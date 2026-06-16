@@ -1,0 +1,684 @@
+// lib/screens/reports/z_report_screen.dart
+import '../../models/settings_model.dart';
+import 'package:flutter/material.dart';
+import '../../models/transaction_model.dart';
+import '../../models/z_report_model.dart';
+import 'z_report_history_screen.dart';
+import '../../utils/z_report_pdf.dart';
+import '../../utils/export_helper.dart';
+
+class ZReportScreen extends StatefulWidget {
+  final String branch;
+  final String cashier;
+  const ZReportScreen({super.key, required this.branch, required this.cashier});
+  @override
+  State<ZReportScreen> createState() => _ZReportScreenState();
+}
+
+class _ZReportScreenState extends State<ZReportScreen> {
+  final List<Transaction> _transactions = Transaction.allTransactions;
+  final _beginningCashController = TextEditingController(text: '5000.00');
+  final _endingCashController = TextEditingController(text: '');
+  bool _isReportGenerated = false;
+  final DateTime _reportDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    // Check if already generated today
+    if (ZReportRecord.hasReportForToday()) {
+      _isReportGenerated = true;
+    }
+  }
+
+  // Only today's transactions
+  List<Transaction> get _todayTransactions {
+    final resetHour = {"12:00 AM": 0, "3:00 AM": 3, "6:00 AM": 6, "8:00 AM": 8}[AppSettings.zReportResetTime] ?? 0; final today = DateTime(_reportDate.year, _reportDate.month, _reportDate.day, resetHour);
+    return _transactions.where((t) => t.dateTime.isAfter(today)).toList();
+  }
+
+  List<Transaction> get _validTransactions =>
+      _todayTransactions.where((t) => t.status != 'voided' && t.status != 'refunded').toList();
+
+  List<Transaction> get _voidedTransactions =>
+      _todayTransactions.where((t) => t.status == 'voided').toList();
+
+  double get _totalGrossSales =>
+      _validTransactions.fold(0, (sum, t) => sum + t.total + t.totalDiscount);
+
+  double get _totalDiscount =>
+      _validTransactions.fold(0, (sum, t) => sum + t.totalDiscount);
+
+  double get _totalNetSales =>
+      _validTransactions.fold(0, (sum, t) => sum + t.total);
+
+  int get _totalTransactions => _validTransactions.length;
+
+  double get _totalVoidedAmount =>
+      _voidedTransactions.fold(0, (sum, t) => sum + t.total);
+
+  int get _totalVoidedCount => _voidedTransactions.length;
+
+  List<Transaction> get _refundedTransactions =>
+      _todayTransactions.where((t) => t.status == 'refunded').toList();
+
+  double get _totalRefundedAmount =>
+      _refundedTransactions.fold(0, (sum, t) => sum + t.total);
+
+  int get _totalRefundedCount => _refundedTransactions.length;
+
+  double _getPaymentTotal(String method) {
+    return _validTransactions
+        .where((t) => t.paymentMethod == method)
+        .fold(0, (sum, t) => sum + t.total);
+  }
+
+  int _getPaymentCount(String method) {
+    return _validTransactions.where((t) => t.paymentMethod == method).length;
+  }
+
+  double get _beginningCash => double.tryParse(_beginningCashController.text) ?? 0;
+  double get _expectedCash => _beginningCash + _getPaymentTotal('Cash');
+  double get _endingCash => double.tryParse(_endingCashController.text) ?? 0;
+  double get _overShort => _endingCash - _expectedCash;
+  double get _averageTransaction =>
+      _totalTransactions > 0 ? _totalNetSales / _totalTransactions : 0;
+
+  // ──────────────────────────────────────────────────────────
+  // ✅ GENERATE Z REPORT - Save to history & reset
+  // ──────────────────────────────────────────────────────────
+  void _generateReport() {
+    if (_endingCashController.text.isEmpty) {
+      _snack('Please enter the ending cash count');
+      return;
+    }
+
+    if (ZReportRecord.hasReportForToday()) {
+      _snack('Z Report already generated for today!');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.warning_amber, color: Colors.orange[700], size: 28),
+          const SizedBox(width: 10),
+          const Text('Generate Z Report?', style: TextStyle(fontSize: 16)),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(10)),
+            child: const Text(
+              'This will:\n• Save today\'s report to history\n• Lock this day\'s transactions\n• Reset for the next business day\n\nThis action cannot be undone.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Net Sales:', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(_totalNetSales.toStringAsFixed(2), style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[700])),
+          ]),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Transactions:', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text('$_totalTransactions'),
+          ]),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            const Text('Over/Short:', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              _overShort == 0 ? 'BALANCED' : '${_overShort.abs().toStringAsFixed(2)} ${_overShort > 0 ? "OVER" : "SHORT"}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _overShort == 0 ? Colors.green : _overShort > 0 ? Colors.blue : Colors.red,
+              ),
+            ),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _saveAndGenerate();
+            },
+            icon: const Icon(Icons.check),
+            label: const Text('Generate & Save'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveAndGenerate() {
+    final now = DateTime.now();
+    final methods = ['Cash', 'GCash', 'Maya', 'Card'];
+
+    // Build payment breakdown
+    final paymentBreakdown = methods.map((m) => ZReportPaymentBreakdown(
+      method: m, count: _getPaymentCount(m), total: _getPaymentTotal(m),
+    )).toList();
+
+    // Build void records
+    final voidRecords = _voidedTransactions.map((t) => ZReportVoidRecord(
+      txnId: t.id, reason: t.voidReason, amount: t.total,
+    )).toList();
+
+    // Build transaction log
+    final txnLog = _todayTransactions.map((t) => ZReportTxnRecord(
+      txnId: t.id, dateTime: t.dateTime, paymentMethod: t.paymentMethod,
+      amount: t.total, status: t.status,
+    )).toList();
+
+    // Create report ID
+    final reportId = 'ZR-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
+
+    // Save to history
+    ZReportRecord.addReport(ZReportRecord(
+      reportId: reportId,
+      reportDate: DateTime(_reportDate.year, _reportDate.month, _reportDate.day),
+      generatedAt: now,
+      branch: widget.branch,
+      cashier: widget.cashier,
+      grossSales: _totalGrossSales,
+      totalDiscount: _totalDiscount,
+      netSales: _totalNetSales,
+      totalTransactions: _totalTransactions,
+      averageTransaction: _averageTransaction,
+      paymentBreakdown: paymentBreakdown,
+      voidedCount: _totalVoidedCount,
+      voidedAmount: _totalVoidedAmount,
+      voidedTransactions: voidRecords,
+      refundedCount: _totalRefundedCount,
+      refundedAmount: _totalRefundedAmount,
+      refundedTransactions: _refundedTransactions.map((t) => ZReportVoidRecord(txnId: t.id, reason: 'Refund: ${t.refundMethod}', amount: t.total)).toList(),
+      beginningCash: _beginningCash,
+      expectedCash: _expectedCash,
+      endingCash: _endingCash,
+      overShort: _overShort,
+      transactionLog: txnLog,
+    ));
+
+    setState(() {
+      _isReportGenerated = true;
+    });
+
+    _snack('✅ Z Report generated & saved! Report ID: $reportId');
+  }
+
+  void _printReport() {
+    final methods = ['Cash', 'GCash', 'Maya', 'Card'];
+    final paymentMap = <String, Map<String, dynamic>>{};
+    for (final m in methods) {
+      paymentMap[m] = {'count': _getPaymentCount(m), 'total': _getPaymentTotal(m)};
+    }
+    final voidedList = _voidedTransactions.map((t) => {
+      'id': t.id, 'reason': t.voidReason, 'amount': t.total,
+    }).toList();
+    final txnList = _todayTransactions.map((t) => {
+      'id': t.id, 'dateTime': t.dateTime, 'payment': t.paymentMethod,
+      'amount': t.total, 'status': t.status,
+    }).toList();
+
+    ZReportPdf.printCurrentDay(
+      branch: widget.branch, cashier: widget.cashier, reportDate: _reportDate,
+      grossSales: _totalGrossSales, totalDiscount: _totalDiscount,
+      netSales: _totalNetSales, totalTransactions: _totalTransactions,
+      averageTransaction: _averageTransaction, paymentBreakdown: paymentMap,
+      voidedCount: _totalVoidedCount, voidedAmount: _totalVoidedAmount,
+      voidedList: voidedList, beginningCash: _beginningCash,
+      expectedCash: _expectedCash, endingCash: _endingCash,
+      overShort: _overShort, transactions: txnList,
+      isGenerated: _isReportGenerated,
+    );
+  }
+
+  void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))));
+
+  Color _getPaymentColor(String method) {
+    switch (method) {
+      case 'Cash': return Colors.green;
+      case 'GCash': return Colors.blue;
+      case 'Maya': return Colors.green[800]!;
+      case 'Card': return Colors.purple;
+      default: return Colors.grey;
+    }
+  }
+
+  @override
+  void dispose() {
+    _beginningCashController.dispose();
+    _endingCashController.dispose();
+    super.dispose();
+  }
+
+  String _fmtDt(DateTime dt) {
+    final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${dt.month}/${dt.day}/${dt.year} $h:${dt.minute.toString().padLeft(2, '0')} $ampm';
+  }
+
+  void _exportExcel() {
+    final data = _validTransactions;
+    ExportHelper.exportExcel(
+      headers: ['TXN ID', 'Date/Time', 'Items', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment', 'Status'],
+      rows: data.map((t) => [
+        t.id, _fmtDt(t.dateTime), t.items.length.toString(),
+        t.subtotal.toStringAsFixed(2), t.totalDiscount.toStringAsFixed(2),
+        t.tax.toStringAsFixed(2), t.total.toStringAsFixed(2),
+        t.paymentMethod, t.status,
+      ]).toList(),
+      sheetName: 'Z_Report',
+      fileName: 'ZReport_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✅ Excel exported!'), backgroundColor: Colors.green));
+  }
+
+  void _exportPdf() {
+    final data = _validTransactions;
+    ExportHelper.exportPdf(
+      title: 'Z Report',
+      subtitle: 'Gross: ${_totalGrossSales.toStringAsFixed(2)} | Net: ${_totalNetSales.toStringAsFixed(2)} | ${data.length} transactions',
+      headers: ['TXN ID', 'Date/Time', 'Items', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment', 'Status'],
+      rows: data.map((t) => [
+        t.id, _fmtDt(t.dateTime), t.items.length.toString(),
+        t.subtotal.toStringAsFixed(2), t.totalDiscount.toStringAsFixed(2),
+        t.tax.toStringAsFixed(2), t.total.toStringAsFixed(2),
+        t.paymentMethod, t.status,
+      ]).toList(),
+      fileName: 'ZReport_${DateTime.now().millisecondsSinceEpoch}.pdf',
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✅ PDF exported!'), backgroundColor: Colors.green));
+  }
+
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('📊 Z Report', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'Export',
+            onSelected: (v) {
+              if (v == 'excel') _exportExcel();
+              if (v == 'pdf') _exportPdf();
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'excel', child: ListTile(leading: Icon(Icons.table_chart, color: Colors.green), title: Text('Export Excel'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf, color: Colors.red), title: Text('Export PDF'), contentPadding: EdgeInsets.zero)),
+            ],
+          ),
+          IconButton(
+            icon: Badge(
+              label: Text('${ZReportRecord.history.length}', style: const TextStyle(fontSize: 9)),
+              isLabelVisible: ZReportRecord.history.isNotEmpty,
+              child: const Icon(Icons.history),
+            ),
+            tooltip: 'Z Report History',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ZReportHistoryScreen(branch: widget.branch))),
+          ),
+          IconButton(icon: const Icon(Icons.print), tooltip: 'Print / Save PDF',
+            onPressed: _printReport),
+        ],
+      ),
+      body: _isReportGenerated ? _buildGeneratedView() : _buildCurrentDayView(),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // ✅ CURRENT DAY VIEW (before generating)
+  // ──────────────────────────────────────────────────────────
+  Widget _buildCurrentDayView() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildReportHeader(),
+        const SizedBox(height: 16),
+        _buildSectionTitle('Sales Summary', Icons.trending_up),
+        const SizedBox(height: 8),
+        _buildSalesSummaryCard(),
+        const SizedBox(height: 16),
+        _buildSectionTitle('Payment Breakdown', Icons.payment),
+        const SizedBox(height: 8),
+        _buildPaymentBreakdownCard(),
+        const SizedBox(height: 16),
+        _buildSectionTitle('Voided Transactions', Icons.cancel),
+        const SizedBox(height: 8),
+        _buildVoidSummaryCard(),
+        const SizedBox(height: 16),
+        _buildSectionTitle('Cash Count', Icons.account_balance_wallet),
+        const SizedBox(height: 8),
+        _buildCashCountCard(),
+        const SizedBox(height: 16),
+        _buildSectionTitle('Transaction Log ($_totalTransactions + $_totalVoidedCount voided + $_totalRefundedCount refunded)', Icons.receipt_long),
+        const SizedBox(height: 8),
+        _buildTransactionList(),
+        const SizedBox(height: 16),
+        // Generate button
+        SizedBox(width: double.infinity, height: 55,
+          child: ElevatedButton.icon(
+            onPressed: _generateReport,
+            icon: const Icon(Icons.assessment, size: 28),
+            label: const Text('GENERATE Z REPORT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          ),
+        ),
+        const SizedBox(height: 24),
+      ]),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // ✅ GENERATED VIEW (after generating - locked)
+  // ──────────────────────────────────────────────────────────
+  Widget _buildGeneratedView() {
+    final todayReport = ZReportRecord.history.isNotEmpty ? ZReportRecord.history.first : null;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // ✅ Generated banner
+        Container(
+          width: double.infinity, padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(colors: [Colors.green[700]!, Colors.green[500]!]),
+          ),
+          child: Column(children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 48),
+            const SizedBox(height: 8),
+            const Text('Z Report Generated!', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('${_reportDate.month}/${_reportDate.day}/${_reportDate.year}',
+              style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 14)),
+            if (todayReport != null) ...[
+              const SizedBox(height: 4),
+              Text('ID: ${todayReport.reportId}', style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 11)),
+            ],
+            const SizedBox(height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              _buildHeaderStat('Net Sales', _totalNetSales.toStringAsFixed(2)),
+              _buildHeaderStat('Transactions', '$_totalTransactions'),
+              _buildHeaderStat('Avg/TXN', _averageTransaction.toStringAsFixed(2)),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: 16),
+
+        // ✅ Quick summary
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+            _buildReportRow('Gross Sales', _totalGrossSales.toStringAsFixed(2)),
+            _buildReportRow('Discounts', '-${_totalDiscount.toStringAsFixed(2)}', valueColor: Colors.red),
+            const Divider(),
+            _buildReportRow('NET SALES', _totalNetSales.toStringAsFixed(2), isBold: true, valueColor: Colors.green[800], fontSize: 18),
+            const Divider(),
+            _buildReportRow('Cash Sales', _getPaymentTotal('Cash').toStringAsFixed(2)),
+            _buildReportRow('GCash', _getPaymentTotal('GCash').toStringAsFixed(2)),
+            _buildReportRow('Maya', _getPaymentTotal('Maya').toStringAsFixed(2)),
+            _buildReportRow('Card', _getPaymentTotal('Card').toStringAsFixed(2)),
+            const Divider(),
+            _buildReportRow('Voided', '$_totalVoidedCount (${_totalVoidedAmount.toStringAsFixed(2)})', valueColor: Colors.red),
+            _buildReportRow('Refunded', '$_totalRefundedCount (${_totalRefundedAmount.toStringAsFixed(2)})', valueColor: Colors.orange),
+            _buildReportRow('Over/Short',
+              _overShort == 0 ? 'BALANCED' : '${_overShort.abs().toStringAsFixed(2)} ${_overShort > 0 ? "OVER" : "SHORT"}',
+              valueColor: _overShort == 0 ? Colors.green : _overShort > 0 ? Colors.blue : Colors.red),
+          ])),
+        ),
+        const SizedBox(height: 16),
+
+        // ✅ Action buttons
+        Row(children: [
+          Expanded(child: OutlinedButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => ZReportHistoryScreen(branch: widget.branch))),
+            icon: const Icon(Icons.history),
+            label: const Text('View History'),
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton.icon(
+            onPressed: _printReport,
+            icon: const Icon(Icons.print),
+            label: const Text('Print'),
+            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          )),
+        ]),
+        const SizedBox(height: 16),
+
+        // ✅ Info box
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)),
+          child: Row(children: [
+            Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(
+              'Today\'s Z Report has been generated and saved. New transactions will appear in tomorrow\'s report.',
+              style: TextStyle(fontSize: 12, color: Colors.blue[800]))),
+          ]),
+        ),
+        const SizedBox(height: 24),
+      ]),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // UI COMPONENTS
+  // ──────────────────────────────────────────────────────────
+  Widget _buildReportHeader() {
+    return Card(
+      elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: double.infinity, padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(colors: [Colors.purple[700]!, Colors.purple[500]!])),
+        child: Column(children: [
+          const Icon(Icons.assessment, color: Colors.white, size: 40),
+          const SizedBox(height: 8),
+          const Text('End of Day Report', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text('${_reportDate.month}/${_reportDate.day}/${_reportDate.year}',
+            style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 14)),
+          Text('${widget.branch} • ${widget.cashier}',
+            style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 12)),
+          const SizedBox(height: 16),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+            _buildHeaderStat('Net Sales', _totalNetSales.toStringAsFixed(2)),
+            _buildHeaderStat('Transactions', '$_totalTransactions'),
+            _buildHeaderStat('Avg/TXN', _averageTransaction.toStringAsFixed(2)),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildHeaderStat(String label, String value) {
+    return Column(children: [
+      Text(value, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      Text(label, style: TextStyle(color: Colors.white.withAlpha(180), fontSize: 11)),
+    ]);
+  }
+
+  Widget _buildSalesSummaryCard() {
+    return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        _buildReportRow('Gross Sales', _totalGrossSales.toStringAsFixed(2), isBold: true),
+        const Divider(),
+        _buildReportRow('Less: Discounts', '-${_totalDiscount.toStringAsFixed(2)}', valueColor: Colors.red),
+        const Divider(),
+        _buildReportRow('NET SALES', _totalNetSales.toStringAsFixed(2), isBold: true, valueColor: Colors.green[800], fontSize: 20),
+        const Divider(),
+        _buildReportRow('Total Transactions', '$_totalTransactions'),
+        _buildReportRow('Average per Transaction', _averageTransaction.toStringAsFixed(2)),
+      ])));
+  }
+
+  Widget _buildPaymentBreakdownCard() {
+    final methods = ['Cash', 'GCash', 'Maya', 'Card'];
+    final icons = [Icons.money, Icons.phone_android, Icons.phone_iphone, Icons.credit_card];
+    final colors = [Colors.green, Colors.blue, Colors.green, Colors.purple];
+    return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        for (int i = 0; i < methods.length; i++) ...[
+          Row(children: [
+            Container(padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: colors[i].withAlpha(25), borderRadius: BorderRadius.circular(8)),
+              child: Icon(icons[i], color: colors[i], size: 20)),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(methods[i], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text('${_getPaymentCount(methods[i])} transactions', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            ])),
+            Text(_getPaymentTotal(methods[i]).toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ]),
+          if (i < methods.length - 1) const Divider(height: 20),
+        ],
+        const Divider(height: 24, thickness: 2),
+        _buildReportRow('TOTAL', _totalNetSales.toStringAsFixed(2), isBold: true, fontSize: 18, valueColor: Colors.purple[800]),
+      ])));
+  }
+
+  Widget _buildVoidSummaryCard() {
+    return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        _buildReportRow('Voided Transactions', '$_totalVoidedCount', valueColor: Colors.red),
+        _buildReportRow('Voided Amount', _totalVoidedAmount.toStringAsFixed(2), valueColor: Colors.red, isBold: true),
+        _buildReportRow('Refunded Transactions', '$_totalRefundedCount', valueColor: Colors.orange),
+        _buildReportRow('Refunded Amount', _totalRefundedAmount.toStringAsFixed(2), valueColor: Colors.orange, isBold: true),
+        if (_voidedTransactions.isNotEmpty) ...[
+          const Divider(),
+          ..._voidedTransactions.map((t) => Padding(padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              const Icon(Icons.cancel, color: Colors.red, size: 16), const SizedBox(width: 8),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(t.id, style: const TextStyle(fontSize: 12)),
+                Text(t.voidReason, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+              ])),
+              Text(t.total.toStringAsFixed(2), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w600, fontSize: 13)),
+            ]))),
+        ],
+      ])));
+  }
+
+  Widget _buildCashCountCard() {
+    return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        Row(children: [
+          const Expanded(child: Text('Beginning Cash', style: TextStyle(fontWeight: FontWeight.w500))),
+          SizedBox(width: 150, child: TextField(
+            controller: _beginningCashController, keyboardType: TextInputType.number,
+            textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            decoration: InputDecoration(prefixText: 'P ', contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+            onChanged: (_) => setState(() {}))),
+        ]),
+        const SizedBox(height: 12),
+        _buildReportRow('Add: Cash Sales', '+${_getPaymentTotal('Cash').toStringAsFixed(2)}', valueColor: Colors.green),
+        const Divider(),
+        _buildReportRow('Expected Cash', _expectedCash.toStringAsFixed(2), isBold: true, fontSize: 16),
+        const SizedBox(height: 12),
+        Row(children: [
+          const Expanded(child: Text('Ending Cash (Actual)', style: TextStyle(fontWeight: FontWeight.w500))),
+          SizedBox(width: 150, child: TextField(
+            controller: _endingCashController, keyboardType: TextInputType.number,
+            textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            decoration: InputDecoration(prefixText: 'P ', hintText: '0.00',
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+            onChanged: (_) => setState(() {}))),
+        ]),
+        const SizedBox(height: 12),
+        if (_endingCashController.text.isNotEmpty)
+          Container(
+            width: double.infinity, padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _overShort == 0 ? Colors.green[50] : _overShort > 0 ? Colors.blue[50] : Colors.red[50],
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _overShort == 0 ? Colors.green : _overShort > 0 ? Colors.blue : Colors.red, width: 0.5)),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(_overShort == 0 ? '✅ BALANCED' : _overShort > 0 ? '📈 OVER' : '📉 SHORT',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16,
+                  color: _overShort == 0 ? Colors.green[800] : _overShort > 0 ? Colors.blue[800] : Colors.red[800])),
+              Text(_overShort.abs().toStringAsFixed(2),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20,
+                  color: _overShort == 0 ? Colors.green[800] : _overShort > 0 ? Colors.blue[800] : Colors.red[800])),
+            ])),
+      ])));
+  }
+
+  Widget _buildTransactionList() {
+    return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
+          child: const Row(children: [
+            Expanded(flex: 3, child: Text('Transaction ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+            Expanded(flex: 2, child: Text('Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+            Expanded(flex: 2, child: Text('Payment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+            Expanded(flex: 2, child: Text('Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.right)),
+          ])),
+        const SizedBox(height: 4),
+        if (_todayTransactions.isEmpty)
+          const Padding(padding: EdgeInsets.all(20), child: Text('No transactions today', style: TextStyle(color: Colors.grey)))
+        else
+          ..._todayTransactions.map((t) => Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+              color: t.status == 'voided' ? Colors.red[50] : t.status == 'refunded' ? Colors.orange[50] : null),
+            child: Row(children: [
+              Expanded(flex: 3, child: Row(children: [
+                if (t.status == 'voided') const Icon(Icons.cancel, color: Colors.red, size: 14),
+                if (t.status == 'refunded') const Icon(Icons.undo, color: Colors.orange, size: 14),
+                if (t.status == 'voided' || t.status == 'refunded') const SizedBox(width: 4),
+                Flexible(child: Text(t.id, style: TextStyle(fontSize: 11,
+                  decoration: (t.status == 'voided' || t.status == 'refunded') ? TextDecoration.lineThrough : null,
+                  color: t.status == 'voided' ? Colors.red : t.status == 'refunded' ? Colors.orange : Colors.black87), overflow: TextOverflow.ellipsis)),
+              ])),
+              Expanded(flex: 2, child: Text('${t.dateTime.hour}:${t.dateTime.minute.toString().padLeft(2, '0')}',
+                style: const TextStyle(fontSize: 11), textAlign: TextAlign.center)),
+              Expanded(flex: 2, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: _getPaymentColor(t.paymentMethod).withAlpha(20), borderRadius: BorderRadius.circular(4)),
+                child: Text(t.paymentMethod, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: _getPaymentColor(t.paymentMethod)), textAlign: TextAlign.center))),
+              Expanded(flex: 2, child: Text(t.total.toStringAsFixed(2), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold,
+                decoration: (t.status == 'voided' || t.status == 'refunded') ? TextDecoration.lineThrough : null,
+                color: t.status == 'voided' ? Colors.red : t.status == 'refunded' ? Colors.orange : Colors.black87), textAlign: TextAlign.right)),
+            ]))),
+      ])));
+  }
+
+  Widget _buildSectionTitle(String title, IconData icon) {
+    return Row(children: [
+      Icon(icon, size: 20, color: Colors.purple[700]), const SizedBox(width: 8),
+      Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple[800])),
+    ]);
+  }
+
+  Widget _buildReportRow(String label, String value, {bool isBold = false, Color? valueColor, double fontSize = 14}) {
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w500, fontSize: fontSize)),
+        Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize, color: valueColor ?? Colors.black87)),
+      ]));
+  }
+}

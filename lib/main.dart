@@ -1,0 +1,173 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart' hide Transaction;
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/setup_screen.dart';
+import 'models/settings_model.dart';
+import 'models/product_model.dart';
+import 'models/batch_model.dart';
+import 'models/transaction_model.dart';
+import 'models/customer_model.dart';
+import 'models/user_model.dart';
+import 'models/branch_model.dart';
+import 'models/employee_model.dart';
+import 'models/customer_directory_model.dart';
+import 'models/batch_log_model.dart';
+import 'models/stock_transfer_model.dart';
+import 'models/discount_record_model.dart';
+import 'helpers/database_helper.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  }
+  runApp(const QuickPOSApp());
+}
+
+class QuickPOSApp extends StatelessWidget {
+  const QuickPOSApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FlavianoPOS - PRO',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7B1FA2)),
+        useMaterial3: true,
+      ),
+      home: const AppLoader(),
+    );
+  }
+}
+
+class AppLoader extends StatefulWidget {
+  const AppLoader({super.key});
+  @override
+  State<AppLoader> createState() => _AppLoaderState();
+}
+
+class _AppLoaderState extends State<AppLoader> {
+  String _status = 'Initializing...';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    try {
+      _setStatus('Loading settings...');
+      await AppSettings.init();
+
+      _setStatus('Opening database...');
+      await DatabaseHelper().database.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Database timeout — clear browser storage (F12 → Application → Clear site data) and refresh.'),
+      );
+
+      _setStatus('Loading products...');
+      await Product.loadFromDB();
+
+      _setStatus('Loading batches...');
+      await ProductBatch.loadFromDB();
+
+      _setStatus('Loading transactions...');
+      await Transaction.loadFromDB();
+
+      _setStatus('Loading customers...');
+      await Customer.loadFromDB();
+
+      _setStatus('Loading directory...');
+      await DirectoryCustomer.loadFromDB();
+
+      _setStatus('Loading users...');
+      await AppUser.loadFromDB();
+
+      _setStatus('Loading branches...');
+      await Branch.loadFromDB();
+
+      _setStatus('Loading transfers...');
+      await StockTransferStorage.loadFromDB();
+
+      _setStatus('Loading discounts...');
+      await DiscountRecord.loadFromDB();
+
+      if (mounted) {
+        final hasUsers = AppUser.allUsers.isNotEmpty;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => hasUsers ? const LoginScreen() : const SetupScreen(),
+          ),
+        );
+      }
+    } catch (e, stack) {
+      debugPrint('=== INIT ERROR at: $_status ===');
+      debugPrint('Error: $e');
+      debugPrint('Stack: $stack');
+      if (mounted) {
+        setState(() => _error = '$_status\n\n$e');
+      }
+    }
+  }
+
+  void _setStatus(String s) {
+    debugPrint('⏳ $s');
+    if (mounted) setState(() => _status = s);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isT = MediaQuery.of(context).size.width > 600;
+    return Scaffold(
+      body: Container(
+        width: double.infinity, height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Color(0xFF6A1B9A), Color(0xFF7B1FA2), Color(0xFF8E24AA)],
+          ),
+        ),
+        child: Center(
+          child: _error != null
+              ? SingleChildScrollView(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.error_outline, color: Colors.white, size: 64),
+                    const SizedBox(height: 16),
+                    const Text('Startup Error', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                      child: SelectableText(_error!, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () { setState(() { _error = null; _status = 'Retrying...'; }); _initApp(); },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white, foregroundColor: const Color(0xFF7B1FA2),
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ]),
+                )
+              : Column(mainAxisSize: MainAxisSize.min, children: [
+                  const SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)),
+                  const SizedBox(height: 24),
+                  Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Text('FlavianoPOS - PRO', style: TextStyle(color: Colors.white, fontSize: isT ? 22 : 18, fontWeight: FontWeight.bold)),
+                ]),
+        ),
+      ),
+    );
+  }
+}
