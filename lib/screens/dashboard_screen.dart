@@ -1,5 +1,12 @@
 // lib/screens/dashboard_screen.dart
 import 'expenses/expenses_screen.dart';
+import 'profit_loss/profit_loss_screen.dart';
+import '../services/cashier_session_service.dart';
+import '../helpers/database_helper.dart';
+import '../models/cashier_session_model.dart';
+import 'cashier_lock/cash_declaration_screen.dart';
+import 'cashier_lock/incident_report_screen.dart';
+import 'cashier_lock/cashier_report_screen.dart';
 import 'receive_delivery/receive_delivery_screen.dart' as rd;
 import 'item_ledger/item_ledger_screen.dart';
 import 'package:flutter/material.dart';
@@ -40,7 +47,92 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
-  bool _hasAccess(String module) => widget.permissions.contains(module);
+  bool _hasAccess(String module) => widget.permissions.contains('all') || widget.permissions.contains(module);
+
+
+
+  void _openCashierReport() {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => CashierReportScreen(currentUser: widget.userName, branch: widget.branch),
+    ));
+  }
+
+  Future<void> _endShift() async {
+    // Get active session
+    final session = await CashierSessionService.getActiveSession(widget.userName);
+    if (session == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active shift found'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    // Get latest session data (with all updates)
+    final sessionRow = await DatabaseHelper().getSessionById(session.id);
+    if (sessionRow == null) return;
+    final freshSession = CashierSession.fromMap(sessionRow);
+
+    // System Expected Cash = Beginning + Cash Sales - Refunds
+    final systemExpected = freshSession.beginningCash + freshSession.cashSales - freshSession.totalRefunds;
+
+    if (!mounted) return;
+    final result = await Navigator.push<Map<String, dynamic>>(context, MaterialPageRoute(
+      builder: (_) => CashDeclarationScreen(
+        session: freshSession,
+        systemExpectedCash: systemExpected,
+        cashSales: freshSession.cashSales,
+        gcashSales: freshSession.gcashSales,
+        mayaSales: freshSession.mayaSales,
+        cardSales: freshSession.cardSales,
+        totalRefunds: freshSession.totalRefunds,
+        totalVoids: freshSession.totalVoids,
+        totalDiscounts: freshSession.totalDiscounts,
+        totalExchanges: freshSession.totalExchanges,
+        transactionCount: freshSession.transactionCount,
+      ),
+    ));
+
+    if (result == null) return;
+
+    if (result['requireIR'] == true) {
+      // Navigate to IR Screen
+      // Variance > ₱50 → Open IR Screen
+      final irResult = await Navigator.push<Map<String, dynamic>>(context, MaterialPageRoute(
+        builder: (_) => IncidentReportScreen(
+          session: freshSession,
+          totalCounted: result['totalCounted'] as double,
+          systemExpected: systemExpected,
+          variance: result['variance'] as double,
+          denominations: (result['denominations'] as Map<double, int>),
+        ),
+      ));
+
+      if (irResult != null && irResult['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('IR filed. Shift ended with variance ₱${(irResult['variance'] as double).toStringAsFixed(2)}'),
+              backgroundColor: Colors.orange, duration: const Duration(seconds: 3)),
+          );
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+          }
+        }
+      }
+      return;
+    }
+
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Shift ended! Ending cash: ₱${(result['totalCounted'] as double).toStringAsFixed(2)}'),
+          backgroundColor: Colors.green, duration: const Duration(seconds: 3)),
+      );
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
+      }
+    }
+  }
 
   void _navigateToModule(String module) {
     switch (module) {
@@ -168,6 +260,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         break;
       case 'Expenses':
         Navigator.push(context, MaterialPageRoute(builder: (_) => ExpensesScreen(currentUser: widget.userName, branch: widget.branch))).then((_) => setState(() {}));
+        break;
+      case 'Profit & Loss':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => ProfitLossScreen(currentUser: widget.userName, branch: widget.branch))).then((_) => setState(() {}));
         break;
 
       case 'Branches':
@@ -534,7 +629,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
   static const _purple2 = Color(0xFF7B1FA2);
   static const _btnPurple = Color(0xFF8E24AA);
 
+  // ── Dynamic sizing helpers ──
+  int _gridCols(double w) {
+    if (w >= 1200) return 6;
+    if (w >= 1000) return 5;
+    if (w >= 750) return 4;
+    if (w >= 500) return 3;
+    if (w >= 320) return 3;
+    return 2;
+  }
+
+  double _cardHeight(double w) {
+    if (w >= 1200) return 140;
+    if (w >= 1000) return 135;
+    if (w >= 750) return 128;
+    if (w >= 500) return 118;
+    if (w >= 360) return 108;
+    return 96;
+  }
+
+  double _iconSize(double w) {
+    if (w >= 1200) return 36;
+    if (w >= 900) return 32;
+    if (w >= 600) return 30;
+    if (w >= 400) return 28;
+    return 22;
+  }
+
+  double _iconPadding(double w) {
+    if (w >= 1200) return 14;
+    if (w >= 900) return 13;
+    if (w >= 600) return 12;
+    if (w >= 400) return 11;
+    return 8;
+  }
+
+  double _labelSize(double w) {
+    if (w >= 1200) return 14;
+    if (w >= 900) return 13;
+    if (w >= 600) return 12;
+    if (w >= 400) return 11.5;
+    return 10;
+  }
+
+  double _gridSpacing(double w) {
+    if (w >= 1200) return 16;
+    if (w >= 900) return 14;
+    if (w >= 600) return 12;
+    if (w >= 400) return 10;
+    return 8;
+  }
+
+  double _cardBorderRadius(double w) {
+    if (w >= 900) return 20;
+    if (w >= 600) return 18;
+    return 16;
+  }
+
+  double _cardInnerHPad(double w) {
+    if (w >= 900) return 10;
+    if (w >= 600) return 8;
+    return 6;
+  }
+
+  double _cardInnerVPad(double w) {
+    if (w >= 900) return 14;
+    if (w >= 600) return 12;
+    return 10;
+  }
+
   @override
+
+  void _showPermissionDenied(String moduleName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.lock, color: Colors.orange[700], size: 28),
+            const SizedBox(width: 10),
+            const Text('Permission Required', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You don\'t have permission to access $moduleName.',
+              style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber[50],
+                border: Border.all(color: Colors.amber[200]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber[800], size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Contact your administrator to request access.',
+                      style: TextStyle(fontSize: 11, color: Colors.amber[900]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton.icon(
+            icon: const Icon(Icons.check),
+            label: const Text('OK'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -566,13 +789,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: LayoutBuilder(builder: (context, outer) {
           final screenW = outer.maxWidth;
           final isCompact = screenW < 360;
-          final isPhone = screenW < 700;
-          final isTablet = screenW >= 700;
-          final isWide = screenW >= 1000;
-          final contentMaxW = screenW >= 1200 ? 1400.0 : (screenW >= 900 ? 1200.0 : double.infinity);
-          final hPad = screenW < 400 ? 10.0 : (screenW < 600 ? 14.0 : (screenW < 900 ? 22.0 : (screenW < 1200 ? 30.0 : 40.0)));
-          final gridCols = screenW < 320 ? 2 : (screenW < 500 ? 3 : (screenW < 750 ? 4 : (screenW < 1000 ? 5 : 6)));
-          final cardH = screenW < 360 ? 100.0 : (screenW < 500 ? 112.0 : (screenW < 750 ? 122.0 : 135.0));
+
+          // ✅ FIX 1: No max width cap — fills entire screen
+          final contentMaxW = double.infinity;
+
+          // ✅ FIX 2: Reduced padding on wide screens
+          final hPad = screenW < 400 ? 10.0 : (screenW < 600 ? 14.0 : (screenW < 900 ? 16.0 : 20.0));
+
+          // ── Dynamic grid values ──
+          final gridCols = _gridCols(screenW);
+          final cardH = _cardHeight(screenW);
+          final spacing = _gridSpacing(screenW);
+          final iconSz = _iconSize(screenW);
+          final iconPad = _iconPadding(screenW);
+          final labelSz = _labelSize(screenW);
+          final borderR = _cardBorderRadius(screenW);
+          final innerH = _cardInnerHPad(screenW);
+          final innerV = _cardInnerVPad(screenW);
 
           return Center(child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: contentMaxW),
@@ -609,32 +842,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Text('Quick Actions', style: TextStyle(fontSize: screenW < 360 ? 16.0 : (screenW < 600 ? 18.0 : 20.0), fontWeight: FontWeight.bold)),
                 SizedBox(height: screenW < 600 ? 8.0 : 14.0),
 
-                // ── Responsive Grid ──
+                // ── Responsive Dynamic Grid ──
                 GridView(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: gridCols,
-                    crossAxisSpacing: screenW < 400 ? 8.0 : (screenW < 600 ? 10.0 : 14.0),
-                    mainAxisSpacing: screenW < 400 ? 8.0 : (screenW < 600 ? 10.0 : 14.0),
-                    mainAxisExtent: cardH),
+                    crossAxisSpacing: spacing,
+                    mainAxisSpacing: spacing,
+                    mainAxisExtent: cardH,
+                  ),
                   children: [
-                    _buildModuleCard('Cashiering', Icons.point_of_sale, Colors.green, () => _navigateToModule('Cashiering')),
-                    _buildModuleCard('Inventory', Icons.inventory_2, Colors.orange, () => _navigateToModule('Inventory')),
-                    _buildModuleCard('Z Report', Icons.assessment, Colors.purple, () => _navigateToModule('Z Report')),
-                    _buildModuleCard('Sales History', Icons.history, Colors.teal, () => _navigateToModule('Sales History')),
-                    _buildModuleCard('Stock Adjustment', Icons.tune, Colors.blue, () => _navigateToModule('Stock Adjustment')),
-                    _buildModuleCard('Item Ledger', Icons.account_balance_wallet, Colors.deepPurple, () => _navigateToModule('Item Ledger')),
-                    _buildModuleCard('Receive Delivery', Icons.local_shipping, Colors.teal, () => _navigateToModule('Receive Delivery')),
-                    _buildModuleCard('Batch', Icons.inventory_2, Colors.teal, () => _navigateToModule('Batch')),
-                    _buildModuleCard('Stock Transfer', Icons.swap_horiz, Colors.blue, () => _navigateToModule('Stock Transfer')),
-                    _buildModuleCard('Branches', Icons.store, Colors.indigo, () => _navigateToModule('Branches')),
-                    _buildModuleCard('Customers', Icons.people, Colors.cyan, () => _navigateToModule('Customers')),
-                    _buildModuleCard('Users', Icons.admin_panel_settings, Colors.red, () => _navigateToModule('Users')),
-                    _buildModuleCard('Discount Monitor', Icons.discount, Colors.deepOrange, () => _navigateToModule('Discount Monitor')),
-                    _buildModuleCard('Settings', Icons.settings, Colors.blueGrey, () => _navigateToModule('Settings')),
-                    _buildModuleCard('Expenses', Icons.receipt_long, Colors.purple, () => _navigateToModule('Expenses')),
-                  ]),
+if (_hasAccess('Cashiering'))                     _buildModuleCard('Cashiering', Icons.point_of_sale, Colors.green, () => _navigateToModule('Cashiering'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Inventory'))                     _buildModuleCard('Inventory', Icons.inventory_2, Colors.orange, () => _navigateToModule('Inventory'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Z Report'))                     _buildModuleCard('Z Report', Icons.assessment, Colors.purple, () => _navigateToModule('Z Report'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Sales History'))                     _buildModuleCard('Sales History', Icons.history, Colors.teal, () => _navigateToModule('Sales History'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Stock Adjustment'))                     _buildModuleCard('Stock Adjustment', Icons.tune, Colors.blue, () => _navigateToModule('Stock Adjustment'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Item Ledger'))                     _buildModuleCard('Item Ledger', Icons.account_balance_wallet, Colors.deepPurple, () => _navigateToModule('Item Ledger'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Receive Delivery'))                     _buildModuleCard('Receive Delivery', Icons.local_shipping, Colors.teal, () => _navigateToModule('Receive Delivery'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Batch Management'))                     _buildModuleCard('Batch', Icons.inventory_2, Colors.teal, () => _navigateToModule('Batch'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Stock Transfer'))                     _buildModuleCard('Stock Transfer', Icons.swap_horiz, Colors.blue, () => _navigateToModule('Stock Transfer'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Branches'))                     _buildModuleCard('Branches', Icons.store, Colors.indigo, () => _navigateToModule('Branches'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Customers'))                     _buildModuleCard('Customers', Icons.people, Colors.cyan, () => _navigateToModule('Customers'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Users'))                     _buildModuleCard('Users', Icons.admin_panel_settings, Colors.red, () => _navigateToModule('Users'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Discount Monitoring'))                     _buildModuleCard('Discount Monitor', Icons.discount, Colors.deepOrange, () => _navigateToModule('Discount Monitor'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Settings'))                     _buildModuleCard('Settings', Icons.settings, Colors.blueGrey, () => _navigateToModule('Settings'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Expenses'))                     _buildModuleCard('Expenses', Icons.receipt_long, Colors.purple, () => _navigateToModule('Expenses'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Profit & Loss'))                _buildModuleCard('Profit & Loss', Icons.trending_up, Colors.teal, () => _navigateToModule('Profit & Loss'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+                if (_hasAccess("End Shift")) _buildModuleCard("End Shift", Icons.lock_clock, Colors.red.shade700, () => _endShift(), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+                if (_hasAccess("Cashier Report")) _buildModuleCard("Cashier Report", Icons.assignment_ind, Colors.indigo.shade700, () => _openCashierReport(), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+                  ],
+                ),
+                const SizedBox(height: 80),
               ])),
           ));
         }),
@@ -643,9 +882,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);
-          if (index == 1) { _navigateToModule('Cashiering'); setState(() => _selectedIndex = 0); }
-          else if (index == 2) { _navigateToModule('Inventory'); setState(() => _selectedIndex = 0); }
-          else if (index == 3) { _navigateToModule('Sales History'); setState(() => _selectedIndex = 0); }
+          if (index == 0) return; // Dashboard - always accessible
+
+          // Tab 1: Cashier
+          if (index == 1) {
+            if (_hasAccess('Cashiering')) {
+              _navigateToModule('Cashiering');
+            } else {
+              _showPermissionDenied('Cashier');
+            }
+            setState(() => _selectedIndex = 0);
+          }
+          // Tab 2: Inventory
+          else if (index == 2) {
+            if (_hasAccess('Inventory')) {
+              _navigateToModule('Inventory');
+            } else {
+              _showPermissionDenied('Inventory');
+            }
+            setState(() => _selectedIndex = 0);
+          }
+          // Tab 3: Reports
+          else if (index == 3) {
+            if (_hasAccess("Tab: Reports")) {
+              _navigateToModule('Sales History');
+            } else {
+              _showPermissionDenied('Reports');
+            }
+            setState(() => _selectedIndex = 0);
+          }
         },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
@@ -664,17 +929,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11)),
   ]);
 
-  Widget _buildModuleCard(String title, IconData icon, Color color, VoidCallback onTap) => Card(
-    elevation: 2, clipBehavior: Clip.antiAlias,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(16),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 28)),
-          const SizedBox(height: 7),
-          Flexible(child: Text(title, style: const TextStyle(fontSize: 11.5, height: 1.1, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center, maxLines: 2, softWrap: true, overflow: TextOverflow.ellipsis)),
-        ]))));
+  Widget _buildModuleCard(
+    String title,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+    double iconSz,
+    double iconPad,
+    double labelSz,
+    double borderR,
+    double innerH,
+    double innerV,
+  ) =>
+      Card(
+        elevation: 2,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(borderR)),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(borderR),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: innerH, vertical: innerV),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(iconPad),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: iconSz),
+                ),
+                SizedBox(height: iconSz * 0.25),
+                Flexible(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: labelSz,
+                      height: 1.15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }

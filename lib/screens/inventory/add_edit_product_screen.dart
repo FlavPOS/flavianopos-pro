@@ -30,12 +30,12 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
 
   bool get _isEditing => widget.product != null;
 
-  final List<String> _categories = [
+  List<String> _categories = [
     'Beverages', 'Snacks', 'Rice & Grains', 'Canned Goods', 'Personal Care',
     'Dairy', 'Frozen Foods', 'Condiments', 'Household', 'Others',
   ];
 
-  final List<String> _units = [
+  List<String> _units = [
     'pcs', 'kg', 'g', 'L', 'ml', 'pack', 'box', 'bottle', 'can', 'sachet', 'dozen',
   ];
 
@@ -52,7 +52,13 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
     _barcodeController = TextEditingController(text: p?.barcode ?? '');
     if (p != null) {
       _selectedCategory = p.category;
+      if (!_categories.contains(_selectedCategory)) {
+        _categories.insert(0, _selectedCategory);
+      }
       _selectedUnit = p.unit;
+      if (!_units.contains(_selectedUnit)) {
+        _units.insert(0, _selectedUnit);
+      }
       _existingImagePath = p.imagePath;
     }
   }

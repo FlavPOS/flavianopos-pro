@@ -8,6 +8,7 @@ import '../../models/product_model.dart';
 import '../../models/transaction_model.dart';
 import '../stock_adjustment/adjustment_model.dart';
 import '../../models/stock_transfer_model.dart';
+import '../../models/exchange_model.dart';
 import '../receive_delivery/delivery_model.dart';
 
 class LedgerEntry {
@@ -114,6 +115,50 @@ class _ItemLedgerScreenState extends State<ItemLedgerScreen> {
       }
     } catch (_) {}
 
+
+
+    // ═══ EXCHANGE TRACKING ═══
+    try {
+      final exchanges = await Exchange.getAll();
+      for (final exc in exchanges) {
+        final excDate = DateTime.tryParse(exc.dateCreated) ?? DateTime.now();
+
+        // RETURNED item (stock came back IN)
+        if (exc.returnedItemSku == p.sku) {
+          entries.add(LedgerEntry(
+            date: excDate,
+            type: 'Exchange In',
+            reference: '${exc.exchangeNumber} (Returned)',
+            qtyIn: exc.returnedQty,
+          ));
+        }
+
+        // NEW items (stock went OUT to customer)
+        // Multi-item format: "Item1 x2 | Item2 x1"
+        // SKU format: "SKU1 | SKU2"
+        final skus = exc.newItemSku.split(' | ').map((s) => s.trim()).toList();
+        final names = exc.newItemName.split(' | ').map((s) => s.trim()).toList();
+
+        for (int i = 0; i < skus.length; i++) {
+          if (skus[i] == p.sku) {
+            // Parse quantity from name (format: "Product Name x2")
+            int qty = 1;
+            if (i < names.length) {
+              final match = RegExp(r'x(\d+)$').firstMatch(names[i]);
+              if (match != null) {
+                qty = int.tryParse(match.group(1) ?? '1') ?? 1;
+              }
+            }
+            entries.add(LedgerEntry(
+              date: excDate,
+              type: 'Exchange Out',
+              reference: '${exc.exchangeNumber} (Replacement)',
+              qtyOut: qty,
+            ));
+          }
+        }
+      }
+    } catch (_) {}
 
     entries.sort((a, b) => a.date.compareTo(b.date));
 

@@ -14,7 +14,7 @@ class CustomersScreen extends StatefulWidget {
 }
 
 class _CustomersScreenState extends State<CustomersScreen> {
-  final List<DirectoryCustomer> _customers = DirectoryCustomer.allCustomers;
+  List<DirectoryCustomer> _customers = [];
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedGroup = 'All';
@@ -49,18 +49,20 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final result = await Navigator.push(context,
       MaterialPageRoute(builder: (context) => const AddCustomerScreen()));
     if (result != null && result is DirectoryCustomer) {
-      DirectoryCustomer.addCustomer(result);
-      setState(() => _customers.add(result));
+      await DirectoryCustomer.addCustomer(result);
+      await _loadFromDB();
       _snack('${result.name} added!');
     }
   }
 
-  void _updateCustomer(DirectoryCustomer updated) {
-    setState(() {
-      final index = _customers.indexWhere((c) => c.id == updated.id);
-      DirectoryCustomer.updateCustomer(updated.id, updated);
-      if (index >= 0) _customers[index] = updated;
-    });
+  Future<void> _updateCustomer(DirectoryCustomer updated) async {
+    await DirectoryCustomer.updateCustomer(updated.id, updated);
+    if (mounted) {
+      setState(() {
+        final index = _customers.indexWhere((c) => c.id == updated.id);
+        if (index >= 0) _customers[index] = updated;
+      });
+    }
   }
 
   void _deleteCustomer(DirectoryCustomer customer) {
@@ -261,6 +263,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
   void dispose() { _searchController.dispose(); super.dispose(); }
 
   @override
+  @override
+  void initState() {
+    super.initState();
+    _loadFromDB();
+  }
+
+  Future<void> _loadFromDB() async {
+    await DirectoryCustomer.loadFromDB();
+    if (mounted) {
+      setState(() {
+        _customers = List<DirectoryCustomer>.from(DirectoryCustomer.allCustomers);
+      });
+    }
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

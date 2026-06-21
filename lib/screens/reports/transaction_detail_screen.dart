@@ -1,5 +1,6 @@
 // lib/screens/reports/transaction_detail_screen.dart
 import 'package:flutter/material.dart';
+import '../../models/user_model.dart';
 import '../../models/transaction_model.dart';
 import '../../models/settings_model.dart';
 import '../../models/product_model.dart';
@@ -54,15 +55,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         const SizedBox(height: 12),
         TextField(controller: pinCtrl, decoration: InputDecoration(labelText: 'Manager PIN *',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-            obscureText: true, maxLength: 4),
+            obscureText: true, maxLength: 6),
       ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         ElevatedButton(onPressed: () {
           if (reasonCtrl.text.trim().isEmpty) { _snack('Enter reason'); return; }
-          if (AppSettings.requirePinVoid && pinCtrl.text != '1234') { _snack('Invalid PIN'); return; }
+          final mgrV = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+          if (AppSettings.requirePinVoid && mgrV == null) { _snack('Invalid Manager PIN'); return; }
           setState(() { t.status = 'voided'; t.voidReason = reasonCtrl.text.trim();
-            t.voidedBy = 'admin'; t.voidedAt = DateTime.now(); }); _restoreStock();
+            t.voidedBy = mgrV?.name ?? 'admin'; t.voidedAt = DateTime.now(); }); _restoreStock();
           widget.onUpdate(); Navigator.pop(ctx); _snack('Transaction voided');
         }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             child: const Text('Void')),
@@ -91,7 +93,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
             onChanged: (v) => setD(() => method = v!)),
           if (AppSettings.requirePinVoid) ...[
             const SizedBox(height: 12),
-            TextField(controller: pinCtrl, obscureText: true, maxLength: 4,
+            TextField(controller: pinCtrl, obscureText: true, maxLength: 6,
               decoration: InputDecoration(labelText: 'Manager PIN *',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
           ],
@@ -99,9 +101,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(onPressed: () {
-            if (AppSettings.requirePinVoid && pinCtrl.text != '1234') { _snack('Invalid PIN'); return; }
+            final mgrR = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+            if (AppSettings.requirePinVoid && mgrR == null) { _snack('Invalid Manager PIN'); return; }
             setState(() { t.status = 'refunded'; t.refundAmount = t.total;
-              t.refundMethod = method; t.refundedBy = 'admin'; t.refundedAt = DateTime.now(); }); _restoreStock();
+              t.refundMethod = method; t.refundedBy = mgrR?.name ?? 'admin'; t.refundedAt = DateTime.now(); }); _restoreStock();
             widget.onUpdate(); Navigator.pop(ctx); _snack('Refunded ${t.total.toStringAsFixed(2)}');
           }, style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
               child: const Text('Refund')),

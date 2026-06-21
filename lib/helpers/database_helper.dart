@@ -22,15 +22,66 @@ class DatabaseHelper {
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'quickpos_pro.db');
     return await openDatabase(
-      path, version: 6,
+      path, version: 15,
       onCreate: _createDB, onUpgrade: _upgradeDB,
       onConfigure: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
+      onOpen: _ensureAllTables,
     );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CREATE ALL 17 TABLES (fresh install)
   // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🛡️ BULLETPROOF: Ensure ALL critical tables exist on EVERY app open
+  // This protects against DB version mismatches, failed migrations, etc.
+  // ═══════════════════════════════════════════════════════════════════════════
+  Future<void> _ensureAllTables(Database db) async {
+    // Store Profile table
+    try {
+      await db.execute('CREATE TABLE IF NOT EXISTS store_profile (id INTEGER PRIMARY KEY, storeName TEXT DEFAULT "", branch TEXT DEFAULT "", businessType TEXT DEFAULT "Retail Store", owner TEXT DEFAULT "", address TEXT DEFAULT "", phone TEXT DEFAULT "", email TEXT DEFAULT "", tin TEXT DEFAULT "", logoPath TEXT DEFAULT "", receiptHeader TEXT DEFAULT "", receiptFooter TEXT DEFAULT "Thank you for shopping!", vatRegistered INTEGER DEFAULT 0, updatedAt TEXT)');
+    } catch (_) {}
+
+    // Cashier Locking System tables
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS cashier_sessions (id TEXT PRIMARY KEY, shiftId TEXT UNIQUE NOT NULL, cashierId TEXT NOT NULL, cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', beginningCash REAL DEFAULT 0, beginningSource TEXT DEFAULT 'Vault', beginningRemarks TEXT DEFAULT '', endingCashDeclared REAL DEFAULT 0, systemExpectedCash REAL DEFAULT 0, variance REAL DEFAULT 0, varianceType TEXT DEFAULT 'balanced', status TEXT DEFAULT 'open', openedAt TEXT NOT NULL, closedAt TEXT, cashSales REAL DEFAULT 0, gcashSales REAL DEFAULT 0, mayaSales REAL DEFAULT 0, cardSales REAL DEFAULT 0, otherSales REAL DEFAULT 0, totalRefunds REAL DEFAULT 0, totalVoids REAL DEFAULT 0, totalDiscounts REAL DEFAULT 0, totalExchanges REAL DEFAULT 0, transactionCount INTEGER DEFAULT 0, originalDeclared REAL DEFAULT 0, originalVariance REAL DEFAULT 0, adjustedBy TEXT DEFAULT '', adjustedAt TEXT, adjustmentReason TEXT DEFAULT '', wasAdjusted INTEGER DEFAULT 0)''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS denomination_records (id INTEGER PRIMARY KEY AUTOINCREMENT, sessionId TEXT NOT NULL, type TEXT DEFAULT 'ending', denomination REAL NOT NULL, quantity INTEGER DEFAULT 0, total REAL DEFAULT 0, createdAt TEXT)''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS incident_reports (id TEXT PRIMARY KEY, irNumber TEXT UNIQUE, sessionId TEXT NOT NULL, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', variance REAL DEFAULT 0, varianceType TEXT DEFAULT '', reason TEXT DEFAULT '', remarks TEXT DEFAULT '', attachmentPath TEXT DEFAULT '', createdBy TEXT DEFAULT '', createdAt TEXT NOT NULL, approvedBy TEXT DEFAULT '', approvedAt TEXT, status TEXT DEFAULT 'pending')''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, allTransactionsJson TEXT DEFAULT '')''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT 'edit', isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS adjustment_records (id TEXT PRIMARY KEY, itemName TEXT NOT NULL, sku TEXT DEFAULT '', adjustmentType TEXT NOT NULL, quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0, newStock INTEGER DEFAULT 0, reason TEXT DEFAULT '', notes TEXT DEFAULT '', dateTime TEXT NOT NULL, cost REAL DEFAULT 0, retail REAL DEFAULT 0)''');
+    } catch (_) {}
+
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS exchanges (id TEXT PRIMARY KEY, exchangeNumber TEXT UNIQUE, originalTxnId TEXT, exchangeDate TEXT, returnedItemName TEXT, returnedItemSku TEXT, returnedQty INTEGER DEFAULT 0, returnedPrice REAL DEFAULT 0, newItemName TEXT, newItemSku TEXT, newQty INTEGER DEFAULT 0, newPrice REAL DEFAULT 0, priceDifference REAL DEFAULT 0, amountPaid REAL DEFAULT 0, reason TEXT DEFAULT '', processedBy TEXT DEFAULT '', approvedBy TEXT DEFAULT '', branch TEXT DEFAULT '', status TEXT DEFAULT 'Completed', dateCreated TEXT)''');
+    } catch (_) {}
+
+    // Auto-seed default reasons if empty
+    try {
+      final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM adjustment_reasons'),
+      );
+      if (count == null || count == 0) {
+        await _seedDefaultReasons(db);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _createDB(Database db, int version) async {
     // ── 1. products ──
     await db.execute('''
@@ -296,6 +347,12 @@ class DatabaseHelper {
   // UPGRADE v1 → v2
   // ═══════════════════════════════════════════════════════════════════════════
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    // 🛡️ BULLETPROOF: Ensure ALL critical tables exist FIRST!
+    try { await db.execute("CREATE TABLE IF NOT EXISTS cashier_sessions (id TEXT PRIMARY KEY, shiftId TEXT UNIQUE NOT NULL, cashierId TEXT NOT NULL, cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', beginningCash REAL DEFAULT 0, beginningSource TEXT DEFAULT 'Vault', beginningRemarks TEXT DEFAULT '', endingCashDeclared REAL DEFAULT 0, systemExpectedCash REAL DEFAULT 0, variance REAL DEFAULT 0, varianceType TEXT DEFAULT 'balanced', status TEXT DEFAULT 'open', openedAt TEXT NOT NULL, closedAt TEXT, cashSales REAL DEFAULT 0, gcashSales REAL DEFAULT 0, mayaSales REAL DEFAULT 0, cardSales REAL DEFAULT 0, otherSales REAL DEFAULT 0, totalRefunds REAL DEFAULT 0, totalVoids REAL DEFAULT 0, totalDiscounts REAL DEFAULT 0, totalExchanges REAL DEFAULT 0, transactionCount INTEGER DEFAULT 0, originalDeclared REAL DEFAULT 0, originalVariance REAL DEFAULT 0, adjustedBy TEXT DEFAULT '', adjustedAt TEXT, adjustmentReason TEXT DEFAULT '', wasAdjusted INTEGER DEFAULT 0)"); } catch (_) {}
+    try { await db.execute("CREATE TABLE IF NOT EXISTS denomination_records (id INTEGER PRIMARY KEY AUTOINCREMENT, sessionId TEXT NOT NULL, type TEXT DEFAULT 'ending', denomination REAL NOT NULL, quantity INTEGER DEFAULT 0, total REAL DEFAULT 0, createdAt TEXT)"); } catch (_) {}
+    try { await db.execute("CREATE TABLE IF NOT EXISTS incident_reports (id TEXT PRIMARY KEY, irNumber TEXT UNIQUE, sessionId TEXT NOT NULL, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', variance REAL DEFAULT 0, varianceType TEXT DEFAULT '', reason TEXT DEFAULT '', remarks TEXT DEFAULT '', attachmentPath TEXT DEFAULT '', createdBy TEXT DEFAULT '', createdAt TEXT NOT NULL, approvedBy TEXT DEFAULT '', approvedAt TEXT, status TEXT DEFAULT 'pending')"); } catch (_) {}
+    try { await db.execute("CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, refundedTransactionsJson TEXT DEFAULT '', allTransactionsJson TEXT DEFAULT '')"); } catch (_) {}
+
     if (oldVersion < 2) {
       // ALTER existing tables
       await db.execute("ALTER TABLE customers ADD COLUMN totalPoints REAL DEFAULT 0");
@@ -315,6 +372,101 @@ class DatabaseHelper {
       await db.execute('CREATE TABLE IF NOT EXISTS employees (id TEXT PRIMARY KEY, branchId TEXT NOT NULL, name TEXT NOT NULL, role TEXT DEFAULT \'Staff\', phone TEXT DEFAULT \'\', email TEXT DEFAULT \'\', salary REAL DEFAULT 0, isActive INTEGER DEFAULT 1, dateHired TEXT NOT NULL, notes TEXT DEFAULT \'\', FOREIGN KEY (branchId) REFERENCES branches(id))');
       await db.execute('CREATE TABLE IF NOT EXISTS batch_logs (id TEXT PRIMARY KEY, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT \'\', productName TEXT DEFAULT \'\', productSku TEXT DEFAULT \'\', action TEXT NOT NULL, reason TEXT DEFAULT \'\', field TEXT DEFAULT \'\', oldValue TEXT DEFAULT \'\', newValue TEXT DEFAULT \'\', dateTime TEXT NOT NULL, FOREIGN KEY (batchId) REFERENCES batches(id))');
       await db.execute('CREATE TABLE IF NOT EXISTS adjustment_records (id TEXT PRIMARY KEY, itemName TEXT NOT NULL, sku TEXT DEFAULT \'\', adjustmentType TEXT NOT NULL, quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0, newStock INTEGER DEFAULT 0, reason TEXT DEFAULT \'\', notes TEXT DEFAULT \'\', dateTime TEXT NOT NULL, cost REAL DEFAULT 0, retail REAL DEFAULT 0)');
+      await db.execute('CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT \'edit\', isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)');
+      await _seedDefaultReasons(db);
+
+    // === Z REPORTS TABLE (fresh installs) ===
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS z_reports (
+        reportId TEXT PRIMARY KEY,
+        reportDate TEXT NOT NULL,
+        generatedAt TEXT NOT NULL,
+        branch TEXT DEFAULT '',
+        cashier TEXT DEFAULT '',
+        grossSales REAL DEFAULT 0,
+        totalDiscount REAL DEFAULT 0,
+        netSales REAL DEFAULT 0,
+        totalTransactions INTEGER DEFAULT 0,
+        averageTransaction REAL DEFAULT 0,
+        paymentBreakdownJson TEXT DEFAULT '',
+        voidedCount INTEGER DEFAULT 0,
+        voidedAmount REAL DEFAULT 0,
+        voidedTransactionsJson TEXT DEFAULT '',
+        beginningCash REAL DEFAULT 0,
+        endingCash REAL DEFAULT 0,
+        expectedCash REAL DEFAULT 0,
+        overShort REAL DEFAULT 0,
+        refundedCount INTEGER DEFAULT 0,
+        refundedAmount REAL DEFAULT 0,
+        allTransactionsJson TEXT DEFAULT ''
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_zreport_date ON z_reports(reportDate)');
+
+    // === CASHIER LOCKING SYSTEM TABLES (fresh installs) ===
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cashier_sessions (
+        id TEXT PRIMARY KEY,
+        shiftId TEXT UNIQUE NOT NULL,
+        cashierId TEXT NOT NULL,
+        cashierName TEXT DEFAULT '',
+        branch TEXT DEFAULT '',
+        beginningCash REAL DEFAULT 0,
+        beginningSource TEXT DEFAULT 'Vault',
+        beginningRemarks TEXT DEFAULT '',
+        endingCashDeclared REAL DEFAULT 0,
+        systemExpectedCash REAL DEFAULT 0,
+        variance REAL DEFAULT 0,
+        varianceType TEXT DEFAULT 'balanced',
+        status TEXT DEFAULT 'open',
+        openedAt TEXT NOT NULL,
+        closedAt TEXT,
+        cashSales REAL DEFAULT 0,
+        gcashSales REAL DEFAULT 0,
+        mayaSales REAL DEFAULT 0,
+        cardSales REAL DEFAULT 0,
+        otherSales REAL DEFAULT 0,
+        totalRefunds REAL DEFAULT 0,
+        totalVoids REAL DEFAULT 0,
+        totalDiscounts REAL DEFAULT 0,
+        totalExchanges REAL DEFAULT 0,
+        transactionCount INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS denomination_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sessionId TEXT NOT NULL,
+        type TEXT DEFAULT 'ending',
+        denomination REAL NOT NULL,
+        quantity INTEGER DEFAULT 0,
+        total REAL DEFAULT 0,
+        createdAt TEXT
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS incident_reports (
+        id TEXT PRIMARY KEY,
+        irNumber TEXT UNIQUE,
+        sessionId TEXT NOT NULL,
+        cashierId TEXT DEFAULT '',
+        cashierName TEXT DEFAULT '',
+        branch TEXT DEFAULT '',
+        variance REAL DEFAULT 0,
+        varianceType TEXT DEFAULT '',
+        reason TEXT DEFAULT '',
+        remarks TEXT DEFAULT '',
+        attachmentPath TEXT DEFAULT '',
+        createdBy TEXT DEFAULT '',
+        createdAt TEXT NOT NULL,
+        approvedBy TEXT DEFAULT '',
+        approvedAt TEXT,
+        status TEXT DEFAULT 'pending'
+      )
+    ''');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_cashier ON cashier_sessions(cashierId, status)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_denom_session ON denomination_records(sessionId)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_ir_session ON incident_reports(sessionId)');
       await db.execute('CREATE TABLE IF NOT EXISTS stock_transfers (id TEXT PRIMARY KEY, transferNo TEXT NOT NULL UNIQUE, transferDate TEXT NOT NULL, fromBranchId TEXT DEFAULT \'\', fromBranchName TEXT DEFAULT \'\', toBranchId TEXT DEFAULT \'\', toBranchName TEXT DEFAULT \'\', status TEXT DEFAULT \'Draft\', preparedBy TEXT DEFAULT \'\', approvedBy TEXT DEFAULT \'\', receivedBy TEXT DEFAULT \'\', receivedDate TEXT, remarks TEXT DEFAULT \'\', createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL)');
       await db.execute('CREATE TABLE IF NOT EXISTS transfer_items (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, itemId TEXT DEFAULT \'\', itemCode TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', category TEXT DEFAULT \'\', unit TEXT DEFAULT \'pcs\', batchId TEXT DEFAULT \'\', batchNumber TEXT DEFAULT \'\', manufacturedDate TEXT, expiryDate TEXT, qtyTransferred INTEGER DEFAULT 0, qtyReceived INTEGER DEFAULT 0, cost REAL DEFAULT 0, remarks TEXT DEFAULT \'\', FOREIGN KEY (transferId) REFERENCES stock_transfers(id))');
       await db.execute('CREATE TABLE IF NOT EXISTS transfer_ledger (id TEXT PRIMARY KEY, transferId TEXT DEFAULT \'\', referenceNo TEXT DEFAULT \'\', itemId TEXT DEFAULT \'\', itemCode TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', batchId TEXT DEFAULT \'\', batchNumber TEXT DEFAULT \'\', branchId TEXT DEFAULT \'\', branchName TEXT DEFAULT \'\', movementType TEXT DEFAULT \'\', manufacturedDate TEXT, expiryDate TEXT, beginningBalance INTEGER DEFAULT 0, qtyIn INTEGER DEFAULT 0, qtyOut INTEGER DEFAULT 0, endingBalance INTEGER DEFAULT 0, cost REAL DEFAULT 0, user TEXT DEFAULT \'\', date TEXT NOT NULL, remarks TEXT DEFAULT \'\')');
@@ -358,6 +510,163 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await db.execute('CREATE TABLE IF NOT EXISTS exchanges (id TEXT PRIMARY KEY, exchangeNumber TEXT UNIQUE, originalTxnId TEXT, exchangeDate TEXT, returnedItemName TEXT, returnedItemSku TEXT, returnedQty INTEGER DEFAULT 0, returnedPrice REAL DEFAULT 0, newItemName TEXT, newItemSku TEXT, newQty INTEGER DEFAULT 0, newPrice REAL DEFAULT 0, priceDifference REAL DEFAULT 0, amountPaid REAL DEFAULT 0, reason TEXT DEFAULT "", processedBy TEXT DEFAULT "", approvedBy TEXT DEFAULT "", branch TEXT DEFAULT "", status TEXT DEFAULT "Completed", dateCreated TEXT)');
+    }
+    if (oldVersion < 8) {
+      try { await db.execute('CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT \'edit\', isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)'); await db.execute('DELETE FROM adjustment_reasons'); } catch (_) {}
+      await _seedDefaultReasons(db);
+    }
+    if (oldVersion < 9) {
+      // Auto-grant Expenses permission to existing Admin & Manager users
+      try {
+        await db.execute("UPDATE users SET permissions = permissions || ',Expenses' WHERE (role = 'Admin' OR role = 'Manager') AND permissions NOT LIKE '%Expenses%'");
+      } catch (_) {}
+    }
+    if (oldVersion < 10) {
+      // Auto-grant Profit & Loss permission to existing Admin & Manager users
+      try {
+        await db.execute("UPDATE users SET permissions = permissions || ',Profit & Loss' WHERE (role = 'Admin' OR role = 'Manager') AND permissions NOT LIKE '%Profit & Loss%'");
+      } catch (_) {}
+    }
+    if (oldVersion < 11) {
+      // Auto-add Wrong Adjustment / Reversal default reason
+      try {
+        await db.insert('adjustment_reasons', {
+          'id': 'def-add-07',
+          'label': 'Wrong Adjustment / Reversal',
+          'type': 'add',
+          'iconName': 'undo',
+          'isDefault': 1,
+          'isActive': 1,
+          'sortOrder': 7,
+          'dateCreated': DateTime.now().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      } catch (_) {}
+    }
+    if (oldVersion < 12) {
+      // Add DirectoryCustomer fields to customers table
+      try { await db.execute("ALTER TABLE customers ADD COLUMN customer_group TEXT DEFAULT 'Regular'"); } catch (_) {}
+      try { await db.execute("ALTER TABLE customers ADD COLUMN totalSpent REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE customers ADD COLUMN totalVisits INTEGER DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE customers ADD COLUMN lastVisitDate TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE customers ADD COLUMN joinDate TEXT"); } catch (_) {}
+    }
+    if (oldVersion < 13) {
+      // === CASHIER LOCKING SYSTEM (3 new tables) ===
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS cashier_sessions (
+            id TEXT PRIMARY KEY,
+            shiftId TEXT UNIQUE NOT NULL,
+            cashierId TEXT NOT NULL,
+            cashierName TEXT DEFAULT '',
+            branch TEXT DEFAULT '',
+            beginningCash REAL DEFAULT 0,
+            beginningSource TEXT DEFAULT 'Vault',
+            beginningRemarks TEXT DEFAULT '',
+            endingCashDeclared REAL DEFAULT 0,
+            systemExpectedCash REAL DEFAULT 0,
+            variance REAL DEFAULT 0,
+            varianceType TEXT DEFAULT 'balanced',
+            status TEXT DEFAULT 'open',
+            openedAt TEXT NOT NULL,
+            closedAt TEXT,
+            cashSales REAL DEFAULT 0,
+            gcashSales REAL DEFAULT 0,
+            mayaSales REAL DEFAULT 0,
+            cardSales REAL DEFAULT 0,
+            otherSales REAL DEFAULT 0,
+            totalRefunds REAL DEFAULT 0,
+            totalVoids REAL DEFAULT 0,
+            totalDiscounts REAL DEFAULT 0,
+            totalExchanges REAL DEFAULT 0,
+            transactionCount INTEGER DEFAULT 0
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS denomination_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sessionId TEXT NOT NULL,
+            type TEXT DEFAULT 'ending',
+            denomination REAL NOT NULL,
+            quantity INTEGER DEFAULT 0,
+            total REAL DEFAULT 0,
+            createdAt TEXT
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS incident_reports (
+            id TEXT PRIMARY KEY,
+            irNumber TEXT UNIQUE,
+            sessionId TEXT NOT NULL,
+            cashierId TEXT DEFAULT '',
+            cashierName TEXT DEFAULT '',
+            branch TEXT DEFAULT '',
+            variance REAL DEFAULT 0,
+            varianceType TEXT DEFAULT '',
+            reason TEXT DEFAULT '',
+            remarks TEXT DEFAULT '',
+            attachmentPath TEXT DEFAULT '',
+            createdBy TEXT DEFAULT '',
+            createdAt TEXT NOT NULL,
+            approvedBy TEXT DEFAULT '',
+            approvedAt TEXT,
+            status TEXT DEFAULT 'pending'
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_sessions_cashier ON cashier_sessions(cashierId, status)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_denom_session ON denomination_records(sessionId)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_ir_session ON incident_reports(sessionId)');
+      } catch (_) {}
+    }
+    if (oldVersion < 14) {
+      // Add adjustment tracking columns to cashier_sessions
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN originalDeclared REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN originalVariance REAL DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN adjustedBy TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN adjustedAt TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN adjustmentReason TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN wasAdjusted INTEGER DEFAULT 0"); } catch (_) {}
+    }
+    if (oldVersion < 15) {
+      // Z Reports persistence table
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS z_reports (
+            reportId TEXT PRIMARY KEY,
+            reportDate TEXT NOT NULL,
+            generatedAt TEXT NOT NULL,
+            branch TEXT DEFAULT '',
+            cashier TEXT DEFAULT '',
+            grossSales REAL DEFAULT 0,
+            totalDiscount REAL DEFAULT 0,
+            netSales REAL DEFAULT 0,
+            totalTransactions INTEGER DEFAULT 0,
+            averageTransaction REAL DEFAULT 0,
+            paymentBreakdownJson TEXT DEFAULT '',
+            voidedCount INTEGER DEFAULT 0,
+            voidedAmount REAL DEFAULT 0,
+            voidedTransactionsJson TEXT DEFAULT '',
+            beginningCash REAL DEFAULT 0,
+            endingCash REAL DEFAULT 0,
+            expectedCash REAL DEFAULT 0,
+            overShort REAL DEFAULT 0,
+            refundedCount INTEGER DEFAULT 0,
+            refundedAmount REAL DEFAULT 0,
+            allTransactionsJson TEXT DEFAULT ''
+          )
+        ''');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_zreport_date ON z_reports(reportDate)');
+      } catch (_) {}
+    }
+    if (oldVersion < 7) {
+      await db.execute('CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT "edit", isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)');
+      await _seedDefaultReasons(db);
     }
   }
 
@@ -414,6 +723,18 @@ class DatabaseHelper {
   Future<Map<String, dynamic>?> getTransactionById(String id) async { final db = await database; final r = await db.query('transactions', where: 'id = ?', whereArgs: [id]); return r.isNotEmpty ? r.first : null; }
   Future<List<Map<String, dynamic>>> getTransactionItems(String txnId) async { final db = await database; return await db.query('transaction_items', where: 'transactionId = ?', whereArgs: [txnId]); }
   Future<List<Map<String, dynamic>>> getTransactionsByDateRange(String startDate, String endDate) async { final db = await database; return await db.query('transactions', where: 'dateTime BETWEEN ? AND ?', whereArgs: [startDate, endDate], orderBy: 'dateTime DESC'); }
+
+  // Delete a specific transaction item by SKU
+  Future<int> deleteTransactionItem(String txnId, String sku) async {
+    final db = await database;
+    return await db.delete('transaction_items', where: 'transactionId = ? AND sku = ?', whereArgs: [txnId, sku]);
+  }
+
+  // Insert a single transaction item (used for exchange replacements)
+  Future<int> insertTransactionItem(Map<String, dynamic> item) async {
+    final db = await database;
+    return await db.insert('transaction_items', item, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
   Future<List<Map<String, dynamic>>> getTransactionsByStatus(String status) async { final db = await database; return await db.query('transactions', where: 'status = ?', whereArgs: [status], orderBy: 'dateTime DESC'); }
   Future<double> getDailySales(String date) async { final db = await database; final r = await db.rawQuery("SELECT COALESCE(SUM(total), 0.0) as total FROM transactions WHERE dateTime LIKE ? AND status = 'completed'", ['\$date%']); return (r.first['total'] as num?)?.toDouble() ?? 0.0; }
 
@@ -617,15 +938,200 @@ class DatabaseHelper {
     return data;
   }
 
+
+  // ═══════════ CASHIER SESSIONS ═══════════
+  Future<int> insertCashierSession(Map<String, dynamic> s) async {
+    final db = await database;
+    return await db.insert('cashier_sessions', s, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> updateCashierSession(String id, Map<String, dynamic> s) async {
+    final db = await database;
+    return await db.update('cashier_sessions', s, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Map<String, dynamic>?> getActiveSession(String cashierId) async {
+    final db = await database;
+    final rows = await db.query('cashier_sessions',
+      where: 'cashierId = ? AND status = ?', whereArgs: [cashierId, 'open'],
+      orderBy: 'openedAt DESC', limit: 1);
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getAllSessions({String? cashierId, String? status}) async {
+    final db = await database;
+    String where = '';
+    List<dynamic> args = [];
+    if (cashierId != null) { where = 'cashierId = ?'; args.add(cashierId); }
+    if (status != null) { where = where.isEmpty ? 'status = ?' : '$where AND status = ?'; args.add(status); }
+    return await db.query('cashier_sessions',
+      where: where.isEmpty ? null : where, whereArgs: args.isEmpty ? null : args,
+      orderBy: 'openedAt DESC');
+  }
+
+  Future<Map<String, dynamic>?> getSessionById(String id) async {
+    final db = await database;
+    final rows = await db.query('cashier_sessions', where: 'id = ?', whereArgs: [id]);
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  // ═══════════ DENOMINATION RECORDS ═══════════
+  Future<int> insertDenominationRecord(Map<String, dynamic> d) async {
+    final db = await database;
+    return await db.insert('denomination_records', d);
+  }
+
+  Future<void> insertDenominationBatch(List<Map<String, dynamic>> denoms) async {
+    final db = await database;
+    final batch = db.batch();
+    for (final d in denoms) {
+      batch.insert('denomination_records', d);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<Map<String, dynamic>>> getDenominationsBySession(String sessionId, {String? type}) async {
+    final db = await database;
+    String where = 'sessionId = ?';
+    List<dynamic> args = [sessionId];
+    if (type != null) { where += ' AND type = ?'; args.add(type); }
+    return await db.query('denomination_records', where: where, whereArgs: args, orderBy: 'denomination DESC');
+  }
+
+  // ═══════════ INCIDENT REPORTS ═══════════
+  Future<int> insertIncidentReport(Map<String, dynamic> ir) async {
+    final db = await database;
+    return await db.insert('incident_reports', ir, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllIncidentReports() async {
+    final db = await database;
+    return await db.query('incident_reports', orderBy: 'createdAt DESC');
+  }
+
+  Future<Map<String, dynamic>?> getIncidentReportBySession(String sessionId) async {
+    final db = await database;
+    final rows = await db.query('incident_reports', where: 'sessionId = ?', whereArgs: [sessionId], limit: 1);
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+
+  // ═══════════ Z REPORTS ═══════════
+  Future<int> insertZReport(Map<String, dynamic> r) async {
+    final db = await database;
+    return await db.insert('z_reports', r, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllZReports() async {
+    final db = await database;
+    return await db.query('z_reports', orderBy: 'generatedAt DESC');
+  }
+
+  Future<bool> hasZReportForDate(DateTime date) async {
+    final db = await database;
+    final dateStr = '${date.year}-${date.month.toString().padLeft(2, "0")}-${date.day.toString().padLeft(2, "0")}';
+    final rows = await db.query('z_reports',
+      where: "reportDate LIKE ?", whereArgs: ['$dateStr%'], limit: 1);
+    return rows.isNotEmpty;
+  }
+
+  Future<void> clearZReports() async {
+    final db = await database;
+    await db.delete('z_reports');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // STORE PROFILE
+  // ═══════════════════════════════════════════════════════
+  
+  Future<Map<String, dynamic>?> getStoreProfile() async {
+    final db = await database;
+    try {
+      final result = await db.query('store_profile', limit: 1);
+      return result.isNotEmpty ? result.first : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  
+  Future<int> saveStoreProfile(Map<String, dynamic> data) async {
+    final db = await database;
+    data['updatedAt'] = DateTime.now().toIso8601String();
+    
+    final existing = await getStoreProfile();
+    if (existing != null) {
+      return await db.update(
+        'store_profile',
+        data,
+        where: 'id = ?',
+        whereArgs: [existing['id']],
+      );
+    } else {
+      return await db.insert('store_profile', data);
+    }
+  }
+
   Future<void> clearAllData() async {
     final db = await database;
-    await db.delete('discount_items'); await db.delete('discount_records');
-    await db.delete('delivery_items'); await db.delete('delivery_records');
-    await db.delete('transfer_items'); await db.delete('transfer_ledger'); await db.delete('stock_transfers');
-    await db.delete('adjustment_records'); await db.delete('batch_logs'); await db.delete('employees');
-    await db.delete('transaction_items'); await db.delete('transactions');
-    await db.delete('batches'); await db.delete('products');
-    await db.delete('customers'); await db.delete('users'); await db.delete('branches');
+    // Order matters: delete child tables before parent tables
+    // ALL 29 tables covered!
+    
+    // Cashier Locking (NEW v2.0)
+    try { await db.delete('denomination_records'); } catch (_) {}
+    try { await db.delete('incident_reports'); } catch (_) {}
+    try { await db.delete('cashier_sessions'); } catch (_) {}
+    
+    // Z Reports
+    try { await db.delete('z_reports'); } catch (_) {}
+    
+    // Exchanges
+    try { await db.delete('exchanges'); } catch (_) {}
+    
+    // Expenses
+    try { await db.delete('expense_audit_trail'); } catch (_) {}
+    try { await db.delete('expense_budgets'); } catch (_) {}
+    try { await db.delete('petty_cash_transactions'); } catch (_) {}
+    try { await db.delete('expense_sub_categories'); } catch (_) {}
+    try { await db.delete('expense_categories'); } catch (_) {}
+    try { await db.delete('expenses'); } catch (_) {}
+    
+    // Discounts
+    try { await db.delete('discount_items'); } catch (_) {}
+    try { await db.delete('discount_records'); } catch (_) {}
+    
+    // Delivery
+    try { await db.delete('delivery_items'); } catch (_) {}
+    try { await db.delete('delivery_records'); } catch (_) {}
+    
+    // Stock Transfer
+    try { await db.delete('transfer_items'); } catch (_) {}
+    try { await db.delete('transfer_ledger'); } catch (_) {}
+    try { await db.delete('stock_transfers'); } catch (_) {}
+    
+    // Adjustments
+    try { await db.delete('adjustment_records'); } catch (_) {}
+    try { await db.delete('adjustment_reasons'); } catch (_) {}
+    
+    // Batch
+    try { await db.delete('batch_logs'); } catch (_) {}
+    try { await db.delete('batches'); } catch (_) {}
+    
+    // Employees
+    try { await db.delete('employees'); } catch (_) {}
+    
+    // Transactions
+    try { await db.delete('transaction_items'); } catch (_) {}
+    try { await db.delete('transactions'); } catch (_) {}
+    
+    // Products
+    try { await db.delete('products'); } catch (_) {}
+    
+    // Customers
+    try { await db.delete('customers'); } catch (_) {}
+    
+    // Users + Branches (LAST - so user must redo setup!)
+    try { await db.delete('users'); } catch (_) {}
+    try { await db.delete('branches'); } catch (_) {}
   }
 
   Future<void> close() async { final db = await database; await db.close(); _database = null; }
@@ -735,4 +1241,91 @@ class DatabaseHelper {
     return branch != null;
   }
 
+
+  // ═══════════════════════════════════════════════════════
+  // ADJUSTMENT REASONS — Seed + CRUD
+  // ═══════════════════════════════════════════════════════
+
+  Future<void> seedDefaultReasonsIfEmpty() async { final db = await database; await _seedDefaultReasons(db); }
+
+  Future<void> _seedDefaultReasons(Database db) async { await db.execute('CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT \'edit\', isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)');
+    final count = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT COUNT(*) FROM adjustment_reasons'));
+    if (count != null && count > 0) return;
+
+    final now = DateTime.now().toIso8601String();
+    final defaults = <Map<String, dynamic>>[
+      // ── ADD REASONS (6) ──
+      {'id': 'def-add-01', 'label': 'New Stock / Restock',       'type': 'add',    'iconName': 'inventory',         'isDefault': 1, 'isActive': 1, 'sortOrder': 1, 'dateCreated': now},
+      {'id': 'def-add-02', 'label': 'Customer Return',           'type': 'add',    'iconName': 'assignment_return', 'isDefault': 1, 'isActive': 1, 'sortOrder': 2, 'dateCreated': now},
+      {'id': 'def-add-03', 'label': 'Transfer In',               'type': 'add',    'iconName': 'call_received',     'isDefault': 1, 'isActive': 1, 'sortOrder': 3, 'dateCreated': now},
+      {'id': 'def-add-04', 'label': 'Found / Inventory Surplus', 'type': 'add',    'iconName': 'search',            'isDefault': 1, 'isActive': 1, 'sortOrder': 4, 'dateCreated': now},
+      {'id': 'def-add-05', 'label': 'Promo / Free Items',        'type': 'add',    'iconName': 'card_giftcard',     'isDefault': 1, 'isActive': 1, 'sortOrder': 5, 'dateCreated': now},
+      {'id': 'def-add-06', 'label': 'Correction / Data Fix',     'type': 'add',    'iconName': 'build',             'isDefault': 1, 'isActive': 1, 'sortOrder': 6, 'dateCreated': now},
+      {'id': 'def-add-07', 'label': 'Wrong Adjustment / Reversal', 'type': 'add',    'iconName': 'undo',              'isDefault': 1, 'isActive': 1, 'sortOrder': 7, 'dateCreated': now},
+      // ── DEDUCT REASONS (8) ──
+      {'id': 'def-ded-01', 'label': 'Damaged / Broken',          'type': 'deduct', 'iconName': 'broken_image',      'isDefault': 1, 'isActive': 1, 'sortOrder': 1, 'dateCreated': now},
+      {'id': 'def-ded-02', 'label': 'Expired',                   'type': 'deduct', 'iconName': 'event_busy',        'isDefault': 1, 'isActive': 1, 'sortOrder': 2, 'dateCreated': now},
+      {'id': 'def-ded-03', 'label': 'Lost / Missing',            'type': 'deduct', 'iconName': 'help_outline',      'isDefault': 1, 'isActive': 1, 'sortOrder': 3, 'dateCreated': now},
+      {'id': 'def-ded-04', 'label': 'Transfer Out',              'type': 'deduct', 'iconName': 'call_made',         'isDefault': 1, 'isActive': 1, 'sortOrder': 4, 'dateCreated': now},
+      {'id': 'def-ded-05', 'label': 'Theft / Shrinkage',         'type': 'deduct', 'iconName': 'report_problem',    'isDefault': 1, 'isActive': 1, 'sortOrder': 5, 'dateCreated': now},
+      {'id': 'def-ded-06', 'label': 'Sample / Tester',           'type': 'deduct', 'iconName': 'science',           'isDefault': 1, 'isActive': 1, 'sortOrder': 6, 'dateCreated': now},
+      {'id': 'def-ded-07', 'label': 'Personal Use / Withdrawal', 'type': 'deduct', 'iconName': 'person_remove',     'isDefault': 1, 'isActive': 1, 'sortOrder': 7, 'dateCreated': now},
+      {'id': 'def-ded-08', 'label': 'Correction / Data Fix (Deduct)', 'type': 'deduct', 'iconName': 'build',             'isDefault': 1, 'isActive': 1, 'sortOrder': 8, 'dateCreated': now},
+    ];
+
+    final batch = db.batch();
+    for (final r in defaults) {
+      batch.insert('adjustment_reasons', r);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Returns all active adjustment reasons, optionally filtered by type.
+  Future<List<Map<String, dynamic>>> getAdjustmentReasons({String? type}) async {
+    final db = await database;
+    String where = 'isActive = 1';
+    List<dynamic> args = [];
+    if (type != null && type.isNotEmpty) {
+      where += ' AND type = ?';
+      args.add(type);
+    }
+    return await db.query(
+      'adjustment_reasons',
+      where: where,
+      whereArgs: args,
+      orderBy: 'type ASC, sortOrder ASC, label ASC',
+    );
+  }
+
+  /// Inserts a new adjustment reason.
+  Future<void> insertAdjustmentReason(Map<String, dynamic> reason) async {
+    final db = await database;
+    await db.insert('adjustment_reasons', reason,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Updates an existing adjustment reason by id.
+  Future<void> updateAdjustmentReason(String id, Map<String, dynamic> data) async {
+    final db = await database;
+    await db.update('adjustment_reasons', data, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Soft-deletes (sets isActive=0). Returns false if isDefault=1.
+  Future<bool> deleteAdjustmentReason(String id) async {
+    final db = await database;
+    final rows = await db.query('adjustment_reasons',
+        where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isNotEmpty && rows.first['isDefault'] == 1) return false;
+    await db.update('adjustment_reasons', {'isActive': 0},
+        where: 'id = ?', whereArgs: [id]);
+    return true;
+  }
+
+  /// Restores a soft-deleted reason (sets isActive=1).
+  Future<void> restoreAdjustmentReason(String id) async {
+    final db = await database;
+    await db.update('adjustment_reasons', {'isActive': 1},
+        where: 'id = ?', whereArgs: [id]);
+  }
 }

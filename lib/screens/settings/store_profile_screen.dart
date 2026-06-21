@@ -1,5 +1,11 @@
 // lib/screens/settings/store_profile_screen.dart
+// FULLY WIRED TO DATABASE - with logo upload!
+
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../helpers/database_helper.dart';
 
 class StoreProfileScreen extends StatefulWidget {
   final String branch;
@@ -11,39 +17,54 @@ class StoreProfileScreen extends StatefulWidget {
 
 class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _storeNameController;
-  late TextEditingController _branchNameController;
-  late TextEditingController _addressController;
-  late TextEditingController _phoneController;
-  late TextEditingController _emailController;
-  late TextEditingController _tinController;
-  late TextEditingController _ownerController;
+  final _storeNameController = TextEditingController();
+  final _branchNameController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _tinController = TextEditingController();
+  final _ownerController = TextEditingController();
+  final _receiptHeaderController = TextEditingController();
+  final _receiptFooterController = TextEditingController();
+  
   String _businessType = 'Retail Store';
+  bool _vatRegistered = false;
+  String _logoPath = '';
+  bool _loading = true;
+  bool _saving = false;
 
   final List<String> _businessTypes = [
-    'Retail Store',
-    'Grocery',
-    'Convenience Store',
-    'Sari-Sari Store',
-    'Pharmacy',
-    'Restaurant',
-    'Hardware',
-    'General Merchandise',
-    'Other',
+    'Retail Store', 'Grocery', 'Convenience Store', 'Sari-Sari Store',
+    'Pharmacy', 'Restaurant', 'Hardware', 'General Merchandise', 'Other',
   ];
 
   @override
   void initState() {
     super.initState();
-    _storeNameController = TextEditingController(text: 'FlavianoPOS Store');
-    _branchNameController = TextEditingController(text: widget.branch);
-    _addressController = TextEditingController(
-      text: 'Diversion Road, Consolacion, Cebu City',
-    );
-    _phoneController = TextEditingController(text: '09171234567');
-    _emailController = TextEditingController(text: 'store@quickpos.com');
-    _tinController = TextEditingController(text: '123-456-789-000');
-    _ownerController = TextEditingController(text: 'Flaviano Dagondon Jr.');
+    _branchNameController.text = widget.branch;
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await DatabaseHelper().getStoreProfile();
+    if (profile != null && mounted) {
+      setState(() {
+        _storeNameController.text = profile['storeName'] ?? '';
+        _ownerController.text = profile['owner'] ?? '';
+        _addressController.text = profile['address'] ?? '';
+        _phoneController.text = profile['phone'] ?? '';
+        _emailController.text = profile['email'] ?? '';
+        _tinController.text = profile['tin'] ?? '';
+        _logoPath = profile['logoPath'] ?? '';
+        _businessType = profile['businessType'] ?? 'Retail Store';
+        _vatRegistered = (profile['vatRegistered'] ?? 0) == 1;
+        _receiptHeaderController.text = profile['receiptHeader'] ?? '';
+        _receiptFooterController.text = profile['receiptFooter'] ?? 'Thank you for shopping!';
+        _loading = false;
+      });
+    } else {
+      setState(() => _loading = false);
+    }
   }
 
   @override
@@ -55,45 +76,124 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     _emailController.dispose();
     _tinController.dispose();
     _ownerController.dispose();
+    _receiptHeaderController.dispose();
+    _receiptFooterController.dispose();
     super.dispose();
   }
 
-  void _saveProfile() {
-    if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Store profile saved!'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: Colors.green,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+  Future<void> _pickLogo() async {
+    try {
+      final picker = ImagePicker();
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+              if (_logoPath.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.delete, color: Colors.red),
+                  title: const Text('Remove Logo', style: TextStyle(color: Colors.red)),
+                  onTap: () { Navigator.pop(ctx); setState(() => _logoPath = ''); },
+                ),
+            ],
           ),
         ),
       );
+      if (source == null) return;
+      final image = await picker.pickImage(source: source, maxWidth: 1024, imageQuality: 80);
+      if (image == null) return;
+      
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName = 'store_logo_${DateTime.now().millisecondsSinceEpoch}.png';
+      final savedPath = '${dir.path}/$fileName';
+      await File(image.path).copy(savedPath);
+      
+      if (_logoPath.isNotEmpty) {
+        try { await File(_logoPath).delete(); } catch (_) {}
+      }
+      
+      setState(() => _logoPath = savedPath);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Logo updated! Tap Save to keep changes.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await DatabaseHelper().saveStoreProfile({
+        'storeName': _storeNameController.text.trim(),
+        'branch': _branchNameController.text.trim(),
+        'businessType': _businessType,
+        'owner': _ownerController.text.trim(),
+        'address': _addressController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+        'tin': _tinController.text.trim(),
+        'logoPath': _logoPath,
+        'receiptHeader': _receiptHeaderController.text.trim(),
+        'receiptFooter': _receiptFooterController.text.trim(),
+        'vatRegistered': _vatRegistered ? 1 : 0,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Store profile saved successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Store Profile',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.blue[700],
+        title: const Text('Store Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF7B1FA2),
         foregroundColor: Colors.white,
         actions: [
           TextButton.icon(
-            onPressed: _saveProfile,
-            icon: const Icon(Icons.save, color: Colors.white),
-            label: const Text(
-              'Save',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            onPressed: _saving ? null : _saveProfile,
+            icon: _saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.save, color: Colors.white),
+            label: Text(_saving ? 'Saving...' : 'Save', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -105,145 +205,95 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
-                child: Column(
+                child: Stack(
                   children: [
                     Container(
-                      width: 100,
-                      height: 100,
+                      width: 120, height: 120,
                       decoration: BoxDecoration(
-                        color: Colors.blue.withAlpha(20),
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.blue.withAlpha(50),
-                          width: 2,
-                        ),
+                        color: Colors.purple[50],
+                        border: Border.all(color: Colors.purple, width: 3),
                       ),
-                      child: const Icon(
-                        Icons.store,
-                        size: 48,
-                        color: Colors.blue,
-                      ),
+                      child: _logoPath.isNotEmpty && File(_logoPath).existsSync()
+                        ? ClipOval(child: Image.file(File(_logoPath), fit: BoxFit.cover))
+                        : Icon(Icons.store, size: 60, color: Colors.purple[700]),
                     ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed:
-                          () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Upload logo coming soon!'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
+                    Positioned(
+                      bottom: 0, right: 0,
+                      child: GestureDetector(
+                        onTap: _pickLogo,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.purple[700],
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
                           ),
-                      icon: const Icon(Icons.camera_alt, size: 16),
-                      label: const Text(
-                        'Change Logo',
-                        style: TextStyle(fontSize: 12),
+                          child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _buildHeader('Business Information', Icons.business),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _storeNameController,
-                decoration: _decor('Store Name', Icons.storefront),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _pickLogo,
+                  icon: const Icon(Icons.camera_alt, size: 16),
+                  label: const Text('Change Logo'),
+                ),
               ),
+              const SizedBox(height: 20),
+              _buildField('Store Name *', _storeNameController, Icons.store, required: true),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _branchNameController,
-                decoration: _decor('Branch Name', Icons.location_city),
-              ),
+              _buildField('Branch', _branchNameController, Icons.location_on, enabled: false),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: _businessType,
-                decoration: _decor('Business Type', Icons.category),
-                items:
-                    _businessTypes
-                        .map(
-                          (t) => DropdownMenuItem(
-                            value: t,
-                            child: Text(
-                              t,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                        )
-                        .toList(),
+                value: _businessType,
+                decoration: InputDecoration(
+                  labelText: 'Business Type',
+                  prefixIcon: const Icon(Icons.business),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                items: _businessTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
                 onChanged: (v) => setState(() => _businessType = v!),
               ),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _ownerController,
-                decoration: _decor('Owner / Manager', Icons.person),
-              ),
+              _buildField('Owner Name', _ownerController, Icons.person),
               const SizedBox(height: 12),
-              TextFormField(
-                controller: _tinController,
-                decoration: _decor('TIN Number', Icons.numbers),
+              _buildField('Address', _addressController, Icons.location_on, maxLines: 2),
+              const SizedBox(height: 12),
+              _buildField('Phone', _phoneController, Icons.phone, keyboardType: TextInputType.phone),
+              const SizedBox(height: 12),
+              _buildField('Email', _emailController, Icons.email, keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 12),
+              _buildField('TIN (Tax ID)', _tinController, Icons.numbers),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                title: const Text('VAT Registered'),
+                subtitle: const Text('Apply VAT to receipts'),
+                value: _vatRegistered,
+                onChanged: (v) => setState(() => _vatRegistered = v),
+                activeColor: Colors.purple,
               ),
+              const SizedBox(height: 16),
+              const Text('Receipt Customization', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              _buildField('Receipt Header (optional)', _receiptHeaderController, Icons.format_align_center, maxLines: 2),
+              const SizedBox(height: 12),
+              _buildField('Receipt Footer (optional)', _receiptFooterController, Icons.format_align_center, maxLines: 2),
               const SizedBox(height: 24),
-              _buildHeader('Contact & Location', Icons.contact_phone),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _addressController,
-                decoration: _decor('Store Address', Icons.location_on),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phoneController,
-                decoration: _decor('Phone Number', Icons.phone),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _emailController,
-                decoration: _decor('Email Address', Icons.email),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 24),
-              _buildHeader('Operating Hours', Icons.access_time),
-              const SizedBox(height: 12),
-              Card(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _buildHoursRow('Monday - Friday', '8:00 AM - 9:00 PM'),
-                      const Divider(),
-                      _buildHoursRow('Saturday', '8:00 AM - 10:00 PM'),
-                      const Divider(),
-                      _buildHoursRow('Sunday', '9:00 AM - 8:00 PM'),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
               SizedBox(
-                width: double.infinity,
-                height: 50,
+                width: double.infinity, height: 50,
                 child: ElevatedButton.icon(
-                  onPressed: _saveProfile,
+                  onPressed: _saving ? null : _saveProfile,
                   icon: const Icon(Icons.save),
-                  label: const Text(
-                    'SAVE PROFILE',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      letterSpacing: 1,
-                    ),
-                  ),
+                  label: const Text('SAVE PROFILE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
+                    backgroundColor: Colors.purple[700],
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
@@ -254,38 +304,19 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  Widget _buildHeader(String title, IconData icon) => Row(
-    children: [
-      Icon(icon, size: 20, color: Colors.blue[700]),
-      const SizedBox(width: 8),
-      Text(
-        title,
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.blue[800],
-        ),
+  Widget _buildField(String label, TextEditingController ctrl, IconData icon,
+      {bool required = false, bool enabled = true, int maxLines = 1, TextInputType keyboardType = TextInputType.text}) {
+    return TextFormField(
+      controller: ctrl,
+      enabled: enabled,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       ),
-    ],
-  );
-
-  InputDecoration _decor(String label, IconData icon) => InputDecoration(
-    labelText: label,
-    prefixIcon: Icon(icon),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-  );
-
-  Widget _buildHoursRow(String day, String hours) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          day,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-        ),
-        Text(hours, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-      ],
-    ),
-  );
+      validator: required ? (v) => v?.isEmpty == true ? 'Required' : null : null,
+    );
+  }
 }

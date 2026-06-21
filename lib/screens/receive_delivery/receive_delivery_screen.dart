@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -90,9 +91,9 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     if (AppSettings.requirePinVoid && mounted) {
       final pinCtrl = TextEditingController();
       final pinOk = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const Text('Manager PIN Required'),
-        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 4, decoration: InputDecoration(labelText: 'Enter Manager PIN', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 6, decoration: InputDecoration(labelText: 'Enter Manager PIN', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () { if (pinCtrl.text == '1234') { Navigator.pop(ctx, true); } else { _snack('Invalid PIN'); } }, child: const Text('Confirm'))]));
+          ElevatedButton(onPressed: () { final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull; if (mgr != null) { Navigator.pop(ctx, true); } else { _snack('Invalid Manager PIN'); } }, child: const Text('Confirm'))]));
       if (pinOk != true) return;
     }
     try {

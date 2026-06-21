@@ -31,21 +31,22 @@ class AppUser {
     'Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment',
     'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management',
     'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring',
-    'Customers', 'Branches', 'Users', 'Settings',
+    'Customers', 'Branches', 'Users', 'Settings', 'Expenses', 'Profit & Loss',
   ];
 
   static const Map<String, List<String>> moduleCategories = {
     'Sales': ['Dashboard', 'Cashiering', 'Sales History'],
-    'Reports': ['Sales Analytics', 'Z Report', 'Discount Monitoring'],
+    'Reports': ['Sales Analytics', 'Z Report', 'Discount Monitoring', 'Profit & Loss'],
     'Inventory': ['Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management'],
-    'Management': ['Customers', 'Branches', 'Users', 'Settings'],
+    'Management': ['Customers', 'Branches', 'Users', 'Settings', 'Expenses'],
+    'Cashier Locking': ['End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
   };
 
   static const Map<String, List<String>> rolePresets = {
-    'Admin': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Users', 'Settings'],
-    'Manager': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches'],
-    'Cashier': ['Dashboard', 'Cashiering', 'Sales History'],
-    'Inventory Clerk': ['Dashboard', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management'],
+    'Admin': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Users', 'Settings', 'Expenses', 'Profit & Loss', 'End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
+    'Manager': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Expenses', 'Profit & Loss', 'End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
+    'Cashier': ['Dashboard', 'Cashiering', 'Sales History', 'End Shift', 'Tab: Cashier'],
+    'Inventory Clerk': ['Dashboard', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Tab: Inventory'],
     'Custom': [],
   };
 

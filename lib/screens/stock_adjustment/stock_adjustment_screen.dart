@@ -7,6 +7,10 @@ import '../../models/product_model.dart';
 import '../../models/adjustment_item.dart';
 import 'adjustment_model.dart';
 import 'adjustment_history_screen.dart';
+import 'adjustment_icon_map.dart';
+import 'adjustment_reasons_settings_screen.dart';
+import '../../helpers/database_helper.dart';
+import '../../models/user_model.dart';
 import '../inventory/inventory_screen.dart';
 
 class StockAdjustmentScreen extends StatefulWidget {
@@ -23,20 +27,8 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
   final List<AdjustmentItem> _items = [];
 
 
-  final Map<String, IconData> _reasonIcons = {
-    'Delivery': Icons.local_shipping,
-    'Damaged': Icons.broken_image,
-    'Expired': Icons.event_busy,
-    'Return': Icons.assignment_return,
-    'Recount': Icons.calculate,
-    'Transfer': Icons.swap_horiz,
-    'Data Entry Error': Icons.edit_note,
-    'Returned by Customer': Icons.person_off,
-    'Marketing Sample': Icons.campaign,
-    'Other': Icons.more_horiz,
-  };
-
-  List<String> get _reasons => _reasonIcons.keys.toList();
+  List<Map<String, dynamic>> _addReasons = [];
+  List<Map<String, dynamic>> _deductReasons = [];
 
   String _formatCompact(double v) {
     if (v >= 1000000000) return '${(v / 1000000000).toStringAsFixed(1)}Bn';
@@ -70,6 +62,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
   @override
   void initState() {
     super.initState();
+    _loadReasons();
     if (widget.initialProduct != null) {
       final item = AdjustmentItem(product: widget.initialProduct!);
       _items.add(item);
@@ -85,6 +78,30 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       item.dispose();
     }
     super.dispose();
+  }
+
+  Future<void> _loadReasons() async {
+    var adds = await DatabaseHelper().getAdjustmentReasons(type: 'add');
+    var deducts = await DatabaseHelper().getAdjustmentReasons(type: 'deduct');
+    if (adds.isEmpty && deducts.isEmpty) {
+      await DatabaseHelper().seedDefaultReasonsIfEmpty();
+      adds = await DatabaseHelper().getAdjustmentReasons(type: 'add');
+      deducts = await DatabaseHelper().getAdjustmentReasons(type: 'deduct');
+    }
+    if (mounted) {
+      setState(() {
+        _addReasons = adds;
+        _deductReasons = deducts;
+      });
+    }
+  }
+
+  IconData _getIconForReason(String? reason) {
+    if (reason == null) return Icons.more_horiz;
+    final all = [..._addReasons, ..._deductReasons];
+    final match = all.where((r) => r['label'] == reason);
+    if (match.isNotEmpty) return getReasonIcon(match.first['iconName'] as String?);
+    return Icons.more_horiz;
   }
 
   void _showSnackBar(String msg, {Color? color}) {
@@ -119,14 +136,15 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       final pinCtrl = TextEditingController();
       final pinOk = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
         title: const Text('Manager PIN Required'),
-        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 4,
+        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 6,
           decoration: InputDecoration(labelText: 'Enter Manager PIN',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(onPressed: () {
-            if (pinCtrl.text == '1234') { Navigator.pop(ctx, true); }
-            else { _showSnackBar('Invalid PIN', color: Colors.red); }
+            final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+            if (mgr != null) { Navigator.pop(ctx, true); }
+            else { ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Invalid Manager PIN'), backgroundColor: Colors.red)); }
           }, child: const Text('Confirm')),
         ]));
       if (pinOk != true) return;
@@ -138,14 +156,15 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       final pinCtrl = TextEditingController();
       final pinOk = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
         title: const Text('Manager PIN Required'),
-        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 4,
+        content: TextField(controller: pinCtrl, obscureText: true, maxLength: 6,
           decoration: InputDecoration(labelText: 'Enter Manager PIN',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(onPressed: () {
-            if (pinCtrl.text == '1234') { Navigator.pop(ctx, true); }
-            else { _showSnackBar('Invalid PIN', color: Colors.red); }
+            final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+            if (mgr != null) { Navigator.pop(ctx, true); }
+            else { ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Invalid Manager PIN'), backgroundColor: Colors.red)); }
           }, child: const Text('Confirm')),
         ]));
       if (pinOk != true) return;
@@ -177,6 +196,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
 
     if (!mounted) return;
 
+    setState(() { _items.clear(); });
     _showPostSaveDialog(records);
   }
 
@@ -468,12 +488,15 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            onSelected: (v) {
+            onSelected: (v) async {
               if (v == 'history') Navigator.push(context, MaterialPageRoute(builder: (_) => const AdjustmentHistoryScreen()));
+              if (v == 'reasons_settings') { await Navigator.push(context, MaterialPageRoute(builder: (_) => const AdjustmentReasonsSettingsScreen())); _loadReasons(); }
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'history', child: ListTile(
                 leading: Icon(Icons.history, color: Colors.blue), title: Text('Adjustment History'), contentPadding: EdgeInsets.zero)),
+              const PopupMenuItem(value: 'reasons_settings', child: ListTile(
+                leading: Icon(Icons.settings, color: Color(0xFF7C4DFF)), title: Text('Manage Reasons'), contentPadding: EdgeInsets.zero)),
             ],
           ),
         ],
@@ -688,11 +711,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                     const SizedBox(height: 10),
 
                     // Add/Deduct toggle + Qty row
-                    Row(children: [
-                      _typeChip(item, 'Add', true),
-                      const SizedBox(width: 6),
-                      _typeChip(item, 'Deduct', false),
-                      const Spacer(),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       // Qty stepper
                       Container(
                         decoration: BoxDecoration(
@@ -747,37 +766,33 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                     Row(children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          initialValue: item.selectedReason,
+                          initialValue: item.selectedReason.isEmpty ? null : item.selectedReason,
                           isDense: true,
                           decoration: InputDecoration(
                             labelText: 'Reason',
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            prefixIcon: Icon(_reasonIcons[item.selectedReason] ?? Icons.more_horiz, size: 18, color: Colors.blue[700]),
+                            
                           ),
-                          items: _reasons.map((r) => DropdownMenuItem(
-                            value: r,
-                            child: Text(r, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
-
-
-
-
-
-                          )).toList(),
-                          onChanged: (v) { if (v != null) setState(() => item.selectedReason = v); },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: item.notesController,
-                          decoration: InputDecoration(
-                            labelText: 'Notes (optional)',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            isDense: true,
-                          ),
-                          style: const TextStyle(fontSize: 12),
+                          items: [
+                            ..._addReasons.map((r) => DropdownMenuItem<String>(
+                              value: r['label'] as String,
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(getReasonIcon(r['iconName'] as String?), size: 16, color: Colors.green),
+                                const SizedBox(width: 8),
+                                Text(r['label'] as String, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                              ]),
+                            )),
+                            ..._deductReasons.map((r) => DropdownMenuItem<String>(
+                              value: r['label'] as String,
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(getReasonIcon(r['iconName'] as String?), size: 16, color: Colors.red),
+                                const SizedBox(width: 8),
+                                Text(r['label'] as String, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                              ]),
+                            )),
+                          ],
+                          onChanged: (v) { if (v != null) setState(() { item.selectedReason = v; item.isAdd = _addReasons.any((r) => r['label'] == v); }); },
                         ),
                       ),
                     ]),

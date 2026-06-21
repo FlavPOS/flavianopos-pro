@@ -4,6 +4,9 @@ import 'package:sqflite/sqflite.dart' hide Transaction;
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/setup_screen.dart';
+import 'screens/setup/setup_mode_selection_screen.dart';
+import 'screens/setup/setup_path_detector_screen.dart';
+import 'services/setup_mode_service.dart';
 import 'models/settings_model.dart';
 import 'models/product_model.dart';
 import 'models/batch_model.dart';
@@ -11,12 +14,15 @@ import 'models/transaction_model.dart';
 import 'models/customer_model.dart';
 import 'models/user_model.dart';
 import 'models/branch_model.dart';
-import 'models/employee_model.dart';
 import 'models/customer_directory_model.dart';
-import 'models/batch_log_model.dart';
 import 'models/stock_transfer_model.dart';
 import 'models/discount_record_model.dart';
 import 'helpers/database_helper.dart';
+import 'helpers/sync_schema_helper.dart';
+import 'utils/idle_detector.dart';
+import 'utils/theme_notifier.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,14 +36,37 @@ class QuickPOSApp extends StatelessWidget {
   const QuickPOSApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FlavianoPOS - PRO',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7B1FA2)),
-        useMaterial3: true,
+    return AnimatedBuilder(
+      animation: ThemeNotifier.instance,
+      builder: (context, _) => MaterialApp(
+        navigatorKey: navigatorKey,
+        title: 'FlavianoPOS - PRO',
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeNotifier.instance.themeMode,
+        theme: ThemeData(
+          brightness: Brightness.light,
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF7B1FA2)),
+          useMaterial3: true,
+        ),
+        darkTheme: ThemeData(
+          brightness: Brightness.dark,
+          colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF7B1FA2),
+              brightness: Brightness.dark),
+          useMaterial3: true,
+        ),
+        home: IdleDetector(
+          onIdle: () {
+            final ctx = navigatorKey.currentContext;
+            if (ctx == null) return;
+            navigatorKey.currentState?.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (route) => false,
+            );
+          },
+          child: const AppLoader(),
+        ),
       ),
-      home: const AppLoader(),
     );
   }
 }
@@ -65,9 +94,13 @@ class _AppLoaderState extends State<AppLoader> {
 
       _setStatus('Opening database...');
       await DatabaseHelper().database.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw Exception('Database timeout — clear browser storage (F12 → Application → Clear site data) and refresh.'),
-      );
+            const Duration(seconds: 15),
+            onTimeout: () => throw Exception(
+                'Database timeout — clear browser storage (F12 → Application → Clear site data) and refresh.'),
+          );
+
+      _setStatus('Preparing sync schema...');
+      await SyncSchemaHelper.ensureSyncSchema();
 
       _setStatus('Loading products...');
       await Product.loadFromDB();
@@ -97,12 +130,48 @@ class _AppLoaderState extends State<AppLoader> {
       await DiscountRecord.loadFromDB();
 
       if (mounted) {
-        final hasUsers = AppUser.allUsers.isNotEmpty;
+        // 🛡️ BULLETPROOF: Query SQLite DIRECTLY (bypasses cache!)
+        final db = DatabaseHelper();
+        final usersList = await db.getAllUsers();
+        final branchesList = await db.getAllBranches();
+        final hasUsers = usersList.isNotEmpty;
+        final hasBranch = branchesList.isNotEmpty;
+        final needsSetup = !hasUsers || !hasBranch;
+
+        // 🆕 Check setup mode for fresh install
+        final setupModeService = SetupModeService();
+        final setupMode = await setupModeService.getSetupMode();
+
+        debugPrint('===============================');
+        debugPrint('SETUP CHECK (DIRECT DB)');
+        debugPrint('Users in DB: ${usersList.length}');
+        debugPrint('Branches in DB: ${branchesList.length}');
+        debugPrint('Setup Mode: ${setupMode ?? "(not selected)"}');
+        debugPrint('Needs Setup: $needsSetup');
+        debugPrint('===============================');
+
+        Widget nextScreen;
+        if (!needsSetup) {
+          // Already configured -> go to login (unchanged)
+          nextScreen = const LoginScreen();
+        } else if (setupMode == null) {
+          // Fresh install -> ask mode first (Solo vs Multiple)
+          nextScreen = const SetupModeSelectionScreen(
+            soloNextScreen: SetupScreen(),
+          );
+        } else if (setupMode == SetupModeService.modeSolo) {
+          // Solo Store -> existing setup flow (UNCHANGED)
+          nextScreen = const SetupScreen();
+        } else {
+          // 🆕 Multiple Store -> NEW Path Detector
+          // (Decides: Create Company / Add Branch / Join Branch)
+          nextScreen = const SetupPathDetectorScreen();
+        }
+
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => hasUsers ? const LoginScreen() : const SetupScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => nextScreen),
         );
       }
     } catch (e, stack) {
@@ -125,10 +194,12 @@ class _AppLoaderState extends State<AppLoader> {
     final isT = MediaQuery.of(context).size.width > 600;
     return Scaffold(
       body: Container(
-        width: double.infinity, height: double.infinity,
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [Color(0xFF6A1B9A), Color(0xFF7B1FA2), Color(0xFF8E24AA)],
           ),
         ),
@@ -137,34 +208,63 @@ class _AppLoaderState extends State<AppLoader> {
               ? SingleChildScrollView(
                   padding: const EdgeInsets.all(32),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.error_outline, color: Colors.white, size: 64),
+                    const Icon(Icons.error_outline,
+                        color: Colors.white, size: 64),
                     const SizedBox(height: 16),
-                    const Text('Startup Error', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    const Text('Startup Error',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-                      child: SelectableText(_error!, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
+                      decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: SelectableText(_error!,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 13),
+                          textAlign: TextAlign.center),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
-                      onPressed: () { setState(() { _error = null; _status = 'Retrying...'; }); _initApp(); },
+                      onPressed: () {
+                        setState(() {
+                          _error = null;
+                          _status = 'Retrying...';
+                        });
+                        _initApp();
+                      },
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white, foregroundColor: const Color(0xFF7B1FA2),
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF7B1FA2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 32, vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
                   ]),
                 )
               : Column(mainAxisSize: MainAxisSize.min, children: [
-                  const SizedBox(width: 48, height: 48, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)),
+                  const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: CircularProgressIndicator(
+                          color: Colors.white, strokeWidth: 3)),
                   const SizedBox(height: 24),
-                  Text(_status, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                  Text(_status,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 14)),
                   const SizedBox(height: 8),
-                  Text('FlavianoPOS - PRO', style: TextStyle(color: Colors.white, fontSize: isT ? 22 : 18, fontWeight: FontWeight.bold)),
+                  Text('FlavianoPOS - PRO',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isT ? 22 : 18,
+                          fontWeight: FontWeight.bold)),
                 ]),
         ),
       ),

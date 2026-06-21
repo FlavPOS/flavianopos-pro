@@ -5,11 +5,13 @@ class AdjustmentItem {
   final Product product;
   final TextEditingController qtyController = TextEditingController();
   final TextEditingController notesController = TextEditingController();
-  bool isAdd = true;
-  String selectedReason = 'Other';
+  String selectedReason = '';
   int quantity = 0;
+  bool isAdd = true;
 
   AdjustmentItem({required this.product});
+
+  bool get hasReason => selectedReason.isNotEmpty;
 
   int get newStock {
     if (isAdd) return product.stockQty + quantity;

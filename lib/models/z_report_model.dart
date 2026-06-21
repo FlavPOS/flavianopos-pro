@@ -1,4 +1,5 @@
 // lib/models/z_report_model.dart
+import '../helpers/database_helper.dart';
 
 class ZReportPaymentBreakdown {
   final String method;
@@ -88,28 +89,153 @@ class ZReportRecord {
 
   static List<ZReportRecord> get history => List.unmodifiable(_history);
 
-  static void addReport(ZReportRecord report) {
-    _history.insert(0, report); // newest first
+  // ═══ SQLite persistence methods ═══
+  Map<String, dynamic> toMap() => {
+    'reportId': reportId,
+    'reportDate': reportDate.toIso8601String(),
+    'generatedAt': generatedAt.toIso8601String(),
+    'branch': branch,
+    'cashier': cashier,
+    'grossSales': grossSales,
+    'totalDiscount': totalDiscount,
+    'netSales': netSales,
+    'totalTransactions': totalTransactions,
+    'averageTransaction': averageTransaction,
+    'paymentBreakdownJson': paymentBreakdown.map((p) => '${p.method}|${p.count}|${p.total}').join('||'),
+    'voidedCount': voidedCount,
+    'voidedAmount': voidedAmount,
+    'voidedTransactionsJson': voidedTransactions.map((v) => '${v.txnId}|${v.reason}|${v.amount}').join('||'),
+    'beginningCash': beginningCash,
+    'endingCash': endingCash,
+    'expectedCash': expectedCash,
+    'overShort': overShort,
+    'refundedCount': refundedCount,
+    'refundedAmount': refundedAmount,
+    'refundedTransactionsJson': refundedTransactions.map((v) => v.txnId + '|' + v.reason + '|' + v.amount.toString()).join('||'),
+    'allTransactionsJson': transactionLog.map((t) => '${t.txnId}|${t.dateTime.toIso8601String()}|${t.paymentMethod}|${t.amount}|${t.status}').join('||'),
+  };
+
+  factory ZReportRecord.fromMap(Map<String, dynamic> m) {
+    // Deserialize payment breakdown
+    final pbList = <ZReportPaymentBreakdown>[];
+    final pbStr = m['paymentBreakdownJson'] as String? ?? '';
+    if (pbStr.isNotEmpty) {
+      for (final part in pbStr.split('||')) {
+        if (part.isEmpty) continue;
+        final p = part.split('|');
+        if (p.length >= 3) {
+          pbList.add(ZReportPaymentBreakdown(
+            method: p[0], count: int.tryParse(p[1]) ?? 0, total: double.tryParse(p[2]) ?? 0));
+        }
+      }
+    }
+
+    // Deserialize voids
+    final voidsList = <ZReportVoidRecord>[];
+    final voidsStr = m['voidedTransactionsJson'] as String? ?? '';
+    if (voidsStr.isNotEmpty) {
+      for (final part in voidsStr.split('||')) {
+        if (part.isEmpty) continue;
+        final v = part.split('|');
+        if (v.length >= 3) {
+          voidsList.add(ZReportVoidRecord(
+            txnId: v[0], reason: v[1], amount: double.tryParse(v[2]) ?? 0));
+        }
+      }
+    }
+
+
+    // Deserialize refunded transactions (same format as voids)
+    final refundedList = <ZReportVoidRecord>[];
+    final refundedStr = m['refundedTransactionsJson'] as String? ?? '';
+    if (refundedStr.isNotEmpty) {
+      for (final part in refundedStr.split('||')) {
+        if (part.isEmpty) continue;
+        final r = part.split('|');
+        if (r.length >= 3) {
+          refundedList.add(ZReportVoidRecord(
+            txnId: r[0], reason: r[1], amount: double.tryParse(r[2]) ?? 0));
+        }
+      }
+    }
+
+    // Deserialize all transactions
+    final txnList = <ZReportTxnRecord>[];
+    final txnStr = m['allTransactionsJson'] as String? ?? '';
+    if (txnStr.isNotEmpty) {
+      for (final part in txnStr.split('||')) {
+        if (part.isEmpty) continue;
+        final t = part.split('|');
+        if (t.length >= 5) {
+          txnList.add(ZReportTxnRecord(
+            txnId: t[0],
+            dateTime: DateTime.tryParse(t[1]) ?? DateTime.now(),
+            paymentMethod: t[2],
+            amount: double.tryParse(t[3]) ?? 0,
+            status: t[4]));
+        }
+      }
+    }
+
+    return ZReportRecord(
+      reportId: m['reportId'] ?? '',
+      reportDate: DateTime.tryParse(m['reportDate'] ?? '') ?? DateTime.now(),
+      generatedAt: DateTime.tryParse(m['generatedAt'] ?? '') ?? DateTime.now(),
+      branch: m['branch'] ?? '',
+      cashier: m['cashier'] ?? '',
+      grossSales: (m['grossSales'] as num?)?.toDouble() ?? 0,
+      totalDiscount: (m['totalDiscount'] as num?)?.toDouble() ?? 0,
+      netSales: (m['netSales'] as num?)?.toDouble() ?? 0,
+      totalTransactions: m['totalTransactions'] ?? 0,
+      averageTransaction: (m['averageTransaction'] as num?)?.toDouble() ?? 0,
+      paymentBreakdown: pbList,
+      voidedCount: m['voidedCount'] ?? 0,
+      voidedAmount: (m['voidedAmount'] as num?)?.toDouble() ?? 0,
+      voidedTransactions: voidsList,
+      beginningCash: (m['beginningCash'] as num?)?.toDouble() ?? 0,
+      endingCash: (m['endingCash'] as num?)?.toDouble() ?? 0,
+      expectedCash: (m['expectedCash'] as num?)?.toDouble() ?? 0,
+      overShort: (m['overShort'] as num?)?.toDouble() ?? 0,
+      refundedCount: m['refundedCount'] ?? 0,
+      refundedAmount: (m['refundedAmount'] as num?)?.toDouble() ?? 0,
+      refundedTransactions: refundedList,
+      transactionLog: txnList,
+    );
   }
 
-  static void clearHistory() => _history.clear();
-
-  static ZReportRecord? getByDate(DateTime date) {
+  /// Load all reports from SQLite into memory
+  static Future<void> loadFromDB() async {
     try {
-      return _history.firstWhere((r) =>
-        r.reportDate.year == date.year &&
-        r.reportDate.month == date.month &&
-        r.reportDate.day == date.day);
+      final rows = await DatabaseHelper().getAllZReports();
+      _history.clear();
+      _history.addAll(rows.map((r) => ZReportRecord.fromMap(r)));
+    } catch (_) {}
+  }
+
+  /// Save report to SQLite + memory
+  static Future<void> addReport(ZReportRecord report) async {
+    _history.insert(0, report);
+    try {
+      await DatabaseHelper().insertZReport(report.toMap());
+    } catch (_) {}
+  }
+
+  /// Check if today already has a Z Report (queries DB!)
+  static Future<bool> hasReportForToday() async {
+    try {
+      return await DatabaseHelper().hasZReportForDate(DateTime.now());
     } catch (_) {
-      return null;
+      // Fallback to memory check
+      final now = DateTime.now();
+      return _history.any((r) =>
+        r.reportDate.year == now.year &&
+        r.reportDate.month == now.month &&
+        r.reportDate.day == now.day);
     }
   }
 
-  static bool hasReportForToday() {
-    final now = DateTime.now();
-    return _history.any((r) =>
-      r.reportDate.year == now.year &&
-      r.reportDate.month == now.month &&
-      r.reportDate.day == now.day);
+  static Future<void> clearHistory() async {
+    _history.clear();
+    try { await DatabaseHelper().clearZReports(); } catch (_) {}
   }
 }

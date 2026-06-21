@@ -1,6 +1,9 @@
 // lib/screens/cashiering/cashiering_screen.dart
 import 'package:flutter/material.dart';
+import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
+import '../../utils/sound_helper.dart';
+import '../../services/cashier_session_service.dart';
 import '../../models/product_model.dart';
 import '../../models/cart_item_model.dart';
 import '../../widgets/product_card_widget.dart';
@@ -109,7 +112,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             _cart[idx].quantity++;
           } else { _showSnackBar("Maximum stock reached"); }
         } else {
-          _cart.add(CartItem(product: product));
+          _cart.add(CartItem(product: product)); SoundHelper.click();
         }
       });
       return;
@@ -625,13 +628,14 @@ class _CashieringScreenState extends State<CashieringScreen> {
                   Navigator.pop(ctx);
                   showDialog(context: context, builder: (pCtx) => AlertDialog(
                     title: const Text("Manager PIN Required"),
-                    content: TextField(controller: pinCtrl, obscureText: true, maxLength: 4,
+                    content: TextField(controller: pinCtrl, obscureText: true, maxLength: 6,
                       decoration: InputDecoration(labelText: "PIN for ${val.toInt()}% discount",
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
                     actions: [
                       TextButton(onPressed: () => Navigator.pop(pCtx), child: const Text("Cancel")),
                       ElevatedButton(onPressed: () {
-                        if (pinCtrl.text != "1234") { _showSnackBar("Invalid PIN"); Navigator.pop(pCtx); return; }
+                        final mgrCheck = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+                        if (mgrCheck == null) { _showSnackBar("Invalid Manager PIN"); Navigator.pop(pCtx); return; }
                         setState(() { _txnDiscount = TransactionDiscount(type: "Manual", percentage: val, fixedAmount: 0, isPercentage: true); });
                         Navigator.pop(pCtx); _showSnackBar("Manual discount applied");
                       }, child: const Text("Confirm")),
@@ -761,7 +765,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
 
           Transaction.addTransaction(Transaction(
             id: txnId, items: txnItems, subtotal: _cartSubtotal,
-            totalDiscount: disc, tax: total / 1.12 * 0.12, total: total,
+            totalDiscount: disc, tax: AppSettings.vatEnabled ? (total - (total / (1 + AppSettings.vatRate / 100))) : 0, total: total,
             paymentMethod: method, amountPaid: amountPaid, change: amountPaid - total,
             cashier: widget.userName, branch: widget.branch, dateTime: now,
           ));
@@ -779,6 +783,33 @@ class _CashieringScreenState extends State<CashieringScreen> {
               ));
             }
           }
+          // ── Update Active Cashier Session ──
+          () async {
+            try {
+              final session = await CashierSessionService.getActiveSession(widget.userName);
+              if (session != null) {
+                double cashAdd = 0, gcashAdd = 0, mayaAdd = 0, cardAdd = 0, otherAdd = 0;
+                final pm = method.toLowerCase();
+                if (pm.contains('cash')) cashAdd = total;
+                else if (pm.contains('gcash')) gcashAdd = total;
+                else if (pm.contains('maya')) mayaAdd = total;
+                else if (pm.contains('card')) cardAdd = total;
+                else otherAdd = total;
+
+                await CashierSessionService.updateSessionTotals(session.id, {
+                  'cashSales': session.cashSales + cashAdd,
+                  'gcashSales': session.gcashSales + gcashAdd,
+                  'mayaSales': session.mayaSales + mayaAdd,
+                  'cardSales': session.cardSales + cardAdd,
+                  'otherSales': session.otherSales + otherAdd,
+                  'totalDiscounts': session.totalDiscounts + disc,
+                  'transactionCount': session.transactionCount + 1,
+                });
+              }
+            } catch (_) {}
+          }();
+
+          SoundHelper.success();
           Navigator.push(context, MaterialPageRoute(
             builder: (context) => ReceiptScreen(
               items: cartCopy, totalAmount: total, totalDiscount: disc,
@@ -790,7 +821,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
     );
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String message) { SoundHelper.click();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message), behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

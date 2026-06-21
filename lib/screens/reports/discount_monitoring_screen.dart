@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/discount_record_model.dart';
+import '../../models/transaction_model.dart';
 import '../../utils/export_helper.dart';
 
 class DiscountMonitoringScreen extends StatefulWidget {
@@ -33,6 +34,51 @@ class _DiscountMonitoringScreenState extends State<DiscountMonitoringScreen>
   @override
   void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
+  // 🎯 Status filter for void/refund/exchange awareness
+  String _statusFilter = 'Active';  // 'All', 'Active', 'Voided', 'Refunded'
+
+  /// Get transaction status by ID (returns 'completed' if not found)
+  String _getTxnStatus(String transactionId) {
+    try {
+      final txn = Transaction.allTransactions.firstWhere(
+        (t) => t.id == transactionId,
+      );
+      return txn.status;
+    } catch (_) {
+      return 'completed'; // Default if transaction not found
+    }
+  }
+
+  /// Returns color for status badge
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'voided': return Colors.red;
+      case 'refunded': return Colors.orange;
+      case 'exchanged': return Colors.purple;
+      default: return Colors.green; // completed/active
+    }
+  }
+
+  /// Returns icon for status
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'voided': return Icons.cancel;
+      case 'refunded': return Icons.undo;
+      case 'exchanged': return Icons.swap_horiz;
+      default: return Icons.check_circle;
+    }
+  }
+
+  /// Returns label for status
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'voided': return 'VOIDED';
+      case 'refunded': return 'REFUNDED';
+      case 'exchanged': return 'EXCHANGED';
+      default: return 'ACTIVE';
+    }
+  }
+
   List<DiscountRecord> get _filteredRecords {
     final type = _tabs[_tabCtrl.index];
     var records = DiscountRecord.getByType(type);
@@ -40,6 +86,15 @@ class _DiscountMonitoringScreenState extends State<DiscountMonitoringScreen>
     final today = DateTime(now.year, now.month, now.day);
 
     return records.where((r) {
+      // 🎯 Apply status filter
+      if (_statusFilter != 'All') {
+        final txnStatus = _getTxnStatus(r.transactionId);
+        if (_statusFilter == 'Active' && txnStatus != 'completed') return false;
+        if (_statusFilter == 'Voided' && txnStatus != 'voided') return false;
+        if (_statusFilter == 'Refunded' && txnStatus != 'refunded') return false;
+        if (_statusFilter == 'Exchanged' && txnStatus != 'exchanged') return false;
+      }
+
       switch (_dateFilter) {
         case 'Today': return r.dateTime.isAfter(today);
         case 'Yesterday':

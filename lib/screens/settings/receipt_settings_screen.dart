@@ -1,5 +1,6 @@
 // lib/screens/settings/receipt_settings_screen.dart
 import 'package:flutter/material.dart';
+import '../../models/settings_model.dart';
 
 class ReceiptSettingsScreen extends StatefulWidget {
   const ReceiptSettingsScreen({super.key});
@@ -9,27 +10,43 @@ class ReceiptSettingsScreen extends StatefulWidget {
 }
 
 class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
-  final _headerController = TextEditingController(text: 'FlavianoPOS Store');
+  final _headerController = TextEditingController(text: AppSettings.receiptHeader);
   final _subheaderController = TextEditingController(
-    text: 'Diversion Road, Consolacion, Cebu',
+    text: AppSettings.receiptSubheader,
   );
   final _footerController = TextEditingController(
-    text: 'Thank you for shopping with us!',
+    text: AppSettings.receiptFooter,
   );
-  final _footer2Controller = TextEditingController(text: 'Please come again!');
-  final _tinController = TextEditingController(text: 'TIN: 123-456-789-000');
-  bool _showLogo = true;
-  bool _showDate = true;
-  bool _showCashier = true;
-  bool _showBranch = true;
-  bool _showItemCount = true;
+  final _footer2Controller = TextEditingController(text: AppSettings.receiptFooter2);
+  final _tinController = TextEditingController(text: AppSettings.businessTin);
+  bool _showLogo = AppSettings.showLogo;
+  bool _showDate = AppSettings.showDate;
+  bool _showCashier = AppSettings.showCashier;
+  bool _showBranch = AppSettings.showBranch;
+  bool _showItemCount = AppSettings.showItemCount;
   bool _showTaxBreakdown = true;
-  bool _showBarcode = false;
-  bool _showQRCode = false;
-  String _paperSize = '80mm';
-  String _fontSize = 'Medium';
+  bool _showBarcode = AppSettings.showBarcode;
+  bool _showQRCode = AppSettings.showQRCode;
+  String _paperSize = AppSettings.paperSize;
+  String _fontSize = AppSettings.fontSize;
 
   void _saveSettings() {
+    AppSettings.receiptHeader = _headerController.text; AppSettings.save('receiptHeader', _headerController.text);
+    AppSettings.businessName = _headerController.text; AppSettings.save('businessName', _headerController.text);
+    AppSettings.receiptSubheader = _subheaderController.text; AppSettings.save('receiptSubheader', _subheaderController.text);
+    AppSettings.businessAddress = _subheaderController.text; AppSettings.save('businessAddress', _subheaderController.text);
+    AppSettings.receiptFooter = _footerController.text; AppSettings.save('receiptFooter', _footerController.text);
+    AppSettings.receiptFooter2 = _footer2Controller.text; AppSettings.save('receiptFooter2', _footer2Controller.text);
+    AppSettings.businessTin = _tinController.text; AppSettings.save('businessTin', _tinController.text);
+    AppSettings.showLogo = _showLogo; AppSettings.save('showLogo', _showLogo);
+    AppSettings.showDate = _showDate; AppSettings.save('showDate', _showDate);
+    AppSettings.showCashier = _showCashier; AppSettings.save('showCashier', _showCashier);
+    AppSettings.showBranch = _showBranch; AppSettings.save('showBranch', _showBranch);
+    AppSettings.showItemCount = _showItemCount; AppSettings.save('showItemCount', _showItemCount);
+    AppSettings.showBarcode = _showBarcode; AppSettings.save('showBarcode', _showBarcode);
+    AppSettings.showQRCode = _showQRCode; AppSettings.save('showQRCode', _showQRCode);
+    AppSettings.paperSize = _paperSize; AppSettings.save('paperSize', _paperSize);
+    AppSettings.fontSize = _fontSize; AppSettings.save('fontSize', _fontSize);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Receipt settings saved!'),

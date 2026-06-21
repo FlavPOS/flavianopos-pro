@@ -1,6 +1,9 @@
 // lib/screens/settings/settings_screen.dart
 import 'package:flutter/material.dart';
+import '../../utils/backup_helper.dart';
+import '../../helpers/database_helper.dart';
 import '../../models/settings_model.dart';
+import '../../utils/theme_notifier.dart';
 import 'store_profile_screen.dart';
 import 'tax_settings_screen.dart';
 import 'receipt_settings_screen.dart';
@@ -14,7 +17,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _darkMode = false;
 
   void _s(String key, dynamic value) => AppSettings.save(key, value);
 
@@ -251,10 +253,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SwitchListTile(
               secondary: _iconBox(Icons.dark_mode, Colors.indigo),
               title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.w500)),
-              subtitle: const Text('Coming soon', style: TextStyle(fontSize: 12)),
-              value: _darkMode,
-              onChanged: (v) { setState(() => _darkMode = v);
-                _showSnackBar('Dark mode coming soon!'); setState(() => _darkMode = false); }),
+              subtitle: const Text('Switch to dark theme', style: TextStyle(fontSize: 12)),
+              value: AppSettings.darkMode,
+              onChanged: (v) { ThemeNotifier.instance.setDark(v); setState(() {}); }),
             const Divider(height: 0),
             SwitchListTile(
               secondary: _iconBox(Icons.volume_up, Colors.teal),
@@ -291,10 +292,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListTile(
               leading: _iconBox(Icons.language, Colors.purple),
               title: const Text('Language', style: TextStyle(fontWeight: FontWeight.w500)),
-              trailing: DropdownButton<String>(value: AppSettings.language, underline: const SizedBox(),
-                items: ['English', 'Filipino', 'Cebuano'].map((l) => DropdownMenuItem(value: l, child: Text(l, style: const TextStyle(fontSize: 14)))).toList(),
-                onChanged: (v) => setState(() { AppSettings.language = v!; _s('language', v); }))),
-            const Divider(height: 0),
+              subtitle: const Text('Multi-language coming soon', style: TextStyle(fontSize: 12, color: Colors.orange)),
+              trailing: const Text('English', style: TextStyle(color: Colors.grey, fontSize: 13)),
+              enabled: false,
+            ),
             ListTile(
               leading: _iconBox(Icons.attach_money, Colors.green),
               title: const Text('Currency', style: TextStyle(fontWeight: FontWeight.w500)),
@@ -309,10 +310,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 8),
         _buildSettingsTile(icon: Icons.backup, iconColor: Colors.blue,
           title: 'Backup Data', subtitle: 'Export data to cloud or file',
-          onTap: () => _showSnackBar('Backup feature coming soon!')),
+          onTap: _handleBackup),
         _buildSettingsTile(icon: Icons.restore, iconColor: Colors.orange,
           title: 'Restore Data', subtitle: 'Import from backup file',
-          onTap: () => _showSnackBar('Restore feature coming soon!')),
+          onTap: _handleRestore),
         _buildSettingsTile(icon: Icons.delete_forever, iconColor: Colors.red,
           title: 'Clear All Data', subtitle: 'Reset app to factory defaults',
           onTap: _confirmClearData),
@@ -361,16 +362,139 @@ class _SettingsScreenState extends State<SettingsScreen> {
         trailing: const Icon(Icons.chevron_right, color: Colors.grey), onTap: onTap));
   }
 
+  void _handleBackup() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Creating backup...'),
+          ],
+        ),
+      ),
+    );
+    try {
+      final filename = await BackupHelper.saveBackupToFile();
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Backup created: $filename'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Backup failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _handleRestore() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⚠️ Restore Backup'),
+        content: const Text(
+          'This will REPLACE all current data with backup data.\n\nContinue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Restoring data...'),
+          ],
+        ),
+      ),
+    );
+
+    final result = await BackupHelper.pickAndRestoreBackup();
+    if (mounted) Navigator.pop(context);
+    if (result == null) return;
+
+    if (result['success'] == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '✅ Restored ${result['restoredRows']} rows. Please restart app.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Restore failed: ${result['error']}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _confirmClearData() {
     showDialog(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Clear All Data'),
       content: const Text('This will delete ALL data. This cannot be undone!'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () { Navigator.pop(ctx); _showSnackBar('Data cleared (demo only)'); },
+        ElevatedButton(onPressed: () { Navigator.pop(ctx); _doClearAllData(); },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
           child: const Text('Clear All')),
       ]));
+  }
+
+  Future<void> _doClearAllData() async {
+    try {
+      await DatabaseHelper().clearAllData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('All data cleared. Please restart the app.'),
+            backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error clearing data: $e'),
+            backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+      }
+    }
   }
 
   void _showSnackBar(String msg) {

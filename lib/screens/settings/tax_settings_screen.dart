@@ -1,5 +1,6 @@
 // lib/screens/settings/tax_settings_screen.dart
 import 'package:flutter/material.dart';
+import '../../models/settings_model.dart';
 
 class TaxSettingsScreen extends StatefulWidget {
   const TaxSettingsScreen({super.key});
@@ -9,18 +10,27 @@ class TaxSettingsScreen extends StatefulWidget {
 }
 
 class _TaxSettingsScreenState extends State<TaxSettingsScreen> {
-  bool _vatEnabled = true;
-  double _vatRate = 12.0;
-  bool _vatInclusive = true;
-  bool _serviceChargeEnabled = false;
-  double _serviceChargeRate = 10.0;
-  bool _seniorDiscount = true;
-  double _seniorDiscountRate = 20.0;
-  bool _pwdDiscount = true;
+  bool _vatEnabled = AppSettings.vatEnabled;
+  double _vatRate = AppSettings.vatRate;
+  bool _vatInclusive = AppSettings.vatInclusive;
+  bool _serviceChargeEnabled = AppSettings.serviceChargeEnabled;
+  double _serviceChargeRate = AppSettings.serviceChargeRate;
+  bool _seniorDiscount = AppSettings.seniorDiscount;
+  double _seniorDiscountRate = AppSettings.seniorDiscountRate;
+  bool _pwdDiscount = AppSettings.pwdDiscount;
   final double _pwdDiscountRate = 20.0;
-  bool _showTaxBreakdown = true;
+  bool _showTaxBreakdown = AppSettings.showTaxBreakdown;
 
   void _saveSettings() {
+    AppSettings.vatEnabled = _vatEnabled; AppSettings.save('vatEnabled', _vatEnabled);
+    AppSettings.vatRate = _vatRate; AppSettings.save('vatRate', _vatRate);
+    AppSettings.vatInclusive = _vatInclusive; AppSettings.save('vatInclusive', _vatInclusive);
+    AppSettings.serviceChargeEnabled = _serviceChargeEnabled; AppSettings.save('serviceChargeEnabled', _serviceChargeEnabled);
+    AppSettings.serviceChargeRate = _serviceChargeRate; AppSettings.save('serviceChargeRate', _serviceChargeRate);
+    AppSettings.seniorDiscount = _seniorDiscount; AppSettings.save('seniorDiscount', _seniorDiscount);
+    AppSettings.seniorDiscountRate = _seniorDiscountRate; AppSettings.save('seniorDiscountRate', _seniorDiscountRate);
+    AppSettings.pwdDiscount = _pwdDiscount; AppSettings.save('pwdDiscount', _pwdDiscount);
+    AppSettings.showTaxBreakdown = _showTaxBreakdown; AppSettings.save('showTaxBreakdown', _showTaxBreakdown);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Tax settings saved!'),

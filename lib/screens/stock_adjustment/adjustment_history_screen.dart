@@ -86,17 +86,33 @@ class _AdjustmentHistoryScreenState extends State<AdjustmentHistoryScreen> {
           content: Text('No records to export.'), backgroundColor: Colors.orange));
       return;
     }
-    ExportHelper.exportExcel(
-      headers: ['Date', 'Time', 'Item', 'SKU', 'Type', 'Qty', 'Old Stock', 'New Stock', 'Reason', 'Notes'],
-      rows: _filtered.map((r) => [
+    double totalCost = 0;
+    double totalRetail = 0;
+    final rows = _filtered.map((r) {
+      final cost = r.cost * r.quantity;
+      final retail = r.retail * r.quantity;
+      totalCost += cost;
+      totalRetail += retail;
+      return [
         _fmtDate(r.dateTime), _fmtTime(r.dateTime), r.itemName, r.sku,
         r.adjustmentType, '${r.quantity}', '${r.oldStock}', '${r.newStock}',
         r.reason, r.notes,
-      ]).toList(),
+        cost.toStringAsFixed(2), retail.toStringAsFixed(2),
+      ];
+    }).toList();
+    // Add summary rows
+    rows.add(['', '', '', '', '', '', '', '', '', '', '', '']);
+    rows.add(['', '', '', '', '', '', '', '', 'TOTAL @ COST:', '', totalCost.toStringAsFixed(2), '']);
+    rows.add(['', '', '', '', '', '', '', '', 'TOTAL @ RETAIL:', '', '', totalRetail.toStringAsFixed(2)]);
+    rows.add(['', '', '', '', '', '', '', '', 'RECORDS:', '${_filtered.length}', '', '']);
+
+    ExportHelper.exportExcel(
+      headers: ['Date', 'Time', 'Item', 'SKU', 'Type', 'Qty', 'Old Stock', 'New Stock', 'Reason', 'Notes', 'Total @ Cost', 'Total @ Retail'],
+      rows: rows,
       sheetName: 'Adjustment_History',
       fileName: 'Adjustment_History_${DateTime.now().millisecondsSinceEpoch}.xlsx');
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Excel exported!'), backgroundColor: Colors.green));
+        content: Text('Excel exported with totals!'), backgroundColor: Colors.green));
   }
 
   void _exportPdf() {
@@ -105,18 +121,32 @@ class _AdjustmentHistoryScreenState extends State<AdjustmentHistoryScreen> {
           content: Text('No records to export.'), backgroundColor: Colors.orange));
       return;
     }
-    ExportHelper.exportPdf(
-      title: 'Adjustment History Report',
-      subtitle: '${_filtered.length} records',
-      headers: ['Date', 'Item', 'SKU', 'Type', 'Qty', 'Old', 'New', 'Reason'],
-      rows: _filtered.map((r) => [
+    double totalCost = 0;
+    double totalRetail = 0;
+    final rows = _filtered.map((r) {
+      final cost = r.cost * r.quantity;
+      final retail = r.retail * r.quantity;
+      totalCost += cost;
+      totalRetail += retail;
+      return [
         _fmtDate(r.dateTime), r.itemName, r.sku,
         r.adjustmentType, '${r.quantity}', '${r.oldStock}', '${r.newStock}',
-        r.reason,
-      ]).toList(),
+        r.reason, cost.toStringAsFixed(2), retail.toStringAsFixed(2),
+      ];
+    }).toList();
+    // Add summary rows
+    rows.add(['', '', '', '', '', '', '', '', '', '']);
+    rows.add(['', '', '', '', '', '', '', 'TOTAL @ COST:', totalCost.toStringAsFixed(2), '']);
+    rows.add(['', '', '', '', '', '', '', 'TOTAL @ RETAIL:', '', totalRetail.toStringAsFixed(2)]);
+
+    ExportHelper.exportPdf(
+      title: 'Adjustment History Report',
+      subtitle: '${_filtered.length} records | Total Cost: ${totalCost.toStringAsFixed(2)} | Total Retail: ${totalRetail.toStringAsFixed(2)}',
+      headers: ['Date', 'Item', 'SKU', 'Type', 'Qty', 'Old', 'New', 'Reason', 'Cost', 'Retail'],
+      rows: rows,
       fileName: 'Adjustment_History_${DateTime.now().millisecondsSinceEpoch}.pdf');
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('PDF exported!'), backgroundColor: Colors.green));
+        content: Text('PDF exported with totals!'), backgroundColor: Colors.green));
   }
 
   String _fmtDate(DateTime d) => '${d.year}-${_pad(d.month)}-${_pad(d.day)}';

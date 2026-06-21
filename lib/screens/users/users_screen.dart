@@ -12,11 +12,27 @@ class UsersScreen extends StatefulWidget {
 }
 
 class _UsersScreenState extends State<UsersScreen> {
-  final List<AppUser> _users = AppUser.allUsers;
+  List<AppUser> _users = [];
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedRole = 'All';
   final List<String> _roles = ['All', ...AppUser.availableRoles];
+
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    await AppUser.loadFromDB();
+    if (mounted) {
+      setState(() {
+        _users = List<AppUser>.from(AppUser.allUsers);
+      });
+    }
+  }
 
   List<AppUser> get _filtered {
     return _users.where((u) {
@@ -40,8 +56,9 @@ class _UsersScreenState extends State<UsersScreen> {
   void _addUser() async {
     final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddUserScreen()));
     if (result != null && result is AppUser && mounted) {
-      setState(() { AppUser.addUser(result); });
-      _showSnackBar('${result.name} added successfully', color: Colors.green[700]);
+      AppUser.addUser(result);
+      await _loadUsers();
+      if (mounted) _showSnackBar('${result.name} added successfully', color: Colors.green[700]);
     }
   }
 

@@ -1,6 +1,12 @@
 // lib/screens/reports/z_report_screen.dart
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
+import '../../services/cashier_session_service.dart';
+import '../../models/cashier_session_model.dart';
+import '../../models/incident_report_model.dart';
+import '../../models/denomination_model.dart';
+import 'package:flutter/services.dart';
+import '../../helpers/database_helper.dart';
 import '../../models/transaction_model.dart';
 import '../../models/z_report_model.dart';
 import 'z_report_history_screen.dart';
@@ -19,17 +25,87 @@ class _ZReportScreenState extends State<ZReportScreen> {
   final List<Transaction> _transactions = Transaction.allTransactions;
   final _beginningCashController = TextEditingController(text: '5000.00');
   final _endingCashController = TextEditingController(text: '');
+  final Map<double, TextEditingController> _denomCtrls = {};
+  bool _useDenominations = false;
   bool _isReportGenerated = false;
+  CashierSession? _activeSession;
+  CashierSession? _todaysClosedSession;
+  IncidentReport? _ir;
+  bool _loadingSession = true;
+  bool _shiftMustClose = false;
+  List<CashierSession> _allActiveShifts = [];
   final DateTime _reportDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    // Check if already generated today
-    if (ZReportRecord.hasReportForToday()) {
-      _isReportGenerated = true;
+    // Initialize denomination controllers
+    for (final d in DenominationRecord.phDenominations) {
+      _denomCtrls[d] = TextEditingController();
+    }
+    _loadSessionData();
+    _checkExistingReport();
+  }
+
+  Future<void> _checkExistingReport() async {
+    try {
+      await ZReportRecord.loadFromDB();
+      if (mounted && await ZReportRecord.hasReportForToday()) {
+        setState(() => _isReportGenerated = true);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadSessionData() async {
+    try {
+      // Check if there's an active session (shift not closed!)
+      final active = await CashierSessionService.getActiveSession(widget.cashier);
+      // Also check for any active shifts across all cashiers
+      final allActiveShifts = await CashierSessionService.getAllActiveShifts();
+
+      // Get all sessions for today
+      final allSessions = await DatabaseHelper().getAllSessions(cashierId: widget.cashier);
+      CashierSession? todaysClosedSession;
+      for (final row in allSessions) {
+        final s = CashierSession.fromMap(row);
+        if (s.status == 'closed' && _isSameDay(s.closedAt, _reportDate)) {
+          todaysClosedSession = s;
+          break;
+        }
+      }
+
+      // Get IR for the closed session if any
+      IncidentReport? ir;
+      if (todaysClosedSession != null) {
+        final irRow = await DatabaseHelper().getIncidentReportBySession(todaysClosedSession.id);
+        if (irRow != null) ir = IncidentReport.fromMap(irRow);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _activeSession = active;
+        _todaysClosedSession = todaysClosedSession;
+        _ir = ir;
+        _shiftMustClose = active != null || allActiveShifts.isNotEmpty;
+        _allActiveShifts = allActiveShifts;
+        _loadingSession = false;
+
+        // Auto-populate from closed session
+        if (todaysClosedSession != null) {
+          _beginningCashController.text = todaysClosedSession.beginningCash.toStringAsFixed(2);
+          _endingCashController.text = todaysClosedSession.endingCashDeclared.toStringAsFixed(2);
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadingSession = false);
     }
   }
+
+  bool _isSameDay(DateTime? a, DateTime b) {
+    if (a == null) return false;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
 
   // Only today's transactions
   List<Transaction> get _todayTransactions {
@@ -79,7 +155,15 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
   double get _beginningCash => double.tryParse(_beginningCashController.text) ?? 0;
   double get _expectedCash => _beginningCash + _getPaymentTotal('Cash');
-  double get _endingCash => double.tryParse(_endingCashController.text) ?? 0;
+  double get _totalCounted {
+    double total = 0;
+    for (final entry in _denomCtrls.entries) {
+      final qty = int.tryParse(entry.value.text.trim()) ?? 0;
+      total += entry.key * qty;
+    }
+    return total;
+  }
+  double get _endingCash => _useDenominations ? _totalCounted : (double.tryParse(_endingCashController.text) ?? 0);
   double get _overShort => _endingCash - _expectedCash;
   double get _averageTransaction =>
       _totalTransactions > 0 ? _totalNetSales / _totalTransactions : 0;
@@ -87,13 +171,26 @@ class _ZReportScreenState extends State<ZReportScreen> {
   // ──────────────────────────────────────────────────────────
   // ✅ GENERATE Z REPORT - Save to history & reset
   // ──────────────────────────────────────────────────────────
-  void _generateReport() {
-    if (_endingCashController.text.isEmpty) {
+  Future<void> _generateReport() async {
+    // BLOCK 1: Check if any active shifts (multi-cashier check!)
+    if (_shiftMustClose) {
+      _snack('🚨 BLOCKED: ${_allActiveShifts.length} active shift(s) detected! All cashiers must close their shifts first.');
+      return;
+    }
+
+    // BLOCK 2: Check ending cash is entered
+    if (_endingCashController.text.isEmpty && !_useDenominations) {
       _snack('Please enter the ending cash count');
       return;
     }
 
-    if (ZReportRecord.hasReportForToday()) {
+    if (_useDenominations && _totalCounted == 0) {
+      _snack('Please enter denomination counts');
+      return;
+    }
+
+    // BLOCK 3: Check if already generated
+    if (await ZReportRecord.hasReportForToday()) {
       _snack('Z Report already generated for today!');
       return;
     }
@@ -154,7 +251,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     );
   }
 
-  void _saveAndGenerate() {
+  Future<void> _saveAndGenerate() async {
     final now = DateTime.now();
     final methods = ['Cash', 'GCash', 'Maya', 'Card'];
 
@@ -178,7 +275,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     final reportId = 'ZR-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch.toString().substring(8)}';
 
     // Save to history
-    ZReportRecord.addReport(ZReportRecord(
+    await ZReportRecord.addReport(ZReportRecord(
       reportId: reportId,
       reportDate: DateTime(_reportDate.year, _reportDate.month, _reportDate.day),
       generatedAt: now,
@@ -255,6 +352,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
   void dispose() {
     _beginningCashController.dispose();
     _endingCashController.dispose();
+    for (final c in _denomCtrls.values) { c.dispose(); }
     super.dispose();
   }
 
@@ -302,6 +400,80 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
 
   @override
+
+  Widget _buildActiveShiftsBanner() {
+    if (!_shiftMustClose) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        border: Border.all(color: Colors.red[300]!, width: 1.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.warning_amber, color: Colors.red[800], size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '⚠️ Z REPORT BLOCKED',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red[900]),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            'Active shifts detected (${_allActiveShifts.length}). All cashiers must close their shifts before Z Report can be generated.',
+            style: TextStyle(fontSize: 12, color: Colors.red[800]),
+          ),
+          if (_allActiveShifts.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Open Shifts:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800])),
+                  const SizedBox(height: 4),
+                  ..._allActiveShifts.map((s) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Icon(Icons.person, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${s.cashierName} (opened ${s.openedAt.hour.toString().padLeft(2, "0")}:${s.openedAt.minute.toString().padLeft(2, "0")})',
+                          style: TextStyle(fontSize: 11, color: Colors.red[900]),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.red[100], borderRadius: BorderRadius.circular(10)),
+                        child: Text('OPEN', style: TextStyle(fontSize: 9, color: Colors.red[900], fontWeight: FontWeight.bold)),
+                      ),
+                    ]),
+                  )),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Text(
+            '💡 Each cashier must login → End Shift → declare cash → submit before Z Report.',
+            style: TextStyle(fontSize: 10, color: Colors.red[700], fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -345,6 +517,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildActiveShiftsBanner(),
         _buildReportHeader(),
         const SizedBox(height: 16),
         _buildSectionTitle('Sales Summary', Icons.trending_up),
@@ -391,6 +564,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildActiveShiftsBanner(),
         // ✅ Generated banner
         Container(
           width: double.infinity, padding: const EdgeInsets.all(20),
@@ -544,6 +718,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
               child: Icon(icons[i], color: colors[i], size: 20)),
             const SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildActiveShiftsBanner(),
               Text(methods[i], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
               Text('${_getPaymentCount(methods[i])} transactions', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
             ])),
@@ -569,6 +744,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
             child: Row(children: [
               const Icon(Icons.cancel, color: Colors.red, size: 16), const SizedBox(width: 8),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildActiveShiftsBanner(),
                 Text(t.id, style: const TextStyle(fontSize: 12)),
                 Text(t.voidReason, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
               ])),
@@ -594,16 +770,45 @@ class _ZReportScreenState extends State<ZReportScreen> {
         _buildReportRow('Add: Cash Sales', '+${_getPaymentTotal('Cash').toStringAsFixed(2)}', valueColor: Colors.green),
         const Divider(),
         _buildReportRow('Expected Cash', _expectedCash.toStringAsFixed(2), isBold: true, fontSize: 16),
-        const SizedBox(height: 12),
+        // Toggle: Single field OR Denomination breakdown
         Row(children: [
+          Icon(Icons.calculate, size: 18, color: Colors.purple[700]),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Count by Denomination?', style: TextStyle(fontWeight: FontWeight.w500))),
+          Switch(
+            value: _useDenominations,
+            onChanged: (v) => setState(() => _useDenominations = v),
+            activeColor: Colors.purple[700],
+          ),
+        ]),
+        const Divider(),
+        // Ending Cash Input — Single OR Denomination
+        if (!_useDenominations) Row(children: [
           const Expanded(child: Text('Ending Cash (Actual)', style: TextStyle(fontWeight: FontWeight.w500))),
-          SizedBox(width: 150, child: TextField(
+          SizedBox(width: 130, child: TextField(
             controller: _endingCashController, keyboardType: TextInputType.number,
-            textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            decoration: InputDecoration(prefixText: 'P ', hintText: '0.00',
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
-            onChanged: (_) => setState(() {}))),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+            decoration: InputDecoration(
+              prefixText: '₱ ', isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+            onChanged: (_) => setState(() {}),
+          )),
+        ]),
+        if (_useDenominations) Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text('BILLS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue[800], letterSpacing: 1.5))),
+          ..._buildZDenomRows([1000, 500, 200, 100, 50, 20]),
+          Padding(padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: Text('COINS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800], letterSpacing: 1.5))),
+          ..._buildZDenomRows([10, 5, 1, 0.25, 0.10, 0.05]),
+          const Divider(),
+          Row(children: [
+            const Expanded(child: Text('TOTAL COUNTED:', style: TextStyle(fontWeight: FontWeight.bold))),
+            Text('₱${_totalCounted.toStringAsFixed(2)}',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green[700])),
+          ]),
         ]),
         const SizedBox(height: 12),
         if (_endingCashController.text.isNotEmpty)
@@ -622,6 +827,44 @@ class _ZReportScreenState extends State<ZReportScreen> {
                   color: _overShort == 0 ? Colors.green[800] : _overShort > 0 ? Colors.blue[800] : Colors.red[800])),
             ])),
       ])));
+  }
+
+  List<Widget> _buildZDenomRows(List<double> denoms) {
+    return denoms.map((d) {
+      final qty = int.tryParse(_denomCtrls[d]?.text.trim() ?? '') ?? 0;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Container(width: 56, padding: const EdgeInsets.symmetric(vertical: 4),
+            decoration: BoxDecoration(
+              color: d >= 50 ? Colors.blue[50] : Colors.orange[50],
+              borderRadius: BorderRadius.circular(6)),
+            child: Text(DenominationRecord.labelFor(d), textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: d >= 50 ? Colors.blue[800] : Colors.orange[800]))),
+          const SizedBox(width: 8),
+          const Text('×', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 6),
+          SizedBox(width: 60, child: TextField(
+            controller: _denomCtrls[d], keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(
+              hintText: '0', isDense: true,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            ),
+            onChanged: (_) => setState(() {}),
+          )),
+          const SizedBox(width: 6),
+          const Text('=', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 6),
+          Expanded(child: Text('₱${(d * qty).toStringAsFixed(2)}',
+            textAlign: TextAlign.right,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
+              color: qty > 0 ? Colors.green[700] : Colors.grey))),
+        ]),
+      );
+    }).toList();
   }
 
   Widget _buildTransactionList() {

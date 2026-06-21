@@ -14,7 +14,7 @@ class BranchesScreen extends StatefulWidget {
 }
 
 class _BranchesScreenState extends State<BranchesScreen> {
-  final List<Branch> _branches = Branch.allBranches;
+  List<Branch> _branches = [];
   final _searchCtrl = TextEditingController();
   String _query = '';
 
@@ -28,6 +28,22 @@ class _BranchesScreenState extends State<BranchesScreen> {
           )
           .toList();
 
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranches();
+  }
+
+  Future<void> _loadBranches() async {
+    await Branch.loadFromDB();
+    if (mounted) {
+      setState(() {
+        _branches = List<Branch>.from(Branch.allBranches);
+      });
+    }
+  }
+
   int get _activeCount => _branches.where((b) => b.isActive).length;
   int get _totalUsers => _branches.fold(0, (s, b) => s + b.userCount);
   double get _totalSales => _branches.fold(0, (s, b) => s + b.todaySales);
@@ -37,9 +53,10 @@ class _BranchesScreenState extends State<BranchesScreen> {
       context,
       MaterialPageRoute(builder: (context) => const AddBranchScreen()),
     );
-    if (result != null && result is Branch) {
-      setState(() => _branches.add(result));
-      _snack('${result.name} added!');
+    if (result != null && result is Branch && mounted) {
+      Branch.addBranch(result);
+      await _loadBranches();
+      if (mounted) _snack('${result.name} added!');
     }
   }
 

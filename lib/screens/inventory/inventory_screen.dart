@@ -9,6 +9,8 @@ import 'add_edit_product_screen.dart';
 import '../../utils/export_helper.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
+import '../../helpers/database_helper.dart';
+import '../../models/user_model.dart';
 
 class InventoryScreen extends StatefulWidget {
   final String branch;
@@ -421,6 +423,9 @@ _importItems();
                 case 'template':
                   _downloadTemplate();
                   break;
+                case 'delete_all':
+                  _showDeleteAllConfirmation();
+                  break;
               }
             },
             itemBuilder:
@@ -455,6 +460,15 @@ _importItems();
                     child: ListTile(
                       leading: Icon(Icons.download, color: Colors.blue),
                       title: Text('Download Template'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'delete_all',
+                    child: ListTile(
+                      leading: Icon(Icons.delete_forever, color: Colors.red),
+                      title: Text('Delete All Items', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
@@ -1046,5 +1060,178 @@ _importItems();
         ],
       ),
     );
+  }
+
+  // ══════════════════════════════════════════════
+  // ── DELETE ALL ITEMS (3-Step Confirmation) ──
+  // ══════════════════════════════════════════════
+
+  void _showDeleteAllConfirmation() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            SizedBox(width: 8),
+            Text('Delete All Items', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You are about to delete ALL ${_products.length} products, including their batches and stock data.',
+              style: const TextStyle(fontSize: 15),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '⚠️ This action CANNOT be undone!',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 15),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () { Navigator.pop(ctx); _showTypeDeleteConfirmation(); },
+            child: const Text('Continue', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTypeDeleteConfirmation() {
+    final confirmCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Type Confirmation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Type "DELETE ALL" to confirm:', style: TextStyle(fontSize: 15)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Type DELETE ALL'),
+              textCapitalization: TextCapitalization.characters,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              if (confirmCtrl.text.trim().toUpperCase() == 'DELETE ALL') {
+                Navigator.pop(ctx);
+                _showDeletePinDialog();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Please type "DELETE ALL" exactly'), backgroundColor: Colors.orange),
+                );
+              }
+            },
+            child: const Text('Confirm', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeletePinDialog() {
+    final pinCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lock, color: Colors.purple),
+            SizedBox(width: 8),
+            Text('Manager PIN Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter Manager PIN to proceed:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pinCtrl,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Enter PIN',
+                prefixIcon: Icon(Icons.pin),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
+              if (mgr != null) {
+                Navigator.pop(ctx);
+                _executeDeleteAll();
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid Manager PIN'), backgroundColor: Colors.red),
+                );
+              }
+            },
+            child: const Text('Delete All', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _executeDeleteAll() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.purple)),
+    );
+    try {
+      final count = _products.length;
+      final db = await DatabaseHelper().database;
+      await db.delete('batches');
+      await db.delete('products');
+      Product.allProducts.clear();
+      if (mounted) {
+        Navigator.pop(context);
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Successfully deleted $count products and all related batches!')),
+            ]),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting items: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 }

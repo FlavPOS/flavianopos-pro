@@ -234,7 +234,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                 pdfInfoRow('Subtotal:', (widget.totalAmount + widget.totalDiscount).toStringAsFixed(2)),
                 if (widget.totalDiscount > 0)
                   pdfInfoRow('Discount:', '-${widget.totalDiscount.toStringAsFixed(2)}', red: true),
-                pdfInfoRow('VAT (12%) incl:', _vatAmount.toStringAsFixed(2)),
+                pdfInfoRow('VAT (${AppSettings.vatRate.toStringAsFixed(0)}%) incl:', _vatAmount.toStringAsFixed(2)),
                 pw.SizedBox(height: 4),
 
                 // Divider
@@ -387,7 +387,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               _infoRow('Subtotal:', (widget.totalAmount + widget.totalDiscount).toStringAsFixed(2)),
               if (widget.totalDiscount > 0)
                 _infoRow('Discount:', '-${widget.totalDiscount.toStringAsFixed(2)}', isRed: true),
-              _infoRow('VAT (12%) incl:', _vatAmount.toStringAsFixed(2)),
+              _infoRow('VAT (${AppSettings.vatRate.toStringAsFixed(0)}%) incl:', _vatAmount.toStringAsFixed(2)),
               const SizedBox(height: 4),
               _dottedLine(),
               const SizedBox(height: 10),

@@ -265,35 +265,39 @@ class DirectoryCustomer {
   }
   Map<String, dynamic> toMap() => {
     'id': id, 'name': name, 'phone': phone, 'email': email,
-    'address': address, 'group': group, 'notes': notes,
-    'totalSpent': totalSpent, 'totalVisits': totalVisits,
+    'address': address, 'notes': notes,
+    'customer_group': group,
+    'totalSpent': totalSpent,
+    'totalVisits': totalVisits,
     'lastVisitDate': lastVisitDate?.toIso8601String(),
     'joinDate': joinDate.toIso8601String(),
+    'dateAdded': joinDate.toIso8601String(),
     'birthday': birthday?.toIso8601String(),
   };
 
   factory DirectoryCustomer.fromMap(Map<String, dynamic> m) => DirectoryCustomer(
     id: m['id'] ?? '', name: m['name'] ?? '', phone: m['phone'] ?? '',
     email: m['email'] ?? '', address: m['address'] ?? '',
-    group: m['group'] ?? 'Regular', notes: m['notes'] ?? '',
+    group: m['customer_group'] ?? m['group'] ?? 'Regular',
+    notes: m['notes'] ?? '',
     totalSpent: (m['totalSpent'] as num?)?.toDouble() ?? 0,
-    totalVisits: m['totalVisits'] ?? 0,
-    lastVisitDate: m['lastVisitDate'] != null ? DateTime.tryParse(m['lastVisitDate']) : null,
-    joinDate: DateTime.tryParse(m['joinDate'] ?? '') ?? DateTime.now(),
-    birthday: m['birthday'] != null ? DateTime.tryParse(m['birthday']) : null,
+    totalVisits: (m['totalVisits'] as num?)?.toInt() ?? 0,
+    lastVisitDate: m['lastVisitDate'] != null && m['lastVisitDate'].toString().isNotEmpty ? DateTime.tryParse(m['lastVisitDate']) : null,
+    joinDate: DateTime.tryParse(m['joinDate'] ?? m['dateAdded'] ?? '') ?? DateTime.now(),
+    birthday: m['birthday'] != null && m['birthday'].toString().isNotEmpty ? DateTime.tryParse(m['birthday']) : null,
   );
 
-  static void addCustomer(DirectoryCustomer c) {
+  static Future<void> addCustomer(DirectoryCustomer c) async {
     _allCustomers = allCustomers; _allCustomers.insert(0, c);
-    DatabaseHelper().insertCustomer(c.toMap()).catchError((_) => 0);
+    try { await DatabaseHelper().insertCustomer(c.toMap()); } catch (_) {}
   }
-  static void updateCustomer(String id, DirectoryCustomer u) {
+  static Future<void> updateCustomer(String id, DirectoryCustomer u) async {
     final i = _allCustomers.indexWhere((c) => c.id == id); if (i >= 0) _allCustomers[i] = u;
-    DatabaseHelper().updateCustomer(id, u.toMap()).catchError((_) => 0);
+    try { await DatabaseHelper().updateCustomer(id, u.toMap()); } catch (_) {}
   }
-  static void deleteCustomer(String id) {
+  static Future<void> deleteCustomer(String id) async {
     _allCustomers.removeWhere((c) => c.id == id);
-    DatabaseHelper().deleteCustomer(id).catchError((_) => 0);
+    try { await DatabaseHelper().deleteCustomer(id); } catch (_) {}
   }
 
   static Future<void> loadFromDB() async {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../models/user_model.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/app_logo.dart';
+import '../../widgets/pos_background.dart';
 import '../../helpers/database_helper.dart';
 import 'login_screen.dart';
 
@@ -43,7 +45,7 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _handleSetupComplete() async {
     if (_fullNameController.text.trim().isEmpty) { _showSnackBar('Please enter Full Name'); return; }
     if (_usernameController.text.trim().isEmpty) { _showSnackBar('Please enter Username'); return; }
-    if (_pinController.text.length < 4) { _showSnackBar('PIN must be 4-6 digits'); return; }
+    if (_pinController.text.length != 6) { _showSnackBar('PIN must be exactly 6 digits'); return; }
     if (_pinController.text != _confirmPinController.text) { _showSnackBar('PINs do not match'); return; }
 
     setState(() => _isLoading = true);
@@ -52,11 +54,18 @@ class _SetupScreenState extends State<SetupScreen> {
       final db = DatabaseHelper();
 
       // Save branch
-      await db.saveBranch({
+      // Save branch to CORRECT branches table
+      final branchId = 'BR-${DateTime.now().millisecondsSinceEpoch}';
+      await db.insertBranch({
+        'id': branchId,
         'name': _branchNameController.text.trim(),
         'address': _addressController.text.trim(),
         'phone': _phoneController.text.trim(),
         'email': _emailController.text.trim(),
+        'manager': _fullNameController.text.trim(),
+        'isActive': 1,
+        'createdDate': DateTime.now().toIso8601String(),
+        'imagePath': '',
       });
 
       // Save admin user
@@ -66,8 +75,9 @@ class _SetupScreenState extends State<SetupScreen> {
         'username': _usernameController.text.trim(),
         'password': _pinController.text,
         'pin': _pinController.text,
-        'role': 'admin',
+        'role': 'Admin',
         'branch': _branchNameController.text.trim(),
+        'permissions': AppUser.rolePresets['Admin']!.join(','),
         'isActive': 1,
         'dateCreated': DateTime.now().toIso8601String(),
       });
@@ -97,9 +107,9 @@ class _SetupScreenState extends State<SetupScreen> {
     final hPad = isT ? 48.0 : 24.0;
 
     return Scaffold(
-      body: Container(
+      body: Stack(children: [const Positioned.fill(child: POSBackground(child: SizedBox.expand())), Container(
         width: double.infinity, height: double.infinity,
-        decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF6A1B9A), Color(0xFF7B1FA2), Color(0xFF8E24AA)])),
+        decoration: const BoxDecoration(color: Colors.transparent),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -124,6 +134,7 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
         ),
       ),
+      ]),
     );
   }
 
@@ -150,9 +161,9 @@ class _SetupScreenState extends State<SetupScreen> {
     final cp = isT ? 32.0 : 24.0;
     return Container(
       width: double.infinity, padding: EdgeInsets.all(cp),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8))]),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 12)), BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.2), blurRadius: 60, offset: const Offset(0, 0))]),
       child: Column(children: [
-        Container(padding: EdgeInsets.all(isT ? 14 : 10), decoration: BoxDecoration(color: const Color(0xFFF3E5F5), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.store, color: const Color(0xFF7B1FA2), size: isT ? 34 : 28)),
+        Container(padding: EdgeInsets.all(isT ? 14 : 10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]), borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 4))]), child: Icon(Icons.store, color: Colors.white, size: isT ? 34 : 28)),
         const SizedBox(height: 10),
         Text('Branch Setup', style: TextStyle(fontSize: isT ? 24 : 20, fontWeight: FontWeight.bold, color: const Color(0xFF7B1FA2))),
         const SizedBox(height: 4),
@@ -175,9 +186,9 @@ class _SetupScreenState extends State<SetupScreen> {
     final cp = isT ? 32.0 : 24.0;
     return Container(
       width: double.infinity, padding: EdgeInsets.all(cp),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8))]),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 30, offset: const Offset(0, 12)), BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.2), blurRadius: 60, offset: const Offset(0, 0))]),
       child: Column(children: [
-        Container(padding: EdgeInsets.all(isT ? 14 : 10), decoration: BoxDecoration(color: const Color(0xFFF3E5F5), borderRadius: BorderRadius.circular(14)), child: Icon(Icons.admin_panel_settings, color: const Color(0xFF7B1FA2), size: isT ? 34 : 28)),
+        Container(padding: EdgeInsets.all(isT ? 14 : 10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]), borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: const Color(0xFF6366F1).withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, 4))]), child: Icon(Icons.admin_panel_settings, color: Colors.white, size: isT ? 34 : 28)),
         const SizedBox(height: 10),
         Text('Admin Account', style: TextStyle(fontSize: isT ? 24 : 20, fontWeight: FontWeight.bold, color: const Color(0xFF7B1FA2))),
         const SizedBox(height: 4),
@@ -187,7 +198,7 @@ class _SetupScreenState extends State<SetupScreen> {
         SizedBox(height: isT ? 18 : 14),
         _field(c: _usernameController, h: 'Username *', i: Icons.account_circle_outlined, isT: isT),
         SizedBox(height: isT ? 18 : 14),
-        _field(c: _pinController, h: 'PIN (4-6 digits) *', i: Icons.lock_outline, obs: _obscurePin, kt: TextInputType.number, fmt: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)], suf: IconButton(icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF7B1FA2)), onPressed: () => setState(() => _obscurePin = !_obscurePin)), isT: isT),
+        _field(c: _pinController, h: 'PIN (6 digits) *', i: Icons.lock_outline, obs: _obscurePin, kt: TextInputType.number, fmt: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)], suf: IconButton(icon: Icon(_obscurePin ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF7B1FA2)), onPressed: () => setState(() => _obscurePin = !_obscurePin)), isT: isT),
         SizedBox(height: isT ? 18 : 14),
         _field(c: _confirmPinController, h: 'Confirm PIN *', i: Icons.lock_outline, obs: _obscureConfirmPin, kt: TextInputType.number, fmt: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)], suf: IconButton(icon: Icon(_obscureConfirmPin ? Icons.visibility_off : Icons.visibility, color: const Color(0xFF7B1FA2)), onPressed: () => setState(() => _obscureConfirmPin = !_obscureConfirmPin)), isT: isT),
         SizedBox(height: isT ? 28 : 24),
@@ -203,13 +214,13 @@ class _SetupScreenState extends State<SetupScreen> {
   Widget _field({required TextEditingController c, required String h, required IconData i, bool obs = false, TextInputType? kt, List<TextInputFormatter>? fmt, Widget? suf, bool isT = false}) {
     return TextField(
       controller: c, obscureText: obs, keyboardType: kt, inputFormatters: fmt,
-      style: TextStyle(fontSize: isT ? 17 : 15),
+      style: TextStyle(fontSize: isT ? 17 : 15, color: Colors.white),
       decoration: InputDecoration(
-        prefixIcon: Icon(i, color: const Color(0xFF7B1FA2), size: isT ? 26 : 22), hintText: h, hintStyle: TextStyle(color: Colors.grey[400], fontSize: isT ? 17 : 15), suffixIcon: suf,
-        filled: true, fillColor: const Color(0xFFF9F9F9), contentPadding: EdgeInsets.symmetric(vertical: isT ? 18 : 14, horizontal: 16),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey[300]!)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey[300]!)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF7B1FA2), width: 2)),
+        prefixIcon: Icon(i, color: const Color(0xFF8B5CF6), size: isT ? 26 : 22), hintText: h, hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: isT ? 17 : 15), suffixIcon: suf,
+        filled: true, fillColor: Colors.white.withValues(alpha: 0.08), contentPadding: EdgeInsets.symmetric(vertical: isT ? 18 : 14, horizontal: 16),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFF8B5CF6), width: 2)),
       ),
     );
   }
@@ -221,7 +232,7 @@ class _SetupScreenState extends State<SetupScreen> {
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), elevation: 4),
         child: Ink(
-          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF9C27B0), Color(0xFFCE93D8)]), borderRadius: BorderRadius.circular(14)),
+          decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFEC4899)]), borderRadius: BorderRadius.circular(14)),
           child: Container(alignment: Alignment.center, child: isLoading
             ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
             : Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: Colors.white, size: isT ? 24 : 20), const SizedBox(width: 8), Text(label, style: TextStyle(color: Colors.white, fontSize: isT ? 19 : 17, fontWeight: FontWeight.bold))])),

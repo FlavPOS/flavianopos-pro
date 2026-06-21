@@ -59,21 +59,17 @@ class _AddUserScreenState extends State<AddUserScreen> {
     });
   }
 
-  void _selectAll() => setState(() { _selectedPermissions = List<String>.from(AppUser.allModules); _selectedRole = 'Custom'; });
-  void _deselectAll() => setState(() { _selectedPermissions.clear(); _selectedRole = 'Custom'; });
+  void _selectAll() => setState(() => _selectedPermissions = List<String>.from(AppUser.allModules));
+  void _deselectAll() => setState(() => _selectedPermissions.clear());
 
   void _togglePermission(String module) {
+    // Role stays as user selected - permissions are independent!
+    // This preserves Cashier role → Beginning Cash flow trigger
     setState(() {
-      if (_selectedPermissions.contains(module)) { _selectedPermissions.remove(module); }
-      else { _selectedPermissions.add(module); }
-      _selectedRole = 'Custom';
-      for (final entry in AppUser.rolePresets.entries) {
-        if (entry.key == 'Custom') continue;
-        final preset = List<String>.from(entry.value)..sort();
-        final current = List<String>.from(_selectedPermissions)..sort();
-        if (preset.length == current.length && preset.toString() == current.toString()) {
-          _selectedRole = entry.key; break;
-        }
+      if (_selectedPermissions.contains(module)) {
+        _selectedPermissions.remove(module);
+      } else {
+        _selectedPermissions.add(module);
       }
     });
   }
@@ -117,10 +113,10 @@ class _AddUserScreenState extends State<AddUserScreen> {
           TextFormField(controller: _usernameCtrl, decoration: _dec('Username', Icons.alternate_email),
               validator: (v) => v == null || v.isEmpty ? 'Required' : null),
           const SizedBox(height: 12),
-          TextFormField(controller: _pinCtrl, decoration: _dec('PIN (4 digits)', Icons.lock),
-              keyboardType: TextInputType.number, maxLength: 4, obscureText: true,
+          TextFormField(controller: _pinCtrl, decoration: _dec('PIN (6 digits)', Icons.lock),
+              keyboardType: TextInputType.number, maxLength: 6, obscureText: true,
               validator: (v) { if (v == null || v.isEmpty) return 'Required';
-                if (v.length != 4) return 'PIN must be 4 digits'; return null; }),
+                if (v.length != 6) return 'PIN must be 6 digits'; return null; }),
           const SizedBox(height: 12),
           _header('Contact', Icons.contact_mail), const SizedBox(height: 12),
           TextFormField(controller: _emailCtrl, decoration: _dec('Email (Optional)', Icons.email),
@@ -130,7 +126,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
               keyboardType: TextInputType.phone),
           const SizedBox(height: 24),
           _header('Role & Branch', Icons.badge), const SizedBox(height: 12),
-          DropdownButtonFormField<String>(value: _selectedRole,
+          DropdownButtonFormField<String>(value: AppUser.availableRoles.contains(_selectedRole) ? _selectedRole : 'Custom',
             decoration: _dec('Role', Icons.admin_panel_settings),
             items: AppUser.availableRoles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
             onChanged: (v) { if (v != null) _onRoleChanged(v); }),
