@@ -125,6 +125,16 @@ class SyncQueueDao {
   }
 
   /// Reset "processing" items that got stuck (e.g. app crashed mid-sync).
+  Future<int> resetFailedToPending() async {
+    final db = await DatabaseHelper().database;
+    return db.update(
+      table,
+      {"status": SyncStatus.pending, "updatedAt": DateTime.now().toUtc().toIso8601String(), "errorMessage": null},
+      where: "status = ?",
+      whereArgs: [SyncStatus.failed],
+    );
+  }
+
   Future<int> resetStuckProcessing(
       {Duration olderThan = const Duration(minutes: 5)}) async {
     final db = await DatabaseHelper().database;

@@ -60,6 +60,14 @@ class _LoginScreenState extends State<LoginScreen> {
         if (userPerms.isEmpty) {
           userPerms = AppUser.rolePresets[role] ?? AppUser.rolePresets["Admin"] ?? [];
         }
+        // Safety net: Admin/Manager always get Users
+        if ((role == "Admin" || role == "Manager") && !userPerms.contains("Users")) {
+          userPerms.add("Users");
+        }
+        // Safety net: Admin/Manager always get Branches
+        if ((role == "Admin" || role == "Manager") && !userPerms.contains("Branches")) {
+          userPerms.add("Branches");
+        }
         // Safety net: Admin/Manager always get Expenses
         if ((role == "Admin" || role == "Manager") && !userPerms.contains("Expenses")) {
           userPerms.add("Expenses");

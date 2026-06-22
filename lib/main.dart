@@ -19,6 +19,7 @@ import 'models/stock_transfer_model.dart';
 import 'models/discount_record_model.dart';
 import 'helpers/database_helper.dart';
 import 'helpers/sync_schema_helper.dart';
+import "services/sync_manager.dart";
 import 'utils/idle_detector.dart';
 import 'utils/theme_notifier.dart';
 
@@ -101,6 +102,8 @@ class _AppLoaderState extends State<AppLoader> {
 
       _setStatus('Preparing sync schema...');
       await SyncSchemaHelper.ensureSyncSchema();
+      _setStatus("Starting sync engine...");
+      await SyncManager.instance.start();
 
       _setStatus('Loading products...');
       await Product.loadFromDB();

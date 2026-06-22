@@ -10,6 +10,7 @@ import 'cashier_lock/cashier_report_screen.dart';
 import 'receive_delivery/receive_delivery_screen.dart' as rd;
 import 'item_ledger/item_ledger_screen.dart';
 import 'package:flutter/material.dart';
+import "../widgets/sync_status_pill.dart";
 import 'auth/login_screen.dart';
 import 'cashiering/cashiering_screen.dart';
 import 'inventory/inventory_screen.dart';
@@ -774,6 +775,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
             child: Center(child: Text(widget.branch, style: const TextStyle(fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis)),
           ),
+          const SyncStatusPill(),
           IconButton(icon: const Icon(Icons.logout), onPressed: () {
             showDialog(context: context, builder: (ctx) => AlertDialog(
               title: const Text('Logout'), content: const Text('Are you sure you want to logout?'),

@@ -1,0 +1,377 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:sqflite/sqflite.dart' hide Transaction;
+import '../helpers/database_helper.dart';
+import '../helpers/sync_queue_dao.dart';
+import '../helpers/cache_reload_helper.dart';
+import '../models/sync_queue_model.dart';
+import 'setup_mode_service.dart';
+import 'firebase_config_service.dart';
+import 'firebase_realtime_service.dart';
+import 'device_assignment_service.dart';
+import 'connectivity_watcher.dart';
+
+/// SyncManager — central engine for offline-first cloud sync.
+/// Solo Store mode: never starts (zero overhead).
+/// Multiple Store mode: keeps SQLite ↔ Firebase in sync continuously.
+class SyncManager {
+  SyncManager._();
+  static final SyncManager instance = SyncManager._();
+
+  final _queueDao = SyncQueueDao();
+  final _modeSvc = SetupModeService();
+  final _cfgSvc = FirebaseConfigService();
+  final _assignSvc = DeviceAssignmentService();
+  final _connectivity = ConnectivityWatcher.instance;
+
+  Timer? _periodicTimer;
+  StreamSubscription<bool>? _connSub;
+  final List<StreamSubscription<DatabaseEvent>> _rtListeners = [];
+
+  // Status (used by UI pill)
+  final ValueNotifier<SyncStatusInfo> status =
+      ValueNotifier(SyncStatusInfo.idle());
+
+  bool _started = false;
+  bool _draining = false;
+
+  /// Call once on app start.
+  Future<void> start() async {
+    if (_started) return;
+
+    final mode = await _modeSvc.getSetupMode();
+    if (mode != SetupModeService.modeMultiple) {
+      if (kDebugMode) debugPrint('🔕 SyncManager idle (Solo Store mode)');
+      return;
+    }
+
+    // Init Firebase if not already
+    final cfg = await _cfgSvc.load();
+    if (cfg == null || !cfg.hasRequiredFields) {
+      if (kDebugMode) debugPrint('⚠️ SyncManager: no Firebase config');
+      return;
+    }
+    if (!FirebaseRealtimeService.instance.isInitialized) {
+      try {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      } catch (e) {
+        if (kDebugMode) debugPrint('⚠️ SyncManager init failed: $e');
+        return;
+      }
+    }
+
+    // Reset stuck "processing" items from previous crash
+    final reset = await _queueDao.resetStuckProcessing();
+    if (kDebugMode && reset > 0) {
+      debugPrint('♻️  SyncManager reset $reset stuck items');
+    }
+
+    // Connectivity watcher
+    await _connectivity.start();
+    _connSub = _connectivity.onChange.listen((online) {
+      _updateStatus(online: online);
+      if (online) drainOnce(reason: 'connection-returned');
+    });
+    _updateStatus(online: _connectivity.isOnline);
+
+    // Real-time Firebase listeners (own branch only — Q2=A)
+    await _attachRealtimeListeners(cfg.companyCode);
+
+    // Periodic drainer every 30s
+    _periodicTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      drainOnce(reason: 'periodic');
+    });
+
+    // First drain
+    drainOnce(reason: 'startup');
+
+    _started = true;
+    if (kDebugMode) debugPrint('✅ SyncManager started');
+  }
+
+  Future<void> stop() async {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+    await _connSub?.cancel();
+    _connSub = null;
+    for (final s in _rtListeners) {
+      await s.cancel();
+    }
+    _rtListeners.clear();
+    _started = false;
+  }
+
+  /// Manual "Sync Now" button.
+  Future<void> syncNow() => drainOnce(reason: 'manual');
+
+  /// Drain all pending queue items once.
+  Future<void> drainOnce({String reason = ''}) async {
+    if (_draining) return;
+    if (!_connectivity.isOnline) {
+      _updateStatus(online: false);
+      return;
+    }
+    _draining = true;
+    try {
+      final pending = await _queueDao.getPending(limit: 50);
+      _updateStatus(pendingCount: pending.length, syncing: true);
+      int success = 0;
+      for (final item in pending) {
+        final ok = await _processOne(item);
+        if (ok) {
+          success++;
+        } else {
+        }
+      }
+      if (success > 0) {
+        _showSnackBar?.call('☁️ Synced $success record${success == 1 ? '' : 's'}');
+      }
+      final counts = await _queueDao.counts();
+      _updateStatus(
+        pendingCount: counts[SyncStatus.pending] ?? 0,
+        failedCount: counts[SyncStatus.failed] ?? 0,
+        syncing: false,
+        lastSyncAt: DateTime.now(),
+      );
+    } finally {
+      _draining = false;
+    }
+  }
+
+  Future<bool> _processOne(SyncQueueItem item) async {
+    // 🛡️ Ensure Firebase is initialized for this session
+    if (!FirebaseRealtimeService.instance.isInitialized) {
+      try {
+        final cfg = await _cfgSvc.load();
+        if (cfg != null) {
+          await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint("⚠️ Firebase init failed: $e");
+        return false;
+      }
+    }
+    final db = FirebaseRealtimeService.instance.db;
+    if (db == null) return false;
+
+    try {
+      await _queueDao.markProcessing(item.queueId);
+      final payload = item.payloadDecoded();
+      final ref = db.ref(item.firebasePath);
+
+      switch (item.operation) {
+        case SyncOp.delete:
+          await ref.remove().timeout(const Duration(seconds: 12));
+          break;
+        case SyncOp.update:
+        case SyncOp.create:
+        default:
+          await ref.set(payload).timeout(const Duration(seconds: 12));
+          break;
+      }
+
+      await _queueDao.markSynced(item.queueId);
+      await _markRowSynced(item.entityType, item.entityId);
+      return true;
+    } catch (e) {
+      await _queueDao.markFailed(item.queueId, e.toString());
+      if (kDebugMode) debugPrint('⚠️ sync failed [${item.entityType}]: $e');
+      return false;
+    }
+  }
+
+  Future<void> _markRowSynced(String entityType, String entityId) async {
+    final table = _tableFor(entityType);
+    if (table == null) return;
+    try {
+      final db = await DatabaseHelper().database;
+      await db.update(
+        table,
+        {
+          'syncStatus': SyncStatus.synced,
+          'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [entityId],
+      );
+    } catch (_) {}
+  }
+
+  String? _tableFor(String entityType) {
+    switch (entityType) {
+      case 'user':
+      case 'userByBranch':
+        return 'users';
+      case 'branch':
+        return 'branches';
+      case 'company':
+        return 'companies_cache';
+      case 'product':
+        return 'products';
+      case 'sale':
+        return 'transactions';
+      case 'expense':
+        return 'expenses';
+      default:
+        return null;
+    }
+  }
+
+  // ═══════════════════ Real-time listeners (Q2=A: own branch only) ═══════════════════
+  Future<void> _attachRealtimeListeners(String companyCode) async {
+    final fbDb = FirebaseRealtimeService.instance.db;
+    if (fbDb == null) return;
+    final assign = await _assignSvc.read();
+    final branchId = assign['branchId'] ?? '';
+
+    // Listen for branch list changes (so new branches added elsewhere appear)
+    _rtListeners.add(fbDb.ref('companies/$companyCode/branches')
+        .onChildAdded.listen((event) => _onBranchUpdate(event, companyCode)));
+    _rtListeners.add(fbDb.ref('companies/$companyCode/branches')
+        .onChildChanged.listen((event) => _onBranchUpdate(event, companyCode)));
+
+    // Listen for users IN MY BRANCH
+    if (branchId.isNotEmpty) {
+      _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
+          .onChildAdded.listen((event) => _onUserUpdate(event, branchId)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
+          .onChildChanged.listen((event) => _onUserUpdate(event, branchId)));
+    }
+  }
+
+  Future<void> _onBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final id = (m['branchId'] ?? event.snapshot.key ?? '').toString();
+      if (id.isEmpty) return;
+      final db = await DatabaseHelper().database;
+      await db.insert(
+        'branches',
+        {
+          'id': id,
+          'name': (m['branchName'] ?? '').toString(),
+          'address': (m['address'] ?? '').toString(),
+          'phone': (m['phone'] ?? '').toString(),
+          'isActive': (m['isActive'] == true) ? 1 : 1,
+          'email': (m['email'] ?? '').toString(),
+          'manager': (m['manager'] ?? '').toString(),
+          'createdDate': (m['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+          'imagePath': null,
+          'syncStatus': SyncStatus.synced,
+          'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+          'firebaseId': id,
+          'firebasePath': 'companies/$companyCode/branches/$id',
+          'companyId': companyCode,
+          'branchId_sync': id,
+          'isDeleted': 0,
+          'isMainBranch': (m['isMainBranch'] == true) ? 1 : 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await CacheReloadHelper.reloadAll();
+      _showSnackBar?.call('🔄 Branch "${m['branchName']}" updated from cloud');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ branch realtime: $e');
+    }
+  }
+
+  Future<void> _onUserUpdate(DatabaseEvent event, String branchId) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final id = (m['userId'] ?? event.snapshot.key ?? '').toString();
+      final username = (m['username'] ?? '').toString();
+      if (id.isEmpty || username.isEmpty) return;
+      final db = await DatabaseHelper().database;
+      // Insert ONLY if missing locally; never overwrite local PIN
+      final exists = await db.rawQuery(
+          'SELECT id FROM users WHERE id = ? OR LOWER(username) = LOWER(?) LIMIT 1',
+          [id, username]);
+      if (exists.isNotEmpty) return;
+      await db.insert('users', {
+        'id': id,
+        'username': username,
+        'password': '__pending_setup__',
+        'pin': '',
+        'fullName': (m['fullName'] ?? '').toString(),
+        'role': (m['role'] ?? 'Cashier').toString(),
+        'branch': (m['branchName'] ?? '').toString(),
+        'isActive': (m['isActive'] == true) ? 1 : 1,
+        'dateCreated': (m['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
+        'email': (m['email'] ?? '').toString(),
+        'phone': (m['phone'] ?? '').toString(),
+        'permissions': m['permissions'] is List
+            ? jsonEncode(m['permissions'])
+            : (m['permissions'] ?? '').toString(),
+        'biometricEnabled': 0, 'biometricEnrolled': 0,
+        'preferredBiometricType': 'face', 'lastBiometricVerifiedAt': null,
+        'syncStatus': SyncStatus.synced,
+        'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+        'firebaseId': id,
+        'branchId_sync': branchId,
+        'isDeleted': 0,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      await CacheReloadHelper.reloadAll();
+      _showSnackBar?.call('👤 User "$username" mirrored from cloud');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ user realtime: $e');
+    }
+  }
+
+  // ═══════════════════ UI hook for snackbars ═══════════════════
+  void Function(String msg)? _showSnackBar;
+  void registerSnackBar(void Function(String) cb) {
+    _showSnackBar = cb;
+  }
+
+  // ═══════════════════ Status helpers ═══════════════════
+  void _updateStatus({
+    bool? online,
+    int? pendingCount,
+    int? failedCount,
+    bool? syncing,
+    DateTime? lastSyncAt,
+  }) {
+    final cur = status.value;
+    status.value = SyncStatusInfo(
+      online: online ?? cur.online,
+      pendingCount: pendingCount ?? cur.pendingCount,
+      failedCount: failedCount ?? cur.failedCount,
+      syncing: syncing ?? cur.syncing,
+      lastSyncAt: lastSyncAt ?? cur.lastSyncAt,
+    );
+  }
+}
+
+class SyncStatusInfo {
+  final bool online;
+  final int pendingCount;
+  final int failedCount;
+  final bool syncing;
+  final DateTime? lastSyncAt;
+  const SyncStatusInfo({
+    required this.online,
+    required this.pendingCount,
+    required this.failedCount,
+    required this.syncing,
+    this.lastSyncAt,
+  });
+  factory SyncStatusInfo.idle() => const SyncStatusInfo(
+      online: true, pendingCount: 0, failedCount: 0, syncing: false);
+
+  String get label {
+    if (!online) {
+      final p = pendingCount;
+      return p == 0 ? 'Offline' : 'Offline · $p pending';
+    }
+    if (syncing) return 'Syncing...';
+    if (failedCount > 0) return 'Sync issues ($failedCount)';
+    if (pendingCount > 0) return '$pendingCount pending';
+    return 'All synced';
+  }
+}

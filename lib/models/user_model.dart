@@ -1,6 +1,8 @@
 // lib/models/user_model.dart
 import 'dart:convert';
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import '../models/sync_queue_model.dart';
 
 class AppUser {
   final String id;
@@ -44,7 +46,7 @@ class AppUser {
 
   static const Map<String, List<String>> rolePresets = {
     'Admin': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Users', 'Settings', 'Expenses', 'Profit & Loss', 'End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
-    'Manager': ['Dashboard', 'Cashiering', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Expenses', 'Profit & Loss', 'End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
+    'Manager': ['Dashboard', 'Cashiering', 'Users', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Sales History', 'Sales Analytics', 'Z Report', 'Discount Monitoring', 'Customers', 'Branches', 'Expenses', 'Profit & Loss', 'End Shift', 'Cashier Report', 'Tab: Cashier', 'Tab: Inventory', 'Tab: Reports'],
     'Cashier': ['Dashboard', 'Cashiering', 'Sales History', 'End Shift', 'Tab: Cashier'],
     'Inventory Clerk': ['Dashboard', 'Inventory', 'Stock Adjustment', 'Stock Transfer', 'Receive Delivery', 'Item Ledger', 'Batch Management', 'Tab: Inventory'],
     'Custom': [],
@@ -141,17 +143,21 @@ class AppUser {
     _allUsers = allUsers;
     _allUsers.insert(0, u);
     DatabaseHelper().insertUser(u.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueUser(u, op: SyncOp.create);
   }
 
   static void updateUser(String id, AppUser u) {
     final i = _allUsers.indexWhere((x) => x.id == id);
     if (i >= 0) _allUsers[i] = u;
     DatabaseHelper().updateUser(id, u.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueUser(u, op: SyncOp.update);
   }
 
   static void deleteUser(String id) {
     _allUsers.removeWhere((u) => u.id == id);
     DatabaseHelper().deleteUser(id).catchError((_) => 0);
+    final removed = _allUsers.firstWhere((x) => x.id == id, orElse: () => AppUser(id: id, name: "", username: "", pin: "", role: "Cashier", branch: "", joinDate: DateTime.now()));
+    SyncBridge.enqueueUser(removed, op: SyncOp.delete);
   }
 
   // ══════════ Sample Data ══════════

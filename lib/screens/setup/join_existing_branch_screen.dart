@@ -181,14 +181,24 @@ class _JoinExistingBranchScreenState extends State<JoinExistingBranchScreen> {
       final deviceId = await _deviceIdSvc.getOrCreate();
       final myBranchId = _selectedBranchId!;
 
-      // 1) Try Firebase (case-insensitive)
+      // 1) Try Firebase (case-insensitive + match selected branch when multiple admins share username)
       Map<String, dynamic>? me;
       try {
         final allUsers = await _lookup.fetchAllUsers(companyCode);
         final candidates = allUsers.where((u) =>
           ((u['username'] ?? '').toString().toLowerCase()) ==
           usernameTyped.toLowerCase()).toList();
-        if (candidates.isNotEmpty) me = candidates.first;
+        if (candidates.isNotEmpty) {
+          // Prefer the candidate whose branchId matches the selected branch
+          final matchSelected = candidates.where(
+            (u) => (u["branchId"] ?? "").toString() == myBranchId,
+          ).toList();
+          if (matchSelected.isNotEmpty) {
+            me = matchSelected.first;
+          } else {
+            me = candidates.first;
+          }
+        }
       } catch (_) {}
 
       // 2) Fallback to local SQLite

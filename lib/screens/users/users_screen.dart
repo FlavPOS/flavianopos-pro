@@ -1,4 +1,6 @@
 // lib/screens/users/users_screen.dart
+import '../../services/device_assignment_service.dart';
+import '../../helpers/database_helper.dart';
 import 'package:flutter/material.dart';
 import '../../models/user_model.dart';
 import 'add_user_screen.dart';
@@ -25,11 +27,36 @@ class _UsersScreenState extends State<UsersScreen> {
     _loadUsers();
   }
 
+  String? _viewerRole;
+  String _viewerBranch = "";
+
   Future<void> _loadUsers() async {
+    await AppUser.loadFromDB();
+    // 🎯 Branch isolation: find viewer (most-recent login)
+    try {
+      final db = await DatabaseHelper().database;
+      final rows = await db.rawQuery(
+        "SELECT role, branch FROM users WHERE lastLogin IS NOT NULL ORDER BY lastLogin DESC LIMIT 1"
+      );
+      if (rows.isNotEmpty) {
+        _viewerRole = (rows.first["role"] ?? "").toString();
+        _viewerBranch = (rows.first["branch"] ?? "").toString();
+      }
+    } catch (_) {}
+    if (_viewerBranch.isEmpty) {
+      final a = await DeviceAssignmentService().read();
+      _viewerBranch = a["branchName"] ?? "";
+      _viewerRole ??= a["role"];
+    }
     await AppUser.loadFromDB();
     if (mounted) {
       setState(() {
-        _users = List<AppUser>.from(AppUser.allUsers);
+        // Company Admin (role==Admin) sees ALL; others see only own branch
+        final isCompanyAdmin = _viewerRole == "Admin";
+        _users = AppUser.allUsers.where((u) {
+          if (isCompanyAdmin) return true;
+          return u.branch.toLowerCase() == _viewerBranch.toLowerCase();
+        }).toList();
       });
     }
   }

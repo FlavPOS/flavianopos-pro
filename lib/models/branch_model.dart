@@ -1,5 +1,7 @@
 // lib/models/branch_model.dart
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import 'sync_queue_model.dart';
 
 class Branch {
   final String id;
@@ -91,17 +93,21 @@ class Branch {
     _allBranches = allBranches;
     _allBranches.insert(0, b);
     DatabaseHelper().insertBranch(b.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueBranch(b, op: SyncOp.create);
   }
 
   static void updateBranch(String id, Branch u) {
     final i = _allBranches.indexWhere((b) => b.id == id);
     if (i >= 0) _allBranches[i] = u;
     DatabaseHelper().updateBranch(id, u.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueBranch(u, op: SyncOp.update);
   }
 
   static void deleteBranch(String id) {
     _allBranches.removeWhere((b) => b.id == id);
     DatabaseHelper().deleteBranch(id).catchError((_) => 0);
+    final removed = _allBranches.firstWhere((x) => x.id == id, orElse: () => Branch(id: id, name: "", address: "", createdDate: DateTime.now()));
+    SyncBridge.enqueueBranch(removed, op: SyncOp.delete);
   }
 
   // ══════════ Sample Data ══════════
