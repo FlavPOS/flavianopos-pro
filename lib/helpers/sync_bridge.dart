@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../models/branch_model.dart';
 import '../models/product_model.dart';
 import '../models/batch_model.dart';
+import '../models/transaction_model.dart';
 import '../services/setup_mode_service.dart';
 import '../services/firebase_config_service.dart';
 import '../services/firebase_realtime_service.dart';
@@ -405,6 +406,84 @@ class SyncBridge {
       if (db == null) return;
       await db.ref('companies/$companyCode/batches/$branchId/$batchId').remove();
       await _markQueueSynced('batch', batchId);
+    } catch (_) {}
+  }
+
+  // ═══════════════════ SALES TRANSACTIONS (per-branch) ═══════════════════
+  static Future<void> enqueueTransaction(Transaction t, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    final payload = {
+      'txnId': t.id,
+      'companyCode': companyCode,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
+      'subtotal': t.subtotal,
+      'totalDiscount': t.totalDiscount,
+      'tax': t.tax,
+      'total': t.total,
+      'paymentMethod': t.paymentMethod,
+      'amountPaid': t.amountPaid,
+      'change': t.change,
+      'cashier': t.cashier,
+      'branch': t.branch,
+      'dateTime': t.dateTime.toIso8601String(),
+      'status': t.status,
+      'voidReason': t.voidReason,
+      'voidedBy': t.voidedBy,
+      'voidedAt': t.voidedAt?.toIso8601String(),
+      'refundAmount': t.refundAmount,
+      'itemCount': t.items.length,
+      'items': t.items.map((i) => i.toMap()).toList(),
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    final path = 'companies/$companyCode/sales/$branchId/${t.id}';
+    await _queue.enqueue(
+      entityType: 'transaction', entityId: t.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    if (op == SyncOp.delete) {
+      _fireAndForget(() => _deleteTransactionOnFirebase(companyCode, branchId, t.id));
+    } else {
+      _fireAndForget(() => _uploadTransactionToFirebase(companyCode, branchId, t.id, payload));
+    }
+  }
+
+  static Future<void> _uploadTransactionToFirebase(
+      String companyCode, String branchId, String txnId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/sales/$branchId/$txnId').set(payload);
+      await _markQueueSynced('transaction', txnId);
+      await _markRowSynced('transactions', 'id', txnId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ transaction upload failed: $e');
+    }
+  }
+
+  static Future<void> _deleteTransactionOnFirebase(
+      String companyCode, String branchId, String txnId) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/sales/$branchId/$txnId').remove();
+      await _markQueueSynced('transaction', txnId);
     } catch (_) {}
   }
 }

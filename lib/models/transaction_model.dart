@@ -1,5 +1,7 @@
 // lib/models/transaction_model.dart
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import 'sync_queue_model.dart';
 
 class TransactionItem {
   final String name;
@@ -124,12 +126,14 @@ class Transaction {
     _allTransactions = allTransactions;
     _allTransactions.insert(0, txn);
     DatabaseHelper().insertTransactionWithItems(txn.toMap(), txn.items.map((i) => i.toMap()).toList()).catchError((_) => null);
+    SyncBridge.enqueueTransaction(txn, op: SyncOp.create);
   }
 
   static void updateTransaction(String id, Transaction updated) {
     final index = _allTransactions.indexWhere((t) => t.id == id);
     if (index >= 0) _allTransactions[index] = updated;
     DatabaseHelper().updateTransaction(id, updated.toMap()).then((r) => print("DB UPDATE: $r rows for $id status=${updated.status}")).catchError((e) => print("DB ERROR: $e"));
+    SyncBridge.enqueueTransaction(updated, op: SyncOp.update);
   }
 
   static List<Transaction> getSampleTransactions() {

@@ -242,6 +242,24 @@ class SyncManager {
 
     // Listen for users IN MY BRANCH
     if (branchId.isNotEmpty) {
+      // 💰 SALES TRANSACTIONS
+      final viewerRole = (assign["role"] ?? "").toString().toLowerCase().trim();
+      if (viewerRole == "admin" || viewerRole == "companyadmin") {
+        // 🏢 HEAD OFFICE: listen to ALL branches
+        _rtListeners.add(fbDb.ref("companies/$companyCode/sales")
+            .onChildAdded.listen((event) => _onSaleBranchUpdate(event, companyCode)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/sales")
+            .onChildChanged.listen((event) => _onSaleBranchUpdate(event, companyCode)));
+      } else {
+        // 🏪 BRANCH: listen to OWN branch only
+        _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
+            .onChildAdded.listen((event) => _onSaleUpdate(event, companyCode, branchId)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
+            .onChildChanged.listen((event) => _onSaleUpdate(event, companyCode, branchId)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
+            .onChildRemoved.listen((event) => _onSaleDelete(event)));
+      }
+
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
           .onChildAdded.listen((event) => _onUserUpdate(event, branchId)));
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
@@ -405,6 +423,110 @@ class SyncManager {
       _showSnackBar?.call('🗑️ Product removed from cloud');
     } catch (_) {}
   }
+
+  // ═══════════════════ SALES real-time listeners ═══════════════════
+  Future<void> _onSaleUpdate(DatabaseEvent event, String companyCode, String branchId) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final id = (m['txnId'] ?? event.snapshot.key ?? '').toString();
+      if (id.isEmpty) return;
+      final db = await DatabaseHelper().database;
+
+      // Insert transaction header
+      await db.insert('transactions', {
+        'id': id,
+        'subtotal': (m['subtotal'] is num) ? (m['subtotal'] as num).toDouble() : 0.0,
+        'totalDiscount': (m['totalDiscount'] is num) ? (m['totalDiscount'] as num).toDouble() : 0.0,
+        'total': (m['total'] is num) ? (m['total'] as num).toDouble() : 0.0,
+        'paymentMethod': (m['paymentMethod'] ?? 'Cash').toString(),
+        'amountPaid': (m['amountPaid'] is num) ? (m['amountPaid'] as num).toDouble() : 0.0,
+        'changeAmount': (m['change'] is num) ? (m['change'] as num).toDouble() : 0.0,
+        'status': (m['status'] ?? 'completed').toString(),
+        'cashier': (m['cashier'] ?? '').toString(),
+        'branch': (m['branch'] ?? '').toString(),
+        'voidReason': m['voidReason']?.toString(),
+        'voidedBy': m['voidedBy']?.toString(),
+        'voidedAt': m['voidedAt']?.toString(),
+        'refundAmount': (m['refundAmount'] is num) ? (m['refundAmount'] as num).toDouble() : null,
+        'dateTime': (m['dateTime'] ?? DateTime.now().toIso8601String()).toString(),
+        'syncStatus': SyncStatus.synced,
+        'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+        'firebaseId': id,
+        'firebasePath': 'companies/$companyCode/sales/$branchId/$id',
+        'companyId': companyCode,
+        'branchId_sync': branchId,
+        'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      // Insert items if present
+      final itemsRaw = m['items'];
+      if (itemsRaw is List) {
+        // Clear old items for this txn first
+        await db.delete('transaction_items', where: 'transactionId = ?', whereArgs: [id]);
+        for (final item in itemsRaw) {
+          if (item is Map) {
+            final im = item.map((k, v) => MapEntry(k.toString(), v));
+            await db.insert('transaction_items', {
+              'transactionId': id,
+              'name': (im['name'] ?? '').toString(),
+              'sku': (im['sku'] ?? '').toString(),
+              'qty': (im['qty'] is num) ? (im['qty'] as num).toInt() : 0,
+              'price': (im['price'] is num) ? (im['price'] as num).toDouble() : 0.0,
+              'discount': (im['discount'] is num) ? (im['discount'] as num).toDouble() : 0.0,
+              'discountType': (im['discountType'] ?? 'fixed').toString(),
+              'discountAmount': (im['discountAmount'] is num) ? (im['discountAmount'] as num).toDouble() : 0.0,
+            });
+          }
+        }
+      }
+
+      await CacheReloadHelper.reloadAll();
+      _showSnackBar?.call('💰 New sale from "${m['branch']}" — ₱${m['total']}');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ sale realtime: $e');
+    }
+  }
+
+  Future<void> _onSaleDelete(DatabaseEvent event) async {
+    try {
+      final id = event.snapshot.key;
+      if (id == null) return;
+      final db = await DatabaseHelper().database;
+      await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+      await db.delete('transaction_items', where: 'transactionId = ?', whereArgs: [id]);
+      await CacheReloadHelper.reloadAll();
+    } catch (_) {}
+  }
+
+  /// Head Office handler: branchId comes from the parent key in the tree
+  Future<void> _onSaleBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      // event.snapshot here is one branch's subtree (under sales/{branchId})
+      final branchId = event.snapshot.key ?? '';
+      if (branchId.isEmpty) return;
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final salesMap = val.map((k, v) => MapEntry(k.toString(), v));
+      for (final entry in salesMap.entries) {
+        if (entry.value is Map) {
+          // Fake a DatabaseEvent-like update for each child
+          final childSnap = await FirebaseRealtimeService.instance.db
+              ?.ref('companies/$companyCode/sales/$branchId/${entry.key}').get();
+          if (childSnap != null && childSnap.exists) {
+            await _onSaleUpdate(
+              _SyntheticEvent(childSnap),
+              companyCode,
+              branchId,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ HO sale branch sync: $e');
+    }
+  }
 }
 
 class SyncStatusInfo {
@@ -433,4 +555,15 @@ class SyncStatusInfo {
     if (pendingCount > 0) return '$pendingCount pending';
     return 'All synced';
   }
+}
+
+/// Adapter that lets us reuse _onSaleUpdate with a fetched snapshot.
+class _SyntheticEvent implements DatabaseEvent {
+  @override
+  final DataSnapshot snapshot;
+  _SyntheticEvent(this.snapshot);
+  @override
+  String? get previousChildKey => null;
+  @override
+  DatabaseEventType get type => DatabaseEventType.childAdded;
 }
