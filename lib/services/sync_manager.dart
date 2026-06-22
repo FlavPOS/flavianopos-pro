@@ -226,6 +226,7 @@ class SyncManager {
     final assign = await _assignSvc.read();
     final branchId = assign['branchId'] ?? '';
 
+    await _backfillProducts(companyCode);  // 🆕 pull existing products first
     // 📦 Listen for product master (Head Office controls, all branches see)
     _rtListeners.add(fbDb.ref("companies/$companyCode/products")
         .onChildAdded.listen((event) => _onProductUpdate(event, companyCode)));
@@ -246,12 +247,14 @@ class SyncManager {
       final viewerRole = (assign["role"] ?? "").toString().toLowerCase().trim();
       if (viewerRole == "admin" || viewerRole == "companyadmin") {
         // 🏢 HEAD OFFICE: listen to ALL branches
+        await _backfillAllSales(companyCode);  // 🆕 pull existing first
         _rtListeners.add(fbDb.ref("companies/$companyCode/sales")
             .onChildAdded.listen((event) => _onSaleBranchUpdate(event, companyCode)));
         _rtListeners.add(fbDb.ref("companies/$companyCode/sales")
             .onChildChanged.listen((event) => _onSaleBranchUpdate(event, companyCode)));
       } else {
         // 🏪 BRANCH: listen to OWN branch only
+        await _backfillBranchSales(companyCode, branchId);  // 🆕 pull existing first
         _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
             .onChildAdded.listen((event) => _onSaleUpdate(event, companyCode, branchId)));
         _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
@@ -525,6 +528,170 @@ class SyncManager {
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ HO sale branch sync: $e');
+    }
+  }
+
+  // ═══════════════════ BACKFILL (one-shot fetch on attach) ═══════════════════
+  Future<void> _backfillAllSales(String companyCode) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final snap = await db.ref('companies/$companyCode/sales').get()
+          .timeout(const Duration(seconds: 20));
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final branches = raw.map((k, v) => MapEntry(k.toString(), v));
+      int count = 0;
+      for (final branchEntry in branches.entries) {
+        final branchId = branchEntry.key;
+        final salesMap = branchEntry.value;
+        if (salesMap is! Map) continue;
+        for (final saleEntry in salesMap.entries) {
+          if (saleEntry.value is Map) {
+            await _mirrorOneSale(saleEntry.value as Map, branchId, companyCode);
+            count++;
+          }
+        }
+      }
+      if (kDebugMode) debugPrint('📥 HO backfill: $count sales pulled from cloud');
+      await CacheReloadHelper.reloadAll();
+      if (count > 0) {
+        _showSnackBar?.call('📥 Pulled $count sale${count == 1 ? "" : "s"} from cloud');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ HO backfill error: $e');
+    }
+  }
+
+  Future<void> _backfillBranchSales(String companyCode, String branchId) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final snap = await db.ref('companies/$companyCode/sales/$branchId').get()
+          .timeout(const Duration(seconds: 20));
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final salesMap = raw.map((k, v) => MapEntry(k.toString(), v));
+      int count = 0;
+      for (final entry in salesMap.entries) {
+        if (entry.value is Map) {
+          await _mirrorOneSale(entry.value as Map, branchId, companyCode);
+          count++;
+        }
+      }
+      if (kDebugMode) debugPrint('📥 Branch backfill: $count sales pulled');
+      await CacheReloadHelper.reloadAll();
+      if (count > 0) {
+        _showSnackBar?.call('📥 Pulled $count sale${count == 1 ? "" : "s"} from cloud');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ branch backfill error: $e');
+    }
+  }
+
+  Future<void> _mirrorOneSale(Map raw, String branchId, String companyCode) async {
+    final m = raw.map((k, v) => MapEntry(k.toString(), v));
+    final id = (m['txnId'] ?? '').toString();
+    if (id.isEmpty) return;
+    final db = await DatabaseHelper().database;
+    await db.insert('transactions', {
+      'id': id,
+      'subtotal': (m['subtotal'] is num) ? (m['subtotal'] as num).toDouble() : 0.0,
+      'totalDiscount': (m['totalDiscount'] is num) ? (m['totalDiscount'] as num).toDouble() : 0.0,
+      'total': (m['total'] is num) ? (m['total'] as num).toDouble() : 0.0,
+      'paymentMethod': (m['paymentMethod'] ?? 'Cash').toString(),
+      'amountPaid': (m['amountPaid'] is num) ? (m['amountPaid'] as num).toDouble() : 0.0,
+      'changeAmount': (m['change'] is num) ? (m['change'] as num).toDouble() : 0.0,
+      'status': (m['status'] ?? 'completed').toString(),
+      'cashier': (m['cashier'] ?? '').toString(),
+      'branch': (m['branch'] ?? '').toString(),
+      'voidReason': m['voidReason']?.toString(),
+      'voidedBy': m['voidedBy']?.toString(),
+      'voidedAt': m['voidedAt']?.toString(),
+      'refundAmount': (m['refundAmount'] is num) ? (m['refundAmount'] as num).toDouble() : null,
+      'dateTime': (m['dateTime'] ?? DateTime.now().toIso8601String()).toString(),
+      'syncStatus': SyncStatus.synced,
+      'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+      'firebaseId': id,
+      'firebasePath': 'companies/$companyCode/sales/$branchId/$id',
+      'companyId': companyCode,
+      'branchId_sync': branchId,
+      'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    final itemsRaw = m['items'];
+    if (itemsRaw is List) {
+      await db.delete('transaction_items', where: 'transactionId = ?', whereArgs: [id]);
+      for (final item in itemsRaw) {
+        if (item is Map) {
+          final im = item.map((k, v) => MapEntry(k.toString(), v));
+          await db.insert('transaction_items', {
+            'transactionId': id,
+            'name': (im['name'] ?? '').toString(),
+            'sku': (im['sku'] ?? '').toString(),
+            'qty': (im['qty'] is num) ? (im['qty'] as num).toInt() : 0,
+            'price': (im['price'] is num) ? (im['price'] as num).toDouble() : 0.0,
+            'discount': (im['discount'] is num) ? (im['discount'] as num).toDouble() : 0.0,
+            'discountType': (im['discountType'] ?? 'fixed').toString(),
+            'discountAmount': (im['discountAmount'] is num) ? (im['discountAmount'] as num).toDouble() : 0.0,
+          });
+        }
+      }
+    }
+  }
+
+  // ═══════════════════ PRODUCTS BACKFILL (one-shot on attach) ═══════════════════
+  Future<void> _backfillProducts(String companyCode) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final snap = await db.ref('companies/$companyCode/products').get()
+          .timeout(const Duration(seconds: 20));
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final products = raw.map((k, v) => MapEntry(k.toString(), v));
+      int count = 0;
+      final sqliteDb = await DatabaseHelper().database;
+      for (final entry in products.entries) {
+        if (entry.value is! Map) continue;
+        final m = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+        final id = (m['productId'] ?? entry.key ?? '').toString();
+        if (id.isEmpty) continue;
+        await sqliteDb.insert(
+          'products',
+          {
+            'id': id,
+            'sku': (m['sku'] ?? '').toString(),
+            'name': (m['name'] ?? '').toString(),
+            'category': (m['category'] ?? '').toString(),
+            'unit': (m['unit'] ?? 'pcs').toString(),
+            'costPrice': (m['costPrice'] is num) ? (m['costPrice'] as num).toDouble() : 0.0,
+            'sellingPrice': (m['sellingPrice'] is num) ? (m['sellingPrice'] as num).toDouble() : 0.0,
+            'stockQty': (m['stockQty'] is num) ? (m['stockQty'] as num).toInt() : 0,
+            'reorderLevel': (m['reorderLevel'] is num) ? (m['reorderLevel'] as num).toInt() : 5,
+            'barcode': (m['barcode'] ?? '').toString(),
+            'imagePath': null,
+            'imageUrl': (m['imageUrl'] ?? '').toString(),
+            'syncStatus': SyncStatus.synced,
+            'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+            'firebaseId': id,
+            'firebasePath': 'companies/$companyCode/products/$id',
+            'companyId': companyCode,
+            'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        count++;
+      }
+      if (kDebugMode) debugPrint('📥 Product backfill: $count products pulled from cloud');
+      await CacheReloadHelper.reloadAll();
+      if (count > 0) {
+        _showSnackBar?.call('📥 Pulled $count product${count == 1 ? "" : "s"} from cloud');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ product backfill error: $e');
     }
   }
 }

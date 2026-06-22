@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sqflite/sqflite.dart' hide Transaction;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/setup_screen.dart';
@@ -154,10 +155,15 @@ class _AppLoaderState extends State<AppLoader> {
         debugPrint('===============================');
 
         Widget nextScreen;
-        if (!needsSetup) {
-          // Already configured -> go to login (unchanged)
+        // 🆕 Override: Multiple Store + no device assignment = route to Selector
+        final prefs = await SharedPreferences.getInstance();
+        final hasAssignment = (prefs.getString("assignedBranchId") ?? "").isNotEmpty;
+        if (setupMode == SetupModeService.modeMultiple && !hasAssignment) {
+          nextScreen = const SetupPathDetectorScreen();
+        } else if (!needsSetup) {
           nextScreen = const LoginScreen();
-        } else if (setupMode == null) {
+        }
+        else if (setupMode == null) {
           // Fresh install -> ask mode first (Solo vs Multiple)
           nextScreen = const SetupModeSelectionScreen(
             soloNextScreen: SetupScreen(),

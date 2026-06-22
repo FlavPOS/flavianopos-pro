@@ -6,33 +6,30 @@ import '../../helpers/database_helper.dart';
 class DebugResetChip extends StatelessWidget {
   const DebugResetChip({super.key});
 
-  // Keys we PRESERVE so the device stays "registered" to its company/branch
+  // Keys we PRESERVE — Firebase config only.
+  // Device assignment is CLEARED so user re-picks branch.
   static const _preserveKeys = {
     'setupMode',
     'setupModeSelectedAt',
     'firebaseConfigJson',
     'firebaseConfigLocked',
     'deviceId',
-    'assignedCompanyId',
-    'assignedCompanyCode',
-    'assignedBranchId',
-    'assignedBranchName',
-    'assignedDeviceRole',
-    'assignedAt',
   };
 
   Future<void> _factoryReset(BuildContext ctx) async {
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (c) => AlertDialog(
-        title: const Text('Factory Reset (smart)?'),
+        title: const Text('🧹 Smart Reset?'),
         content: const Text(
-          'This wipes LOCAL data only:\n'
-          '  • Users, branches, products, sales, batches, etc.\n\n'
-          'KEEPS:\n'
-          '  • Firebase config (so you stay connected)\n'
-          '  • Device assignment (so SyncManager keeps working)\n\n'
-          'Use this to clear local state and re-pull fresh data from Firebase.',
+          'This wipes:\n'
+          '  • Local users, branches, sales, products, etc.\n'
+          '  • Device assignment to current branch\n\n'
+          'Keeps:\n'
+          '  • Firebase config (no need to retype)\n'
+          '  • Device ID\n\n'
+          'After reset → app routes back to Branch Selector\n'
+          'so you can re-pick which branch this device serves.',
         ),
         actions: [
           TextButton(
@@ -41,11 +38,11 @@ class DebugResetChip extends StatelessWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Wipe Local Data'),
+            child: const Text('Wipe + Re-pick Branch'),
           ),
         ],
       ),
@@ -53,7 +50,7 @@ class DebugResetChip extends StatelessWidget {
     if (ok != true) return;
 
     try {
-      // 1) Wipe SQLite tables
+      // 1) Wipe ALL local tables (including users + branches)
       final db = await DatabaseHelper().database;
       final tables = [
         'users','branches','products','batches','transactions',
@@ -68,7 +65,9 @@ class DebugResetChip extends StatelessWidget {
         try { await db.delete(t); } catch (_) {}
       }
 
-      // 2) Wipe SharedPreferences EXCEPT preserved keys
+      // 2) Wipe SharedPreferences EXCEPT Firebase config keys
+      // This INCLUDES wiping the DeviceAssignmentService keys,
+      // which forces the app to route back to Branch Selector on next boot.
       final prefs = await SharedPreferences.getInstance();
       final allKeys = prefs.getKeys();
       for (final key in allKeys) {
@@ -79,7 +78,7 @@ class DebugResetChip extends StatelessWidget {
 
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-        content: Text('🧹 Local data wiped. Firebase context preserved. Refresh to re-pull from cloud.'),
+        content: Text('🧹 Wiped. Refresh → goes to Branch Selector.'),
         backgroundColor: Colors.green,
         duration: Duration(seconds: 3),
       ));
@@ -89,20 +88,18 @@ class DebugResetChip extends StatelessWidget {
     }
   }
 
-  /// 🔴 Full nuke — wipes EVERYTHING including Firebase config + setupMode.
-  /// Use only if you want to re-do the wizard from scratch.
   Future<void> _nuclearReset(BuildContext ctx) async {
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (c) => AlertDialog(
-        title: const Text('🔴 NUCLEAR Reset?'),
+        title: const Text('💥 NUCLEAR Reset?'),
         content: const Text(
           'This wipes EVERYTHING:\n'
           '  • All local data\n'
           '  • Firebase config\n'
-          '  • Device assignment\n'
+          '  • Device ID\n'
           '  • setupMode (back to Solo/Multiple choice)\n\n'
-          'Use this only to re-do the wizard from scratch.\n'
+          'Use only to re-do the wizard from scratch.\n'
           'Cloud data in Firebase is NOT touched.',
         ),
         actions: [
@@ -122,7 +119,6 @@ class DebugResetChip extends StatelessWidget {
       ),
     );
     if (ok != true) return;
-
     try {
       final db = await DatabaseHelper().database;
       final tables = [
@@ -166,7 +162,7 @@ class DebugResetChip extends StatelessWidget {
           child: ListTile(
             leading: Icon(Icons.cleaning_services, color: Colors.orange),
             title: Text('🧹 Smart Reset', style: TextStyle(fontSize: 13)),
-            subtitle: Text('Wipe local, keep Firebase', style: TextStyle(fontSize: 10)),
+            subtitle: Text('Wipe local, re-pick branch', style: TextStyle(fontSize: 10)),
             dense: true,
           ),
         ),
@@ -175,7 +171,7 @@ class DebugResetChip extends StatelessWidget {
           child: ListTile(
             leading: Icon(Icons.warning, color: Colors.red),
             title: Text('💥 Nuclear Reset', style: TextStyle(fontSize: 13)),
-            subtitle: Text('Wipe EVERYTHING', style: TextStyle(fontSize: 10)),
+            subtitle: Text('Wipe EVERYTHING incl. Firebase config', style: TextStyle(fontSize: 10)),
             dense: true,
           ),
         ),
