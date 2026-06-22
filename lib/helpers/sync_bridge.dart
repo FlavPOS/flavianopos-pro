@@ -260,6 +260,18 @@ class SyncBridge {
   // ═══════════════════ PRODUCT (Head Office only writes) ═══════════════════
   static Future<void> enqueueProduct(Product p, {required String op}) async {
     if (!await _isMultiple()) return;
+    // 🛡️ Role check: only Admin can sync product master changes
+    final dbCheck = await DatabaseHelper().database;
+    final roleRows = await dbCheck.rawQuery(
+      "SELECT role FROM users WHERE lastLogin IS NOT NULL ORDER BY lastLogin DESC LIMIT 1"
+    );
+    if (roleRows.isNotEmpty) {
+      final viewerRole = (roleRows.first["role"] ?? "").toString();
+      if (viewerRole != "Admin") {
+        if (kDebugMode) debugPrint("🔒 Non-Admin tried to sync product — blocked");
+        return;
+      }
+    }
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
     if (companyCode.isEmpty) return;

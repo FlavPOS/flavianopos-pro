@@ -9,7 +9,8 @@ import '../../models/product_model.dart';
 
 class AddEditProductScreen extends StatefulWidget {
   final Product? product;
-  const AddEditProductScreen({super.key, this.product});
+  final bool readOnly;
+  const AddEditProductScreen({super.key, this.product, this.readOnly = false});
   @override
   State<AddEditProductScreen> createState() => _AddEditProductScreenState();
 }
@@ -255,6 +256,17 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
   }
 
   void _saveProduct() {
+    if (widget.readOnly) {
+      debugPrint("🔒 EDIT BLOCKED: widget.readOnly=true");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🔒 Master products are managed by Head Office only."),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
     if (_formKey.currentState!.validate()) {
       String? imgPath = _existingImagePath;
       if (_imageBytes != null) {

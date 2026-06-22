@@ -14,11 +14,15 @@ import '../../models/user_model.dart';
 
 class InventoryScreen extends StatefulWidget {
   final String branch;
+  final String role;
+  final List<String> permissions;
   final bool isSelecting;
 
   const InventoryScreen({
     super.key, 
     required this.branch,
+    this.role = "",
+    this.permissions = const [],
     this.isSelecting = false,
   });
 
@@ -27,6 +31,10 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
+  bool get _canEdit {
+    final r = widget.role.toLowerCase().trim();
+    return r == "admin" || r == "companyadmin" || widget.permissions.contains("Manage Products");
+  }
   List<Product> get _products => Product.allProducts;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -597,7 +605,7 @@ _importItems();
       // FAB - Add Product
       floatingActionButton: widget.isSelecting
           ? null
-          : FloatingActionButton.extended(
+          : !_canEdit ? null : FloatingActionButton.extended(
               onPressed: () => _navigateToAddProduct(),
               backgroundColor: Colors.orange[700],
               foregroundColor: Colors.white,
@@ -947,7 +955,7 @@ _importItems();
   void _navigateToAddProduct() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const AddEditProductScreen()),
+      MaterialPageRoute(builder: (context) => AddEditProductScreen(readOnly: !_canEdit)),
     );
     if (result != null && result is Product) {
       _addProduct(result);
@@ -959,7 +967,7 @@ _importItems();
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AddEditProductScreen(product: product),
+        builder: (context) => AddEditProductScreen(product: product, readOnly: !_canEdit),
       ),
     );
     if (result != null && result is Product) {

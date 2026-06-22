@@ -153,7 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => InventoryScreen(branch: widget.branch),
+            builder: (context) => InventoryScreen(branch: widget.branch, role: widget.role, permissions: widget.permissions),
           ),
         ).then((_) => setState(() {}));
         break;

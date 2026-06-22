@@ -226,6 +226,14 @@ class SyncManager {
     final assign = await _assignSvc.read();
     final branchId = assign['branchId'] ?? '';
 
+    // 📦 Listen for product master (Head Office controls, all branches see)
+    _rtListeners.add(fbDb.ref("companies/$companyCode/products")
+        .onChildAdded.listen((event) => _onProductUpdate(event, companyCode)));
+    _rtListeners.add(fbDb.ref("companies/$companyCode/products")
+        .onChildChanged.listen((event) => _onProductUpdate(event, companyCode)));
+    _rtListeners.add(fbDb.ref("companies/$companyCode/products")
+        .onChildRemoved.listen((event) => _onProductDelete(event)));
+
     // Listen for branch list changes (so new branches added elsewhere appear)
     _rtListeners.add(fbDb.ref('companies/$companyCode/branches')
         .onChildAdded.listen((event) => _onBranchUpdate(event, companyCode)));
@@ -345,6 +353,57 @@ class SyncManager {
       syncing: syncing ?? cur.syncing,
       lastSyncAt: lastSyncAt ?? cur.lastSyncAt,
     );
+  }
+
+  // ═══════════════════ PRODUCT real-time listeners ═══════════════════
+  Future<void> _onProductUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final id = (m['productId'] ?? event.snapshot.key ?? '').toString();
+      if (id.isEmpty) return;
+      final db = await DatabaseHelper().database;
+      await db.insert(
+        'products',
+        {
+          'id': id,
+          'sku': (m['sku'] ?? '').toString(),
+          'name': (m['name'] ?? '').toString(),
+          'category': (m['category'] ?? '').toString(),
+          'unit': (m['unit'] ?? 'pcs').toString(),
+          'costPrice': (m['costPrice'] is num) ? (m['costPrice'] as num).toDouble() : 0.0,
+          'sellingPrice': (m['sellingPrice'] is num) ? (m['sellingPrice'] as num).toDouble() : 0.0,
+          'stockQty': (m['stockQty'] is num) ? (m['stockQty'] as num).toInt() : 0,
+          'reorderLevel': (m['reorderLevel'] is num) ? (m['reorderLevel'] as num).toInt() : 5,
+          'barcode': (m['barcode'] ?? '').toString(),
+          'imagePath': null,
+          'imageUrl': (m['imageUrl'] ?? '').toString(),
+          'syncStatus': SyncStatus.synced,
+          'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
+          'firebaseId': id,
+          'firebasePath': 'companies/$companyCode/products/$id',
+          'companyId': companyCode,
+          'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await CacheReloadHelper.reloadAll();
+      _showSnackBar?.call('📦 Product "${m['name']}" updated from cloud');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ product realtime: $e');
+    }
+  }
+
+  Future<void> _onProductDelete(DatabaseEvent event) async {
+    try {
+      final id = event.snapshot.key;
+      if (id == null) return;
+      final db = await DatabaseHelper().database;
+      await db.delete('products', where: 'id = ?', whereArgs: [id]);
+      await CacheReloadHelper.reloadAll();
+      _showSnackBar?.call('🗑️ Product removed from cloud');
+    } catch (_) {}
   }
 }
 
