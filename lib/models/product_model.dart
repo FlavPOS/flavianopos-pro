@@ -1,5 +1,7 @@
 // lib/models/product_model.dart
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import 'sync_queue_model.dart';
 
 class Product {
   final String id;
@@ -78,16 +80,20 @@ class Product {
     if (index >= 0) _allProducts[index] = newProduct;
     // Write to DB (fire & forget)
     DatabaseHelper().updateProduct(id, newProduct.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueProduct(newProduct, op: SyncOp.update);
   }
 
   static void addProduct(Product product) {
     _allProducts.add(product);
     DatabaseHelper().insertProduct(product.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueProduct(product, op: SyncOp.create);
   }
 
   static void removeProduct(String id) {
     _allProducts.removeWhere((p) => p.id == id);
     DatabaseHelper().deleteProduct(id).catchError((_) => 0);
+    final removed = _allProducts.firstWhere((p) => p.id == id, orElse: () => Product(id: id, sku: "", name: "", stockQty: 0, category: "", costPrice: 0, sellingPrice: 0));
+    SyncBridge.enqueueProduct(removed, op: SyncOp.delete);
   }
 
   // ══════════ Sample Data ══════════

@@ -4,6 +4,8 @@ import '../helpers/sync_queue_dao.dart';
 import '../models/sync_queue_model.dart';
 import '../models/user_model.dart';
 import '../models/branch_model.dart';
+import '../models/product_model.dart';
+import '../models/batch_model.dart';
 import '../services/setup_mode_service.dart';
 import '../services/firebase_config_service.dart';
 import '../services/firebase_realtime_service.dart';
@@ -253,5 +255,144 @@ class SyncBridge {
 
   static void _fireAndForget(Future<void> Function() task) {
     task().catchError((_) {});
+  }
+
+  // ═══════════════════ PRODUCT (Head Office only writes) ═══════════════════
+  static Future<void> enqueueProduct(Product p, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    if (companyCode.isEmpty) return;
+
+    final payload = {
+      'productId': p.id,
+      'companyCode': companyCode,
+      'name': p.name,
+      'sku': p.sku,
+      'barcode': p.barcode,
+      'category': p.category,
+      'unit': p.unit,
+      'costPrice': p.costPrice,
+      'sellingPrice': p.sellingPrice,
+      'stockQty': p.stockQty,
+      'reorderLevel': p.reorderLevel,
+      'imageUrl': p.imageUrl,
+      'isActive': true,
+      'createdByDeviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    final path = 'companies/$companyCode/products/${p.id}';
+    await _queue.enqueue(
+      entityType: 'product', entityId: p.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: ctx['branchId']!,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p2MasterData,
+    );
+    if (op == SyncOp.delete) {
+      _fireAndForget(() => _deleteProductOnFirebase(companyCode, p.id));
+    } else {
+      _fireAndForget(() => _uploadProductToFirebase(companyCode, p.id, payload));
+    }
+  }
+
+  static Future<void> _uploadProductToFirebase(
+      String companyCode, String productId, Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/products/$productId').set(payload);
+      await _markQueueSynced('product', productId);
+      await _markRowSynced('products', 'id', productId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ product upload failed: $e');
+    }
+  }
+
+  static Future<void> _deleteProductOnFirebase(
+      String companyCode, String productId) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/products/$productId').remove();
+      await _markQueueSynced('product', productId);
+    } catch (_) {}
+  }
+
+  // ═══════════════════ BATCH (per-branch physical stock) ═══════════════════
+  static Future<void> enqueueBatch(ProductBatch b, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    final payload = {
+      'batchId': b.id,
+      'productId': b.productId,
+      'productName': b.productName,
+      'productSku': b.productSku,
+      'batchNumber': b.batchNumber,
+      'manufacturedDate': b.manufacturedDate.toIso8601String(),
+      'expiryDate': b.expiryDate.toIso8601String(),
+      'quantity': b.quantity,
+      'originalQty': b.originalQty,
+      'costPrice': b.costPrice,
+      'supplier': b.supplier,
+      'notes': b.notes,
+      'branchId': branchId,
+      'companyCode': companyCode,
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    final path = 'companies/$companyCode/batches/$branchId/${b.id}';
+    await _queue.enqueue(
+      entityType: 'batch', entityId: b.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p2MasterData,
+    );
+    if (op == SyncOp.delete) {
+      _fireAndForget(() => _deleteBatchOnFirebase(companyCode, branchId, b.id));
+    } else {
+      _fireAndForget(() => _uploadBatchToFirebase(companyCode, branchId, b.id, payload));
+    }
+  }
+
+  static Future<void> _uploadBatchToFirebase(
+      String companyCode, String branchId, String batchId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/batches/$branchId/$batchId').set(payload);
+      await _markQueueSynced('batch', batchId);
+      await _markRowSynced('batches', 'id', batchId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ batch upload failed: $e');
+    }
+  }
+
+  static Future<void> _deleteBatchOnFirebase(
+      String companyCode, String branchId, String batchId) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/batches/$branchId/$batchId').remove();
+      await _markQueueSynced('batch', batchId);
+    } catch (_) {}
   }
 }

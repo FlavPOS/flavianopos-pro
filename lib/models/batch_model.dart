@@ -1,5 +1,7 @@
 // lib/models/batch_model.dart
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import 'sync_queue_model.dart';
 
 class ProductBatch {
   final String id;
@@ -115,17 +117,21 @@ class ProductBatch {
     _allBatches = allBatches;
     _allBatches.insert(0, b);
     DatabaseHelper().insertBatch(b.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueBatch(b, op: SyncOp.create);
   }
 
   static void updateBatch(String id, ProductBatch u) {
     final i = _allBatches.indexWhere((b) => b.id == id);
     if (i >= 0) _allBatches[i] = u;
     DatabaseHelper().updateBatch(id, u.toMap()).catchError((_) => 0);
+    SyncBridge.enqueueBatch(u, op: SyncOp.update);
   }
 
   static void deleteBatch(String id) {
     _allBatches.removeWhere((b) => b.id == id);
     DatabaseHelper().deleteBatch(id).catchError((_) => 0);
+    final removed = _allBatches.firstWhere((b) => b.id == id, orElse: () => ProductBatch(id: id, productId: "", productName: "", productSku: "", batchNumber: "", manufacturedDate: DateTime.now(), expiryDate: DateTime.now(), dateAdded: DateTime.now(), quantity: 0, originalQty: 0));
+    SyncBridge.enqueueBatch(removed, op: SyncOp.delete);
   }
 
   static List<ProductBatch> getSampleBatches() {
