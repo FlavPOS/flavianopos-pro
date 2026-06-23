@@ -7,6 +7,7 @@ import '../models/branch_model.dart';
 import '../models/product_model.dart';
 import '../models/batch_model.dart';
 import '../models/transaction_model.dart';
+import '../models/z_report_model.dart';
 import '../services/setup_mode_service.dart';
 import '../services/firebase_config_service.dart';
 import '../services/firebase_realtime_service.dart';
@@ -485,5 +486,72 @@ class SyncBridge {
       await db.ref('companies/$companyCode/sales/$branchId/$txnId').remove();
       await _markQueueSynced('transaction', txnId);
     } catch (_) {}
+  }
+
+  // ═══════════════════ Z REPORTS (per-branch end-of-shift snapshots) ═══════════════════
+  static Future<void> enqueueZReport(ZReportRecord r, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    final payload = {
+      'reportId': r.reportId,
+      'reportDate': r.reportDate.toIso8601String(),
+      'generatedAt': r.generatedAt.toIso8601String(),
+      'branch': r.branch,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
+      'cashier': r.cashier,
+      'companyCode': companyCode,
+      'grossSales': r.grossSales,
+      'totalDiscount': r.totalDiscount,
+      'netSales': r.netSales,
+      'totalTransactions': r.totalTransactions,
+      'averageTransaction': r.averageTransaction,
+      'beginningCash': r.beginningCash,
+      'endingCash': r.endingCash,
+      'expectedCash': r.expectedCash,
+      'overShort': r.overShort,
+      'voidedCount': r.voidedCount,
+      'voidedAmount': r.voidedAmount,
+      'refundedCount': r.refundedCount,
+      'refundedAmount': r.refundedAmount,
+      'paymentBreakdownJson': (r.toMap()['paymentBreakdownJson'] ?? '').toString(),
+      'voidedTransactionsJson': (r.toMap()['voidedTransactionsJson'] ?? '').toString(),
+      'allTransactionsJson': (r.toMap()['allTransactionsJson'] ?? '').toString(),
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    final path = 'companies/$companyCode/zReports/$branchId/${r.reportId}';
+    await _queue.enqueue(
+      entityType: 'zReport', entityId: r.reportId, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    _fireAndForget(() => _uploadZReportToFirebase(companyCode, branchId, r.reportId, payload));
+  }
+
+  static Future<void> _uploadZReportToFirebase(
+      String companyCode, String branchId, String reportId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/zReports/$branchId/$reportId').set(payload);
+      await _markQueueSynced('zReport', reportId);
+      await _markRowSynced('z_reports', 'reportId', reportId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Z Report upload failed: $e');
+    }
   }
 }

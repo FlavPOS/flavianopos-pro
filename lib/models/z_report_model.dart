@@ -1,5 +1,7 @@
 // lib/models/z_report_model.dart
 import '../helpers/database_helper.dart';
+import '../helpers/sync_bridge.dart';
+import 'sync_queue_model.dart';
 
 class ZReportPaymentBreakdown {
   final String method;
@@ -217,6 +219,7 @@ class ZReportRecord {
     _history.insert(0, report);
     try {
       await DatabaseHelper().insertZReport(report.toMap());
+      SyncBridge.enqueueZReport(report, op: SyncOp.create);
     } catch (_) {}
   }
 

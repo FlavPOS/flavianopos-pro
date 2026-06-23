@@ -262,6 +262,21 @@ class SyncManager {
         _rtListeners.add(fbDb.ref("companies/$companyCode/sales/$branchId")
             .onChildRemoved.listen((event) => _onSaleDelete(event)));
       }
+      // 📊 Z REPORTS (same branch-routing pattern as sales)
+      if (viewerRole == "admin" || viewerRole == "companyadmin") {
+        await _backfillAllZReports(companyCode);
+        _rtListeners.add(fbDb.ref("companies/$companyCode/zReports")
+            .onChildAdded.listen((event) => _onZReportBranchUpdate(event, companyCode)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/zReports")
+            .onChildChanged.listen((event) => _onZReportBranchUpdate(event, companyCode)));
+      } else {
+        await _backfillBranchZReports(companyCode, branchId);
+        _rtListeners.add(fbDb.ref("companies/$companyCode/zReports/$branchId")
+            .onChildAdded.listen((event) => _onZReportUpdate(event, companyCode, branchId)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/zReports/$branchId")
+            .onChildChanged.listen((event) => _onZReportUpdate(event, companyCode, branchId)));
+      }
+
 
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
           .onChildAdded.listen((event) => _onUserUpdate(event, branchId)));
@@ -692,6 +707,121 @@ class SyncManager {
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ product backfill error: $e');
+    }
+  }
+
+  // ═══════════════════ Z REPORT real-time listeners ═══════════════════
+  Future<void> _onZReportUpdate(DatabaseEvent event, String companyCode, String branchId) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      await _mirrorOneZReport(m, branchId, companyCode);
+      _showSnackBar?.call('📊 New Z Report from "${m['branch']}" — ₱${m['netSales']}');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Z Report realtime: $e');
+    }
+  }
+
+  Future<void> _onZReportBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final branchId = event.snapshot.key ?? '';
+      if (branchId.isEmpty) return;
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final reportsMap = val.map((k, v) => MapEntry(k.toString(), v));
+      for (final entry in reportsMap.entries) {
+        if (entry.value is Map) {
+          final m = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+          await _mirrorOneZReport(m, branchId, companyCode);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ HO Z Report sync: $e');
+    }
+  }
+
+  Future<void> _mirrorOneZReport(Map<String, dynamic> m, String branchId, String companyCode) async {
+    final id = (m['reportId'] ?? '').toString();
+    if (id.isEmpty) return;
+    final db = await DatabaseHelper().database;
+    await db.insert('z_reports', {
+      'reportId': id,
+      'reportDate': (m['reportDate'] ?? DateTime.now().toIso8601String()).toString(),
+      'generatedAt': (m['generatedAt'] ?? DateTime.now().toIso8601String()).toString(),
+      'branch': (m['branch'] ?? '').toString(),
+      'cashier': (m['cashier'] ?? '').toString(),
+      'grossSales': (m['grossSales'] is num) ? (m['grossSales'] as num).toDouble() : 0.0,
+      'totalDiscount': (m['totalDiscount'] is num) ? (m['totalDiscount'] as num).toDouble() : 0.0,
+      'netSales': (m['netSales'] is num) ? (m['netSales'] as num).toDouble() : 0.0,
+      'totalTransactions': (m['totalTransactions'] is num) ? (m['totalTransactions'] as num).toInt() : 0,
+      'averageTransaction': (m['averageTransaction'] is num) ? (m['averageTransaction'] as num).toDouble() : 0.0,
+      'paymentBreakdownJson': (m['paymentBreakdownJson'] ?? '').toString(),
+      'voidedCount': (m['voidedCount'] is num) ? (m['voidedCount'] as num).toInt() : 0,
+      'voidedAmount': (m['voidedAmount'] is num) ? (m['voidedAmount'] as num).toDouble() : 0.0,
+      'voidedTransactionsJson': (m['voidedTransactionsJson'] ?? '').toString(),
+      'beginningCash': (m['beginningCash'] is num) ? (m['beginningCash'] as num).toDouble() : 0.0,
+      'endingCash': (m['endingCash'] is num) ? (m['endingCash'] as num).toDouble() : 0.0,
+      'expectedCash': (m['expectedCash'] is num) ? (m['expectedCash'] as num).toDouble() : 0.0,
+      'overShort': (m['overShort'] is num) ? (m['overShort'] as num).toDouble() : 0.0,
+      'refundedCount': (m['refundedCount'] is num) ? (m['refundedCount'] as num).toInt() : 0,
+      'refundedAmount': (m['refundedAmount'] is num) ? (m['refundedAmount'] as num).toDouble() : 0.0,
+      'allTransactionsJson': (m['allTransactionsJson'] ?? '').toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _backfillAllZReports(String companyCode) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final snap = await db.ref('companies/$companyCode/zReports').get()
+          .timeout(const Duration(seconds: 20));
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final branches = raw.map((k, v) => MapEntry(k.toString(), v));
+      int count = 0;
+      for (final branchEntry in branches.entries) {
+        final branchId = branchEntry.key;
+        final reportsMap = branchEntry.value;
+        if (reportsMap is! Map) continue;
+        for (final reportEntry in reportsMap.entries) {
+          if (reportEntry.value is Map) {
+            final m = (reportEntry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+            await _mirrorOneZReport(m, branchId, companyCode);
+            count++;
+          }
+        }
+      }
+      if (count > 0) _showSnackBar?.call('📥 Pulled $count Z Report${count == 1 ? "" : "s"} from cloud');
+      if (kDebugMode) debugPrint('📥 HO Z Report backfill: $count pulled');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Z Report backfill error: $e');
+    }
+  }
+
+  Future<void> _backfillBranchZReports(String companyCode, String branchId) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final snap = await db.ref('companies/$companyCode/zReports/$branchId').get()
+          .timeout(const Duration(seconds: 20));
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final reportsMap = raw.map((k, v) => MapEntry(k.toString(), v));
+      int count = 0;
+      for (final entry in reportsMap.entries) {
+        if (entry.value is Map) {
+          final m = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+          await _mirrorOneZReport(m, branchId, companyCode);
+          count++;
+        }
+      }
+      if (count > 0) _showSnackBar?.call('📥 Pulled $count Z Report${count == 1 ? "" : "s"} from cloud');
+      if (kDebugMode) debugPrint('📥 Branch Z Report backfill: $count pulled');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Branch Z Report backfill error: $e');
     }
   }
 }
