@@ -29,7 +29,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
   final _beginningCashController = TextEditingController();
   final _endingCashController = TextEditingController(text: '');
   final Map<double, TextEditingController> _denomCtrls = {};
-  bool _useDenominations = false;
+  final bool _useDenominations = true;  // 🔒 Always — declaration popup is the only method
   bool _cashDeclared = false;
   String _redeclareReason = "";
   int _redeclareCount = 0;
@@ -47,7 +47,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     super.initState();
     // 🔒 BIR blind audit — force cash declaration on screen open
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!_cashDeclared && !_isReportGenerated && mounted) {
+      if (!_cashDeclared && !_isReportGenerated && _viewerAuthorized && mounted) {
         await Future.delayed(const Duration(milliseconds: 500));
         if (mounted) _showCashDeclarationDialog();
       }
@@ -153,6 +153,10 @@ class _ZReportScreenState extends State<ZReportScreen> {
       _validTransactions.fold(0, (sum, t) => sum + t.total);
 
   int get _totalTransactions => _validTransactions.length;
+
+  // 🧾 VAT computation (BIR-compliant)
+  double get _totalVAT => _validTransactions.fold(0, (sum, t) => sum + t.tax);
+  double get _totalVATableSales => _totalNetSales - _totalVAT;
 
   double get _totalVoidedAmount =>
       _voidedTransactions.fold(0, (sum, t) => sum + t.total);
@@ -680,10 +684,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
         const SizedBox(height: 8),
         _buildCashCountCard(),
         const SizedBox(height: 16),
-        _buildSectionTitle('Transaction Log ($_totalTransactions + $_totalVoidedCount voided + $_totalRefundedCount refunded)', Icons.receipt_long),
-        const SizedBox(height: 8),
-        _buildTransactionList(),
-        const SizedBox(height: 16),
         // 🔄 Re-Declare Cash (Manager PIN required)
         if (_cashDeclared) Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -780,6 +780,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
             const Divider(),
             _buildReportRow('NET SALES', _totalNetSales.toStringAsFixed(2), isBold: true, valueColor: Colors.green[800], fontSize: 18),
             const Divider(),
+        _buildReportRow("VATable Sales", _totalVATableSales.toStringAsFixed(2)),
+        _buildReportRow("VAT (12%)", _totalVAT.toStringAsFixed(2), valueColor: Colors.purple),
+        _buildReportRow("VAT-Exempt Sales", "0.00"),
+        _buildReportRow("Zero-Rated Sales", "0.00"),
+        const Divider(),
             _buildReportRow('Cash Sales', _getPaymentTotal('Cash').toStringAsFixed(2)),
             _buildReportRow('GCash', _getPaymentTotal('GCash').toStringAsFixed(2)),
             _buildReportRow('Maya', _getPaymentTotal('Maya').toStringAsFixed(2)),
@@ -905,6 +910,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
         const Divider(),
         _buildReportRow('NET SALES', _totalNetSales.toStringAsFixed(2), isBold: true, valueColor: Colors.green[800], fontSize: 20),
         const Divider(),
+        _buildReportRow("VATable Sales", _totalVATableSales.toStringAsFixed(2)),
+        _buildReportRow("VAT (12%)", _totalVAT.toStringAsFixed(2), valueColor: Colors.purple),
+        _buildReportRow("VAT-Exempt Sales", "0.00"),
+        _buildReportRow("Zero-Rated Sales", "0.00"),
+        const Divider(),
         _buildReportRow('Total Transactions', '$_totalTransactions'),
         _buildReportRow('Average per Transaction', _averageTransaction.toStringAsFixed(2)),
       ])));
@@ -1000,7 +1010,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
           const Expanded(child: Text('Count by Denomination?', style: TextStyle(fontWeight: FontWeight.w500))),
           Switch(
             value: _useDenominations,
-            onChanged: (v) => setState(() => _useDenominations = v),
+            onChanged: null,  // 🔒 Locked
             activeColor: Colors.purple[700],
           ),
         ]),
@@ -1196,10 +1206,10 @@ class _ZReportScreenState extends State<ZReportScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    ...[1000.0, 500.0, 200.0, 100.0, 50.0, 20.0, 10.0, 5.0, 1.0].map((d) => Padding(
+                    ...[1000.0, 500.0, 200.0, 100.0, 50.0, 20.0, 10.0, 5.0, 1.0, 0.25, 0.10, 0.05].map((d) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(children: [
-                        SizedBox(width: 56, child: Text('P${d.toInt()}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        SizedBox(width: 56, child: Text(d >= 1 ? "P${d.toInt()}" : "${d.toStringAsFixed(2)}c", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
                         const SizedBox(width: 8),
                         const Text('x', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                         const SizedBox(width: 8),
