@@ -51,6 +51,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   bool _hasAccess(String module) => widget.permissions.contains('all') || widget.permissions.contains(module);
 
+  // 🔓 Manager PIN unlock — start new business day after Z Report
+  void _startNewBusinessDay() async {
+    final isLocked = await DailyLockService.isLocked();
+    if (!isLocked) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("ℹ️ Business day is already open"),
+        backgroundColor: Colors.blue,
+      ));
+      return;
+    }
+    if (!mounted) return;
+    final ok = await DailyLockService.unlockDayWithManagerPin(context);
+    if (ok && mounted) setState(() {});
+  }
+
 
 
   void _openCashierReport() {
@@ -871,6 +887,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 if (_hasAccess('Cashiering'))                     _buildModuleCard('Cashiering', Icons.point_of_sale, Colors.green, () => _navigateToModule('Cashiering'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
 if (_hasAccess('Inventory'))                     _buildModuleCard('Inventory', Icons.inventory_2, Colors.orange, () => _navigateToModule('Inventory'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
 if (_hasAccess('Z Report'))                     _buildModuleCard('Z Report', Icons.assessment, Colors.purple, () => _navigateToModule('Z Report'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
+if (_hasAccess('Z Report'))                     _buildModuleCard('Start New Day', Icons.lock_open, Colors.deepOrange, () => _startNewBusinessDay(), iconSz, iconPad, labelSz, borderR, innerH, innerV),
 if (_hasAccess('Sales History'))                     _buildModuleCard('Sales History', Icons.history, Colors.teal, () => _navigateToModule('Sales History'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
 if (_hasAccess('Stock Adjustment'))                     _buildModuleCard('Stock Adjustment', Icons.tune, Colors.blue, () => _navigateToModule('Stock Adjustment'), iconSz, iconPad, labelSz, borderR, innerH, innerV),
 if (_hasAccess('Item Ledger'))                     _buildModuleCard('Item Ledger', Icons.account_balance_wallet, Colors.deepPurple, () => _navigateToModule('Item Ledger'), iconSz, iconPad, labelSz, borderR, innerH, innerV),

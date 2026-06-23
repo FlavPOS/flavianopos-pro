@@ -1,6 +1,7 @@
 // lib/screens/reports/z_report_screen.dart
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
+import '../../services/daily_lock_service.dart';
 import '../../services/cashier_session_service.dart';
 import '../../models/cashier_session_model.dart';
 import '../../models/incident_report_model.dart';
@@ -182,6 +183,22 @@ class _ZReportScreenState extends State<ZReportScreen> {
   // ✅ GENERATE Z REPORT - Save to history & reset
   // ──────────────────────────────────────────────────────────
   Future<void> _generateReport() async {
+    // 🔒 Manager PIN required to End the Business Day (BIR compliance)
+    final managerUsername = await ManagerPinDialog.verify(
+      context,
+      title: "End of Day Authorization",
+      actionLabel: "Generate Z Report & Lock Day",
+    );
+    final managerAuthorized = managerUsername != null;
+    if (!managerAuthorized) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("❌ End of Day cancelled — Manager authorization required"),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    if (!mounted) return;
     // BLOCK 1: Check if any active shifts (multi-cashier check!)
     if (_shiftMustClose) {
       _snack('🚨 BLOCKED: ${_allActiveShifts.length} active shift(s) detected! All cashiers must close their shifts first.');
@@ -212,7 +229,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
         title: Row(children: [
           Icon(Icons.warning_amber, color: Colors.orange[700], size: 28),
           const SizedBox(width: 10),
-          const Text('Generate Z Report?', style: TextStyle(fontSize: 16)),
+          const Text('End of Day Authorization', style: TextStyle(fontSize: 16)),
         ]),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -251,7 +268,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
               _saveAndGenerate();
             },
             icon: const Icon(Icons.check),
-            label: const Text('Generate & Save'),
+            label: const Text('Manager Authorize'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
@@ -309,6 +326,8 @@ class _ZReportScreenState extends State<ZReportScreen> {
       overShort: _overShort,
       transactionLog: txnLog,
     ));
+      // 🔒 Auto-lock business day (Manager PIN required to reopen)
+      await DailyLockService.lockDayAfterZReport(reportId);
 
     setState(() {
       _isReportGenerated = true;
@@ -555,7 +574,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
           child: ElevatedButton.icon(
             onPressed: _generateReport,
             icon: const Icon(Icons.assessment, size: 28),
-            label: const Text('GENERATE Z REPORT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1)),
+            label: const Text('🔒 END OF DAY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 1)),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
           ),
