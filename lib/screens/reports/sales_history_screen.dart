@@ -19,7 +19,7 @@ class SalesHistoryScreen extends StatefulWidget {
 }
 
 class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
-  final List<Transaction> _transactions = Transaction.allTransactions;
+  List<Transaction> get _transactions => Transaction.allTransactions;
   final _searchCtrl = TextEditingController();
   String _query = '';
   String _dateFilter = 'Today';

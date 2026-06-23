@@ -23,7 +23,7 @@ class ZReportScreen extends StatefulWidget {
 
 class _ZReportScreenState extends State<ZReportScreen> {
   final List<Transaction> _transactions = Transaction.allTransactions;
-  final _beginningCashController = TextEditingController(text: '5000.00');
+  final _beginningCashController = TextEditingController();
   final _endingCashController = TextEditingController(text: '');
   final Map<double, TextEditingController> _denomCtrls = {};
   bool _useDenominations = false;
@@ -94,6 +94,10 @@ class _ZReportScreenState extends State<ZReportScreen> {
         if (todaysClosedSession != null) {
           _beginningCashController.text = todaysClosedSession.beginningCash.toStringAsFixed(2);
           _endingCashController.text = todaysClosedSession.endingCashDeclared.toStringAsFixed(2);
+        }
+        // 🆕 Active session (current shift) overrides — uses login-time beginning cash
+        if (active != null) {
+          _beginningCashController.text = active.beginningCash.toStringAsFixed(2);
         }
       });
     } catch (e) {
@@ -757,12 +761,30 @@ class _ZReportScreenState extends State<ZReportScreen> {
   Widget _buildCashCountCard() {
     return Card(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+        // 🆕 Read-only banner
+        Container(
+          padding: const EdgeInsets.all(10),
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.purple.shade50,
+            border: Border.all(color: Colors.purple.shade200),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            Icon(Icons.lock_outline, size: 16, color: Colors.purple.shade700),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              "Beginning Cash is set during Beginning Cash Encoding at log-in. Only Ending Cash is editable here.",
+              style: TextStyle(fontSize: 11, color: Colors.purple.shade700),
+            )),
+          ]),
+        ),
         Row(children: [
           const Expanded(child: Text('Beginning Cash', style: TextStyle(fontWeight: FontWeight.w500))),
           SizedBox(width: 150, child: TextField(
-            controller: _beginningCashController, keyboardType: TextInputType.number,
+            controller: _beginningCashController, readOnly: true, keyboardType: TextInputType.number,
             textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            decoration: InputDecoration(prefixText: 'P ', contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: InputDecoration(prefixText: 'P ', filled: true, fillColor: Colors.grey.shade100, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
             onChanged: (_) => setState(() {}))),
         ]),
