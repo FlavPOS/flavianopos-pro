@@ -43,13 +43,6 @@ class _BeginningCashScreenState extends State<BeginningCashScreen> {
 
     // 🔒 Layer 3 Daily Lock — defense-in-depth (Z Report already done?)
     final lockResult = await DailyLockService.isLocked();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("🔍 DEBUG: DailyLock.isLocked() = $lockResult"),
-        backgroundColor: lockResult ? Colors.red : Colors.green,
-        duration: const Duration(seconds: 4),
-      ));
-    }
     if (lockResult) {
       if (!mounted) return;
       await DailyLockService.showCashierLockedDialog(context, action: "open new shift");

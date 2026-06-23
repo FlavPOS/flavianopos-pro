@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // lib/models/z_report_model.dart
 import '../helpers/database_helper.dart';
 import '../helpers/sync_bridge.dart';
@@ -211,7 +212,7 @@ class ZReportRecord {
       final rows = await DatabaseHelper().getAllZReports();
       _history.clear();
       _history.addAll(rows.map((r) => ZReportRecord.fromMap(r)));
-    } catch (_) {}
+    } catch (e, st) { debugPrint("❌ Z Report SAVE FAILED: $e"); debugPrint("Stack: $st"); rethrow; }
   }
 
   /// Save report to SQLite + memory
@@ -220,7 +221,7 @@ class ZReportRecord {
     try {
       await DatabaseHelper().insertZReport(report.toMap());
       SyncBridge.enqueueZReport(report, op: SyncOp.create);
-    } catch (_) {}
+    } catch (e, st) { debugPrint("❌ Z Report SAVE FAILED: $e"); debugPrint("Stack: $st"); rethrow; }
   }
 
   /// Check if today already has a Z Report (queries DB!)
@@ -239,6 +240,6 @@ class ZReportRecord {
 
   static Future<void> clearHistory() async {
     _history.clear();
-    try { await DatabaseHelper().clearZReports(); } catch (_) {}
+    try { await DatabaseHelper().clearZReports(); } catch (e, st) { debugPrint("❌ Z Report SAVE FAILED: $e"); debugPrint("Stack: $st"); rethrow; }
   }
 }

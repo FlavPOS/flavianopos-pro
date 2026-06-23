@@ -58,6 +58,7 @@ class DatabaseHelper {
 
     try {
       await db.execute('''CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, allTransactionsJson TEXT DEFAULT '')''');
+    try { await db.execute("ALTER TABLE z_reports ADD COLUMN refundedTransactionsJson TEXT DEFAULT ''"); } catch (_) {}
     } catch (_) {}
 
     try {
@@ -353,6 +354,7 @@ class DatabaseHelper {
     try { await db.execute("CREATE TABLE IF NOT EXISTS denomination_records (id INTEGER PRIMARY KEY AUTOINCREMENT, sessionId TEXT NOT NULL, type TEXT DEFAULT 'ending', denomination REAL NOT NULL, quantity INTEGER DEFAULT 0, total REAL DEFAULT 0, createdAt TEXT)"); } catch (_) {}
     try { await db.execute("CREATE TABLE IF NOT EXISTS incident_reports (id TEXT PRIMARY KEY, irNumber TEXT UNIQUE, sessionId TEXT NOT NULL, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', variance REAL DEFAULT 0, varianceType TEXT DEFAULT '', reason TEXT DEFAULT '', remarks TEXT DEFAULT '', attachmentPath TEXT DEFAULT '', createdBy TEXT DEFAULT '', createdAt TEXT NOT NULL, approvedBy TEXT DEFAULT '', approvedAt TEXT, status TEXT DEFAULT 'pending')"); } catch (_) {}
     try { await db.execute("CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, refundedTransactionsJson TEXT DEFAULT '', allTransactionsJson TEXT DEFAULT '')"); } catch (_) {}
+    try { await db.execute("CREATE TABLE IF NOT EXISTS business_day_state (branchId TEXT PRIMARY KEY, status TEXT DEFAULT 'open', lockedAt TEXT DEFAULT '', lockedByZReportId TEXT DEFAULT '', unlockedAt TEXT DEFAULT '', unlockedBy TEXT DEFAULT '', unlockReason TEXT DEFAULT '', updatedAt TEXT DEFAULT '')"); } catch (_) {}
 
     if (oldVersion < 2) {
       // ALTER existing tables
@@ -1033,8 +1035,8 @@ class DatabaseHelper {
     final dayStart = DateTime(date.year, date.month, date.day).toIso8601String();
     final dayEnd = DateTime(date.year, date.month, date.day + 1).toIso8601String();
     final rows = await db.query("z_reports",
-      where: "reportDate >= ? AND reportDate < ?",
-      whereArgs: [dayStart, dayEnd], limit: 1);
+      where: "reportDate >= ? AND reportDate < ? AND (cashier NOT LIKE ? OR cashier IS NULL)",
+      whereArgs: [dayStart, dayEnd, "VOIDED%"], limit: 1);
     debugPrint("🔍 hasZReportForDate: dayStart=$dayStart dayEnd=$dayEnd rows=${rows.length}");
     return rows.isNotEmpty;
   }

@@ -9,12 +9,18 @@ class DailyLockService {
     final assign = await DeviceAssignmentService().read();
     final branchId = assign['branchId'] ?? 'default';
     final now = DateTime.now().toUtc().toIso8601String();
-    await db.insert('business_day_state', {
+    debugPrint("🔒 lockDayAfterZReport: writing for branchId=$branchId");
+    try {
+    await db.insert("business_day_state", {
       'branchId': branchId, 'status': 'locked',
       'lockedAt': now, 'lockedByZReportId': reportId,
       'unlockedAt': '', 'unlockedBy': '', 'unlockReason': '',
       'updatedAt': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    debugPrint("✅ lockDayAfterZReport: business_day_state locked for branchId=$branchId");
+    } catch (e) {
+      debugPrint("❌ lockDayAfterZReport FAILED: $e");
+    }
   }
 
   static Future<bool> isLocked() async {
@@ -38,18 +44,25 @@ class DailyLockService {
     final username = await ManagerPinDialog.verify(
       context, title: 'Start New Business Day', actionLabel: 'Open new business day',
     );
-    if (username == null) return false;
+    if (username == null) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("🔴 DEBUG: PIN dialog returned NULL — cancelled or failed"), duration: Duration(seconds: 6))); return false; }
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("🟢 DEBUG: PIN verified, username=$username, proceeding to unlock..."), duration: const Duration(seconds: 6)));
     final db = await DatabaseHelper().database;
     final assign = await DeviceAssignmentService().read();
     final branchId = assign['branchId'] ?? 'default';
     final now = DateTime.now().toUtc().toIso8601String();
-    await db.insert('business_day_state', {
+    debugPrint("🔒 lockDayAfterZReport: writing for branchId=$branchId");
+    try {
+    await db.insert("business_day_state", {
       'branchId': branchId, 'status': 'open',
       'lockedAt': '', 'lockedByZReportId': '',
       'unlockedAt': now, 'unlockedBy': username,
       'unlockReason': 'Manager opened new business day',
       'updatedAt': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    debugPrint("✅ lockDayAfterZReport: business_day_state locked for branchId=$branchId");
+    } catch (e) {
+      debugPrint("❌ lockDayAfterZReport FAILED: $e");
+    }
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✅ Business day opened by $username'),
@@ -110,6 +123,65 @@ class DailyLockService {
       actionLabel: 'View locked Z Report',
     );
     return username != null;
+  }
+
+  /// Void current Z Report and unlock the day for re-generation.
+  /// BIR-compliant: original Z stays in z_reports (status='VOIDED').
+  /// Audit trail logged with reason.
+  static Future<bool> voidZReportAndUnlock(BuildContext context, {required String currentZReportId}) async {
+    final username = await ManagerPinDialog.verify(
+      context,
+      title: '🔓 Re-Open Z Report',
+      actionLabel: 'Void current Z Report and re-open day',
+    );
+    if (username == null) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("🔴 DEBUG: PIN dialog returned NULL — cancelled or failed"), duration: Duration(seconds: 6))); return false; }
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("🟢 DEBUG: PIN verified, username=$username, proceeding to unlock..."), duration: const Duration(seconds: 6)));
+
+    // Reset business_day_state to 'open'
+    final db = await DatabaseHelper().database;
+    final assign = await DeviceAssignmentService().read();
+    final branchId = assign['branchId'] ?? 'default';
+    final now = DateTime.now().toUtc().toIso8601String();
+
+    await db.insert('business_day_state', {
+      'branchId': branchId,
+      'status': 'open',
+      'lockedAt': '',
+      'lockedByZReportId': '',
+      'unlockedAt': now,
+      'unlockedBy': username,
+      'unlockReason': 'Z Report voided for re-generation',
+      'updatedAt': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    // Mark Z Report as VOIDED (don't delete — BIR audit requires keeping it)
+    try {
+      await db.update('z_reports',
+        {'cashier': 'VOIDED by $username'},
+        where: 'reportId = ?', whereArgs: [currentZReportId]);
+    } catch (_) {}
+
+    // Audit log
+    await db.insert('expense_audit_trail', {
+      'id': 'AUDIT-${DateTime.now().millisecondsSinceEpoch}',
+      'expenseId': 'Z_REPORT_VOID',
+      'expenseNumber': currentZReportId,
+      'action': 'Z_REPORT_VOIDED',
+      'oldValue': 'locked',
+      'newValue': 'open',
+      'performedBy': username,
+      'performedDate': now,
+      'branch': assign['branchName'] ?? '',
+    });
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('🔁 Z Report voided by $username. Day re-opened for new Z.'),
+        backgroundColor: Colors.purple,
+        duration: const Duration(seconds: 4),
+      ));
+    }
+    return true;
   }
 }
 
@@ -177,7 +249,7 @@ class ManagerPinDialog {
     if (users.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('❌ Invalid PIN or insufficient permissions'),
+          content: Text("❌ Invalid PIN!\nMust be an Admin or Manager.\nGo to Users Module to verify."), duration: const Duration(seconds: 8),
           backgroundColor: Colors.red,
         ));
       }
