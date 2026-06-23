@@ -60,13 +60,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
     try {
       // Check if there's an active session (shift not closed!)
       final active = await CashierSessionService.getActiveSession(widget.cashier);
-      // Also check for any active shifts across all cashiers
       final allActiveShifts = await CashierSessionService.getAllActiveShifts();
       // 🆕 Fall back: if no match by widget.cashier, use first open shift (different id field)
       final effectiveActive = active ?? (allActiveShifts.isNotEmpty
-          ? CashierSession.fromMap(allActiveShifts.first)
+          ? allActiveShifts.first
           : null);
-      // Also check for any active shifts across all cashiers
 
       // Get all sessions for today
       final allSessions = await DatabaseHelper().getAllSessions(cashierId: widget.cashier);
