@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/z_report_model.dart';
+import 'firebase_config_service.dart';
+import 'firebase_realtime_service.dart';
+import 'device_assignment_service.dart';
 
-/// BIR-compliant Daily Lock
-/// Once a Z Report is generated for the day, blocks:
-///   - Beginning Cash encoding
-///   - Sales (Cashiering)
-/// Auto-unlocks at midnight (next calendar day)
+/// BIR-compliant Daily Lock — ROLE-AWARE
+/// Blocks ONLY Cashier role from new transactions after Z Report.
+/// Admin/Manager retain authority to encode Beginning Cash and ring sales.
 class DailyLockService {
-  /// True if Z Report already generated today (per local SQLite — branch-isolated by data design)
-  static Future<bool> isLocked() async {
+  /// True if Z Report already generated today.
+  /// Lock applies only to Cashier role.
+  static Future<bool> shouldBlock(String role) async {
+    // Admin/Manager are never blocked (they have authority)
+    if (role.toLowerCase() != 'cashier') return false;
     try {
       return await ZReportRecord.hasReportForToday();
     } catch (_) {
@@ -16,22 +20,73 @@ class DailyLockService {
     }
   }
 
-  /// Human-friendly time until midnight unlock
+  /// True if Z Report already generated today.
+  /// Checks BOTH local SQLite AND Firebase (defense-in-depth).
+  static Future<bool> isLocked() async {
+    // 1. Check local SQLite
+    try {
+      if (await ZReportRecord.hasReportForToday()) return true;
+    } catch (_) {}
+
+    // 2. Check Firebase (in case local was wiped — Smart Reset, Clear Data, etc.)
+    try {
+      final cfg = await FirebaseConfigService().load();
+      if (cfg == null) return false;
+      final companyCode = cfg.companyCode;
+      if (companyCode.isEmpty) return false;
+
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return false;
+
+      // Get current branchId from DeviceAssignmentService
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? '';
+      if (branchId.isEmpty) return false;
+
+      // Today's date as ISO prefix
+      final now = DateTime.now();
+      final todayPrefix = '${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")}';
+
+      final snap = await db
+          .ref('companies/$companyCode/zReports/$branchId')
+          .get()
+          .timeout(const Duration(seconds: 5));
+      if (!snap.exists || snap.value is! Map) return false;
+
+      final reports = (snap.value as Map);
+      for (final entry in reports.entries) {
+        if (entry.value is Map) {
+          final m = entry.value as Map;
+          final reportDate = (m['reportDate'] ?? '').toString();
+          if (reportDate.startsWith(todayPrefix)) {
+            return true; // Today's Z Report found in cloud
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
+  }
+
+  /// Legacy (backward-compatible). Use shouldBlock(role) for new code.
+
   static String unlockMessage() {
     final now = DateTime.now();
     final midnight = DateTime(now.year, now.month, now.day + 1);
     final remaining = midnight.difference(now);
     final hours = remaining.inHours;
     final minutes = remaining.inMinutes % 60;
-    if (hours > 0) {
-      return 'Unlocks in ${hours}h ${minutes}m (midnight)';
-    }
+    if (hours > 0) return 'Unlocks in ${hours}h ${minutes}m (midnight)';
     return 'Unlocks in ${minutes}m (midnight)';
   }
 
-  /// Show lock dialog with Admin override option
-  static Future<bool> showLockDialog(BuildContext context, {required String action}) async {
-    final override = await showDialog<bool>(
+  /// Friendly dialog for Cashier — no Admin Override
+  /// (To override, log out and use Admin credentials)
+  static Future<void> showCashierLockedDialog(BuildContext context, {required String action}) async {
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -78,7 +133,7 @@ class DailyLockService {
                 Icon(Icons.admin_panel_settings, size: 18, color: Colors.purple.shade700),
                 const SizedBox(width: 8),
                 Expanded(child: Text(
-                  'Admin can override with PIN if emergency.',
+                  'If emergency, please log in as Admin or Manager.',
                   style: TextStyle(fontSize: 12, color: Colors.purple.shade700),
                 )),
               ]),
@@ -86,75 +141,16 @@ class DailyLockService {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Close'),
-          ),
-          ElevatedButton.icon(
+          ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade700,
+              backgroundColor: Colors.orange.shade700,
               foregroundColor: Colors.white,
             ),
-            onPressed: () async {
-              final ok = await _promptAdminOverride(ctx);
-              if (ctx.mounted) Navigator.pop(ctx, ok);
-            },
-            icon: const Icon(Icons.key, size: 18),
-            label: const Text('Admin Override'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK, I understand'),
           ),
         ],
       ),
     );
-    return override ?? false;
-  }
-
-  static Future<bool> _promptAdminOverride(BuildContext context) async {
-    final pinCtrl = TextEditingController();
-    final reasonCtrl = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('🔐 Admin PIN Override'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: pinCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Admin PIN',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              obscureText: true,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Reason (required)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (reasonCtrl.text.trim().isEmpty) return;
-              // PIN check: any non-empty for v1 — caller should verify
-              Navigator.pop(ctx, pinCtrl.text.isNotEmpty);
-            },
-            child: const Text('Unlock'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
   }
 }

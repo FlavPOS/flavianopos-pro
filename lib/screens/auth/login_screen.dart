@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/daily_lock_service.dart';
 import '_debug_reset_chip.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/app_logo.dart';
@@ -123,6 +124,12 @@ class _LoginScreenState extends State<LoginScreen> {
         permissions: userPerms,
       )));
     } else {
+      // 🔒 Daily Lock check (BIR-compliant single-Z-per-day)
+      if (await DailyLockService.shouldBlock(role)) {
+        if (!context.mounted) return;
+        await DailyLockService.showCashierLockedDialog(context, action: "open new shift");
+        return;
+      }
       final newSession = await Navigator.push<CashierSession>(context, MaterialPageRoute(
         builder: (_) => BeginningCashScreen(
           cashierId: userName,

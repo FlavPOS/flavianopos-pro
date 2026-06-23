@@ -52,7 +52,8 @@ class _UsersScreenState extends State<UsersScreen> {
     if (mounted) {
       setState(() {
         // Company Admin (role==Admin) sees ALL; others see only own branch
-        final isCompanyAdmin = _viewerRole == "Admin";
+        final r = (_viewerRole ?? "").toLowerCase().trim();
+        final isCompanyAdmin = r == "admin" || r == "companyadmin" || _viewerBranch.isEmpty;
         _users = AppUser.allUsers.where((u) {
           if (isCompanyAdmin) return true;
           return u.branch.toLowerCase() == _viewerBranch.toLowerCase();

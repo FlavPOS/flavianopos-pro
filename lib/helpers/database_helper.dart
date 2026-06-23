@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 // =============================================================================
 // QuickPOS Pro — database_helper.dart (CLEAN v2)
 // Full SQLite Database — 17 Tables, All CRUD, Indexes, Migration
@@ -1019,7 +1020,7 @@ class DatabaseHelper {
   // ═══════════ Z REPORTS ═══════════
   Future<int> insertZReport(Map<String, dynamic> r) async {
     final db = await database;
-    return await db.insert('z_reports', r, conflictAlgorithm: ConflictAlgorithm.replace);
+    debugPrint('💾 INSERTING z_report: id=${r["reportId"]} reportDate="${r["reportDate"]}"'); return await db.insert('z_reports', r, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Map<String, dynamic>>> getAllZReports() async {
@@ -1029,9 +1030,12 @@ class DatabaseHelper {
 
   Future<bool> hasZReportForDate(DateTime date) async {
     final db = await database;
-    final dateStr = '${date.year}-${date.month.toString().padLeft(2, "0")}-${date.day.toString().padLeft(2, "0")}';
-    final rows = await db.query('z_reports',
-      where: "reportDate LIKE ?", whereArgs: ['$dateStr%'], limit: 1);
+    final dayStart = DateTime(date.year, date.month, date.day).toIso8601String();
+    final dayEnd = DateTime(date.year, date.month, date.day + 1).toIso8601String();
+    final rows = await db.query("z_reports",
+      where: "reportDate >= ? AND reportDate < ?",
+      whereArgs: [dayStart, dayEnd], limit: 1);
+    debugPrint("🔍 hasZReportForDate: dayStart=$dayStart dayEnd=$dayEnd rows=${rows.length}");
     return rows.isNotEmpty;
   }
 

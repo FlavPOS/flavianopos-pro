@@ -10,6 +10,7 @@ import 'cashier_lock/cashier_report_screen.dart';
 import 'receive_delivery/receive_delivery_screen.dart' as rd;
 import 'item_ledger/item_ledger_screen.dart';
 import 'package:flutter/material.dart';
+import '../services/daily_lock_service.dart';
 import "../widgets/sync_status_pill.dart";
 import 'auth/login_screen.dart';
 import 'cashiering/cashiering_screen.dart';
@@ -138,6 +139,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _navigateToModule(String module) {
     switch (module) {
       case 'Cashiering':
+        // 🔒 Daily Lock check
+        DailyLockService.shouldBlock(widget.role).then((locked) async {
+          if (locked) {
+            await DailyLockService.showCashierLockedDialog(context, action: "ring up sales");
+            return;
+          }
+          if (!context.mounted) return;
+          Navigator.push(context, MaterialPageRoute(builder: (context) => CashieringScreen(
+            userName: widget.userName, branch: widget.branch,
+          )));
+        });
+        return;
         Navigator.push(
           context,
           MaterialPageRoute(
