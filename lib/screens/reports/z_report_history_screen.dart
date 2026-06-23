@@ -141,6 +141,10 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                       _detailSection('Sales Summary', [
                         _detailRow('Gross Sales', r.grossSales.toStringAsFixed(2)),
                         _detailRow('Discounts', '-${r.totalDiscount.toStringAsFixed(2)}', Colors.red),
+                        _detailRow("VATable Sales", (r.netSales / 1.12).toStringAsFixed(2), null),
+                        _detailRow("VAT (12%)", (r.netSales - r.netSales / 1.12).toStringAsFixed(2), Colors.purple),
+                        _detailRow("VAT-Exempt Sales", "0.00", null),
+                        _detailRow("Zero-Rated Sales", "0.00", null),
                         _detailRow('Net Sales', r.netSales.toStringAsFixed(2), Colors.green[800]),
                         _detailRow('Avg/TXN', r.averageTransaction.toStringAsFixed(2)),
                       ]),
@@ -162,13 +166,6 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                       ]),
                       const SizedBox(height: 12),
 
-                      // Transactions
-                      _detailSection('Transactions (${r.transactionLog.length})',
-                        r.transactionLog.map((t) => _detailRow(
-                          '${t.txnId} ${t.status == "voided" ? "❌" : ""}',
-                          t.amount.toStringAsFixed(2),
-                          t.status == 'voided' ? Colors.red : null)).toList()),
-                      const SizedBox(height: 12),
 
                       // Generated info
                       Text('Generated: ${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}',

@@ -30,6 +30,9 @@ class _ZReportScreenState extends State<ZReportScreen> {
   final _endingCashController = TextEditingController(text: '');
   final Map<double, TextEditingController> _denomCtrls = {};
   bool _useDenominations = false;
+  bool _cashDeclared = false;
+  String _redeclareReason = "";
+  int _redeclareCount = 0;
   bool _isReportGenerated = false;
   CashierSession? _activeSession;
   CashierSession? _todaysClosedSession;
@@ -42,6 +45,13 @@ class _ZReportScreenState extends State<ZReportScreen> {
   @override
   void initState() {
     super.initState();
+    // 🔒 BIR blind audit — force cash declaration on screen open
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!_cashDeclared && !_isReportGenerated && mounted) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) _showCashDeclarationDialog();
+      }
+    });
     _checkZReportLock();
     // Initialize denomination controllers
     for (final d in DenominationRecord.phDenominations) {
@@ -674,6 +684,40 @@ class _ZReportScreenState extends State<ZReportScreen> {
         const SizedBox(height: 8),
         _buildTransactionList(),
         const SizedBox(height: 16),
+        // 🔄 Re-Declare Cash (Manager PIN required)
+        if (_cashDeclared) Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final username = await ManagerPinDialog.verify(
+                  context,
+                  title: "🔄 Re-Declare Cash",
+                  actionLabel: "Recount drawer (with reason)",
+                );
+                if (username != null) {
+                  if (mounted) {
+                    setState(() {
+                      _cashDeclared = false;
+                      _redeclareCount++;
+                      _redeclareReason = "Manager " + username + " recounted (#" + _redeclareCount.toString() + ")";
+                    });
+                  }
+                  if (mounted) _showCashDeclarationDialog();
+                }
+              },
+              icon: const Icon(Icons.refresh, size: 20),
+              label: const Text("🔄 Re-Declare Cash (Manager PIN)"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.orange.shade700,
+                side: BorderSide(color: Colors.orange.shade400, width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ),
         // Generate button
         SizedBox(width: double.infinity, height: 55,
           child: ElevatedButton.icon(
@@ -946,9 +990,9 @@ class _ZReportScreenState extends State<ZReportScreen> {
             onChanged: (_) => setState(() {}))),
         ]),
         const SizedBox(height: 12),
-        _buildReportRow('Add: Cash Sales', '+${_getPaymentTotal('Cash').toStringAsFixed(2)}', valueColor: Colors.green),
+        if (_cashDeclared) _buildReportRow('Add: Cash Sales', '+${_getPaymentTotal('Cash').toStringAsFixed(2)}', valueColor: Colors.green),
         const Divider(),
-        _buildReportRow('Expected Cash', _expectedCash.toStringAsFixed(2), isBold: true, fontSize: 16),
+        _buildReportRow('Expected Cash', _cashDeclared ? _expectedCash.toStringAsFixed(2) : '🔒 Count cash first', isBold: true, fontSize: 16, valueColor: _cashDeclared ? null : Colors.grey),
         // Toggle: Single field OR Denomination breakdown
         Row(children: [
           Icon(Icons.calculate, size: 18, color: Colors.purple[700]),
@@ -1102,5 +1146,127 @@ class _ZReportScreenState extends State<ZReportScreen> {
         Text(label, style: TextStyle(fontWeight: isBold ? FontWeight.bold : FontWeight.w500, fontSize: fontSize)),
         Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: fontSize, color: valueColor ?? Colors.black87)),
       ]));
+  }
+
+  /// 🔒 BIR-grade blind cash declaration popup
+  Future<void> _showCashDeclarationDialog() async {
+    final tempCtrls = <double, TextEditingController>{};
+    for (final d in DenominationRecord.phDenominations) {
+      tempCtrls[d] = TextEditingController(text: _denomCtrls[d]?.text ?? '');
+    }
+
+    double computeTotal() {
+      double total = 0;
+      for (final d in DenominationRecord.phDenominations) {
+        final qty = int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0;
+        total += d * qty;
+      }
+      return total;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final total = computeTotal();
+          return AlertDialog(
+            title: Row(children: [
+              Icon(Icons.account_balance_wallet, color: Colors.purple.shade700, size: 28),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Declare Cash Count')),
+            ]),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: const Text(
+                        'Count physical cash by denomination.\nExpected amount revealed AFTER declaration.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...[1000.0, 500.0, 200.0, 100.0, 50.0, 20.0, 10.0, 5.0, 1.0].map((d) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(children: [
+                        SizedBox(width: 56, child: Text('P${d.toInt()}', style: const TextStyle(fontWeight: FontWeight.bold))),
+                        const SizedBox(width: 8),
+                        const Text('x', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(
+                          controller: tempCtrls[d],
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            isDense: true, hintText: '0',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                          ),
+                          onChanged: (_) => setDialogState(() {}),
+                        )),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 70, child: Text(
+                          'P${(d * (int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0)).toStringAsFixed(2)}',
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        )),
+                      ]),
+                    )),
+                    const Divider(thickness: 2),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('TOTAL COUNTED:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('P${total.toStringAsFixed(2)}',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.purple.shade800)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: total == 0 ? null : () {
+                    for (final d in DenominationRecord.phDenominations) {
+                      _denomCtrls[d]?.text = tempCtrls[d]?.text ?? '';
+                    }
+                    Navigator.pop(ctx);
+                    setState(() { _cashDeclared = true; });
+                  },
+                  icon: const Icon(Icons.save, size: 22),
+                  label: const Text('Submit & Save Count',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
