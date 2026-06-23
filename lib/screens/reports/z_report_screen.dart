@@ -23,6 +23,8 @@ class ZReportScreen extends StatefulWidget {
 }
 
 class _ZReportScreenState extends State<ZReportScreen> {
+  bool _viewerAuthorized = false;
+  bool _checkingLock = true;
   final List<Transaction> _transactions = Transaction.allTransactions;
   final _beginningCashController = TextEditingController();
   final _endingCashController = TextEditingController(text: '');
@@ -40,6 +42,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
   @override
   void initState() {
     super.initState();
+    _checkZReportLock();
     // Initialize denomination controllers
     for (final d in DenominationRecord.phDenominations) {
       _denomCtrls[d] = TextEditingController();
@@ -503,7 +506,109 @@ class _ZReportScreenState extends State<ZReportScreen> {
     );
   }
 
+
+  Future<void> _checkZReportLock() async {
+    final locked = await DailyLockService.isLocked();
+    if (!mounted) return;
+    setState(() {
+      _checkingLock = false;
+      _viewerAuthorized = !locked;
+    });
+  }
+
+  Future<void> _unlockView() async {
+    final ok = await DailyLockService.unlockForView(context);
+    if (!ok) return;
+    if (!mounted) return;
+    setState(() { _viewerAuthorized = true; });
+  }
+
+  Widget _buildLockedScreen() {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('🔒 Z Report — Locked'),
+        backgroundColor: Colors.purple[700],
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(40),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.orange.shade300, width: 3),
+                ),
+                child: Icon(Icons.lock_outline, size: 100, color: Colors.orange.shade700),
+              ),
+              const SizedBox(height: 32),
+              Text('LOCKED', style: TextStyle(
+                fontSize: 48,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade700,
+                letterSpacing: 8,
+              )),
+              const SizedBox(height: 16),
+              const Text(
+                'Z Report has been generated.\nAuthorization required to view.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.black54, height: 1.5),
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: 280, height: 60,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.purple[700],
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 6,
+                  ),
+                  onPressed: _unlockView,
+                  icon: const Icon(Icons.lock_open, size: 24),
+                  label: const Text('Click me to unlock',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 18, color: Colors.purple.shade700),
+                    const SizedBox(width: 8),
+                    Text('Manager / Admin PIN required',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.purple.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
   Widget build(BuildContext context) {
+    if (_checkingLock) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (!_viewerAuthorized) return _buildLockedScreen();
     return Scaffold(
       appBar: AppBar(
         title: const Text('📊 Z Report', style: TextStyle(fontWeight: FontWeight.bold)),

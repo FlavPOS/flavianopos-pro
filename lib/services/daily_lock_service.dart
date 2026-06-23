@@ -99,6 +99,18 @@ class DailyLockService {
       ),
     );
   }
+
+  /// Authorize a one-time view of locked Z Report (BIR audit pattern).
+  /// Returns true if Admin/Manager PIN verified, false if cancelled.
+  /// Does NOT change business_day_state — just authorizes this view.
+  static Future<bool> unlockForView(BuildContext context) async {
+    final username = await ManagerPinDialog.verify(
+      context,
+      title: '🔓 Unlock Z Report',
+      actionLabel: 'View locked Z Report',
+    );
+    return username != null;
+  }
 }
 
 class ManagerPinDialog {
