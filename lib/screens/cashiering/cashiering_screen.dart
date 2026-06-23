@@ -1,5 +1,6 @@
 // lib/screens/cashiering/cashiering_screen.dart
 import 'package:flutter/material.dart';
+import '../../services/daily_lock_service.dart';
 import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 import '../../utils/sound_helper.dart';
@@ -833,6 +834,22 @@ class _CashieringScreenState extends State<CashieringScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: DailyLockService.isLocked(),
+      builder: (context, snap) {
+        if (snap.data == true) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            final override = await DailyLockService.showLockDialog(context, action: "ring up sales");
+            if (!override && context.mounted) Navigator.pop(context);
+          });
+          return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.lock_outline, size: 64, color: Colors.orange.shade700), const SizedBox(height: 16), const Text("End-of-Day Lock Active", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), const SizedBox(height: 8), Text(DailyLockService.unlockMessage(), style: const TextStyle(fontSize: 14, color: Colors.black54))]))));
+        }
+        return _originalBuild(context);
+      },
+    );
+  }
+
+  Widget _originalBuild(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 800;
     return Scaffold(
       appBar: AppBar(

@@ -67,7 +67,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
           : null);
 
       // Get all sessions for today
-      final allSessions = await DatabaseHelper().getAllSessions(cashierId: widget.cashier);
+      final allSessions = await DatabaseHelper().getAllSessions();
       CashierSession? todaysClosedSession;
       for (final row in allSessions) {
         final s = CashierSession.fromMap(row);
@@ -76,6 +76,9 @@ class _ZReportScreenState extends State<ZReportScreen> {
           break;
         }
       }
+
+      // 🆕 Final fallback: today's closed session (if no open shift found)
+      final finalEffective = effectiveActive ?? todaysClosedSession;
 
       // Get IR for the closed session if any
       IncidentReport? ir;
@@ -86,7 +89,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
       if (!mounted) return;
       setState(() {
-        _activeSession = effectiveActive;
+        _activeSession = finalEffective;
         _todaysClosedSession = todaysClosedSession;
         _ir = ir;
         _shiftMustClose = effectiveActive != null || allActiveShifts.isNotEmpty;
@@ -99,8 +102,8 @@ class _ZReportScreenState extends State<ZReportScreen> {
           _endingCashController.text = todaysClosedSession.endingCashDeclared.toStringAsFixed(2);
         }
         // 🆕 Active session (current shift) overrides — uses login-time beginning cash
-        if (effectiveActive != null) {
-          _beginningCashController.text = effectiveActive.beginningCash.toStringAsFixed(2);
+        if (finalEffective != null) {
+          _beginningCashController.text = finalEffective.beginningCash.toStringAsFixed(2);
         }
       });
     } catch (e) {
