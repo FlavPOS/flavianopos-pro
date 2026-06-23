@@ -62,6 +62,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
       final active = await CashierSessionService.getActiveSession(widget.cashier);
       // Also check for any active shifts across all cashiers
       final allActiveShifts = await CashierSessionService.getAllActiveShifts();
+      // 🆕 Fall back: if no match by widget.cashier, use first open shift (different id field)
+      final effectiveActive = active ?? (allActiveShifts.isNotEmpty
+          ? CashierSession.fromMap(allActiveShifts.first)
+          : null);
+      // Also check for any active shifts across all cashiers
 
       // Get all sessions for today
       final allSessions = await DatabaseHelper().getAllSessions(cashierId: widget.cashier);
@@ -83,10 +88,10 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
       if (!mounted) return;
       setState(() {
-        _activeSession = active;
+        _activeSession = effectiveActive;
         _todaysClosedSession = todaysClosedSession;
         _ir = ir;
-        _shiftMustClose = active != null || allActiveShifts.isNotEmpty;
+        _shiftMustClose = effectiveActive != null || allActiveShifts.isNotEmpty;
         _allActiveShifts = allActiveShifts;
         _loadingSession = false;
 
@@ -96,8 +101,8 @@ class _ZReportScreenState extends State<ZReportScreen> {
           _endingCashController.text = todaysClosedSession.endingCashDeclared.toStringAsFixed(2);
         }
         // 🆕 Active session (current shift) overrides — uses login-time beginning cash
-        if (active != null) {
-          _beginningCashController.text = active.beginningCash.toStringAsFixed(2);
+        if (effectiveActive != null) {
+          _beginningCashController.text = effectiveActive.beginningCash.toStringAsFixed(2);
         }
       });
     } catch (e) {
