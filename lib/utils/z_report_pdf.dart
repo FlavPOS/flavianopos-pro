@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 // // import 'dart:convert';
 import 'package:pdf/pdf.dart';
@@ -87,6 +88,8 @@ class ZReportPdf {
     required Map<String, Map<String, dynamic>> paymentBreakdown,
     required int voidedCount,
     required double voidedAmount,
+    required int refundedCount,
+    required double refundedAmount,
     required List<Map<String, dynamic>> voidedList,
     required double beginningCash,
     required double expectedCash,
@@ -94,57 +97,77 @@ class ZReportPdf {
     required double overShort,
     required List<Map<String, dynamic>> transactions,
     required bool isGenerated,
+    Map<double, int>? denominations,
   }) async {
     final pdf = pw.Document();
     final List<pw.Widget> w = [];
 
     w.add(zHeader(branch, cashier, reportDate, isGenerated));
     w.add(zDivider());
+    // ─── Sales Summary ───
     w.add(zSection('SALES SUMMARY'));
     w.add(zRow('Gross Sales', grossSales.toStringAsFixed(2)));
-    w.add(zRow('Less: Discounts', '-${totalDiscount.toStringAsFixed(2)}'));
+    w.add(zRow('Less: Discounts', '-' + totalDiscount.toStringAsFixed(2)));
     w.add(zDivider());
     w.add(zRow('NET SALES', netSales.toStringAsFixed(2), bold: true));
-    w.add(zRow('Total TXN', '$totalTransactions'));
-    w.add(zRow('Avg/TXN', averageTransaction.toStringAsFixed(2)));
+    final vatable = netSales / 1.12;
+    final vat = netSales - vatable;
+    w.add(zRow('VATable Sales', vatable.toStringAsFixed(2)));
+    w.add(zRow('VAT (12%)', vat.toStringAsFixed(2)));
+    w.add(zRow('VAT-Exempt Sales', '0.00'));
+    w.add(zRow('Zero-Rated Sales', '0.00'));
+    w.add(zRow('Total Transactions', totalTransactions.toString()));
+    w.add(zRow('Average per Transaction', averageTransaction.toStringAsFixed(2)));
     w.add(pw.SizedBox(height: 4));
     w.add(zDivider());
+    // ─── Payment Breakdown ───
     w.add(zSection('PAYMENT BREAKDOWN'));
     for (final e in paymentBreakdown.entries) {
       final cnt = e.value['count'];
       final tot = (e.value['total'] as double).toStringAsFixed(2);
-      w.add(zRow('${e.key} ($cnt)', tot));
+      w.add(zRow(e.key + ' (' + cnt.toString() + ')', tot));
     }
     w.add(zDivider());
     w.add(zRow('TOTAL', netSales.toStringAsFixed(2), bold: true));
     w.add(pw.SizedBox(height: 4));
     w.add(zDivider());
-    w.add(zSection('VOIDED TRANSACTIONS'));
-    w.add(zRow('Count', '$voidedCount'));
-    w.add(zRow('Amount', voidedAmount.toStringAsFixed(2)));
-    for (final v in voidedList) {
-      final vid = v['id'] as String;
-      final vr = v['reason'] as String;
-      final va = (v['amount'] as double).toStringAsFixed(2);
-      w.add(pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 1),
-        child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-          pw.Expanded(child: pw.Text('$vid - $vr', style: const pw.TextStyle(fontSize: 7))),
-          pw.Text(va, style: const pw.TextStyle(fontSize: 7)),
-        ]),
-      ));
-    }
+    // ─── Voided & Refunded ───
+    w.add(zSection('VOIDED & REFUNDED'));
+    w.add(zRow('Voided Transactions', voidedCount.toString()));
+    w.add(zRow('Voided Amount', voidedAmount.toStringAsFixed(2)));
+    w.add(zRow('Refunded Transactions', refundedCount.toString()));
+    w.add(zRow('Refunded Amount', refundedAmount.toStringAsFixed(2)));
     w.add(pw.SizedBox(height: 4));
     w.add(zDivider());
+    // ─── Cash Count ───
     w.add(zSection('CASH COUNT'));
     w.add(zRow('Beginning Cash', beginningCash.toStringAsFixed(2)));
-    w.add(zRow('Cash Sales', '+${(expectedCash - beginningCash).toStringAsFixed(2)}'));
+    w.add(zRow('Add: Cash Sales', '+' + (expectedCash - beginningCash).toStringAsFixed(2)));
     w.add(zRow('Expected Cash', expectedCash.toStringAsFixed(2), bold: true));
     w.add(zRow('Ending Cash', endingCash.toStringAsFixed(2)));
     w.add(zDivider());
     w.add(zOverShort(overShort));
     w.add(pw.SizedBox(height: 4));
     w.add(zDivider());
+    // ─── Denomination Breakdown ───
+    if (denominations != null && denominations.isNotEmpty) {
+      final filtered = denominations.entries.where((e) => e.value > 0).toList()
+        ..sort((a, b) => b.key.compareTo(a.key));
+      if (filtered.isNotEmpty) {
+        double denomTotal = 0;
+        w.add(zSection('DENOMINATION BREAKDOWN'));
+        for (final e in filtered) {
+          final lineTotal = e.key * e.value;
+          denomTotal += lineTotal;
+          final lbl = e.key >= 1 ? 'PHP ' + e.key.toInt().toString() + ' x ' + e.value.toString() : 'PHP ' + e.key.toStringAsFixed(2) + ' x ' + e.value.toString();
+          w.add(zRow(lbl, lineTotal.toStringAsFixed(2)));
+        }
+        w.add(zDivider());
+        w.add(zRow('TOTAL COUNTED', denomTotal.toStringAsFixed(2), bold: true));
+        w.add(pw.SizedBox(height: 4));
+        w.add(zDivider());
+      }
+    }
     w.add(zSection('TRANSACTION LOG (${transactions.length})'));
     w.add(pw.Container(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
@@ -212,6 +235,8 @@ class ZReportPdf {
     required Map<String, Map<String, dynamic>> paymentBreakdown,
     required int voidedCount,
     required double voidedAmount,
+    required int refundedCount,
+    required double refundedAmount,
     required List<Map<String, dynamic>> voidedList,
     required double beginningCash,
     required double expectedCash,
@@ -219,23 +244,24 @@ class ZReportPdf {
     required double overShort,
     required List<Map<String, dynamic>> transactions,
     required bool isGenerated,
+    Map<double, int>? denominations,
   }) async {
     final bytes = await _buildPdfBytes(
       branch: branch, cashier: cashier, reportDate: reportDate,
       grossSales: grossSales, totalDiscount: totalDiscount,
       netSales: netSales, totalTransactions: totalTransactions,
       averageTransaction: averageTransaction, paymentBreakdown: paymentBreakdown,
-      voidedCount: voidedCount, voidedAmount: voidedAmount,
+      voidedCount: voidedCount, voidedAmount: voidedAmount, refundedCount: refundedCount, refundedAmount: refundedAmount,
       voidedList: voidedList, beginningCash: beginningCash,
       expectedCash: expectedCash, endingCash: endingCash,
       overShort: overShort, transactions: transactions,
-      isGenerated: isGenerated,
+      isGenerated: isGenerated, denominations: denominations,
     );
     final name = 'Z-Report-${reportDate.month}-${reportDate.day}-${reportDate.year}.pdf';
     downloadPdf(bytes, name);
   }
 
-  static Future<void> printFromRecord(ZReportRecord r) async {
+  static Future<void> printFromRecord(ZReportRecord r, {Map<double, int>? denominations}) async {
     final paymentMap = <String, Map<String, dynamic>>{};
     for (final p in r.paymentBreakdown) {
       paymentMap[p.method] = {'count': p.count, 'total': p.total};
@@ -253,10 +279,10 @@ class ZReportPdf {
       grossSales: r.grossSales, totalDiscount: r.totalDiscount,
       netSales: r.netSales, totalTransactions: r.totalTransactions,
       averageTransaction: r.averageTransaction, paymentBreakdown: paymentMap,
-      voidedCount: r.voidedCount, voidedAmount: r.voidedAmount,
+      voidedCount: r.voidedCount, voidedAmount: r.voidedAmount, refundedCount: r.refundedCount, refundedAmount: r.refundedAmount,
       voidedList: vList, beginningCash: r.beginningCash,
       expectedCash: r.expectedCash, endingCash: r.endingCash,
-      overShort: r.overShort, transactions: tList, isGenerated: true,
+      overShort: r.overShort, transactions: tList, isGenerated: true, denominations: denominations,
     );
   }
 }

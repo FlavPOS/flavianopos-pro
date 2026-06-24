@@ -1,4 +1,5 @@
 // lib/screens/reports/z_report_screen.dart
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
@@ -339,6 +340,30 @@ class _ZReportScreenState extends State<ZReportScreen> {
       // 🔒 Auto-lock business day (Manager PIN required to reopen)
       await DailyLockService.lockDayAfterZReport(reportId);
 
+    // 💰 Save denominations to denomination_records (linked to this Z Report)
+    try {
+      final denomRecords = <Map<String, dynamic>>[];
+      for (final d in DenominationRecord.phDenominations) {
+        final qty = int.tryParse(_denomCtrls[d]?.text.trim() ?? '') ?? 0;
+        if (qty > 0) {
+          denomRecords.add(DenominationRecord(
+            sessionId: reportId,
+            type: 'ending',
+            denomination: d,
+            quantity: qty,
+            total: d * qty,
+            createdAt: now,
+          ).toMap());
+        }
+      }
+      if (denomRecords.isNotEmpty) {
+        await DatabaseHelper().insertDenominationBatch(denomRecords);
+        debugPrint('💰 Saved ${denomRecords.length} denominations for $reportId');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to save denominations: $e');
+    }
+
     setState(() {
       _isReportGenerated = true;
     });
@@ -360,15 +385,21 @@ class _ZReportScreenState extends State<ZReportScreen> {
       'amount': t.total, 'status': t.status,
     }).toList();
 
+    // Build denominations map from controllers
+    final denomMap = <double, int>{};
+    for (final d in DenominationRecord.phDenominations) {
+      final qty = int.tryParse(_denomCtrls[d]?.text.trim() ?? '') ?? 0;
+      if (qty > 0) denomMap[d] = qty;
+    }
     ZReportPdf.printCurrentDay(
       branch: widget.branch, cashier: widget.cashier, reportDate: _reportDate,
       grossSales: _totalGrossSales, totalDiscount: _totalDiscount,
       netSales: _totalNetSales, totalTransactions: _totalTransactions,
       averageTransaction: _averageTransaction, paymentBreakdown: paymentMap,
-      voidedCount: _totalVoidedCount, voidedAmount: _totalVoidedAmount,
+      voidedCount: _totalVoidedCount, voidedAmount: _totalVoidedAmount, refundedCount: _totalRefundedCount, refundedAmount: _totalRefundedAmount,
       voidedList: voidedList, beginningCash: _beginningCash,
       expectedCash: _expectedCash, endingCash: _endingCash,
-      overShort: _overShort, transactions: txnList,
+      overShort: _overShort, denominations: denomMap, transactions: txnList,
       isGenerated: _isReportGenerated,
     );
   }

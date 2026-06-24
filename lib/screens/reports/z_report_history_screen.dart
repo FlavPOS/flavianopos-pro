@@ -568,9 +568,6 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
       }
       for (final r in reports) {
         final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId);
-        final allDenomsCheck = await (await DatabaseHelper().database).query('denomination_records', where: 'sessionId = ?', whereArgs: [r.reportId]);
-        debugPrint('🗄️ DB has ' + allDenomsCheck.length.toString() + ' rows for ' + r.reportId + ': ' + allDenomsCheck.toString());
-        debugPrint('🖨️ History print for ' + r.reportId + '. denomMap has ' + denomMap.length.toString() + ' entries: ' + denomMap.toString());
         await ZReportPdf.printFromRecord(r, denominations: denomMap);
       }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
