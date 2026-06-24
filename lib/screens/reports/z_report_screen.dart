@@ -529,7 +529,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
     }
 
     // 🔒 BIR blind audit — show declaration popup if day is unlocked
-    if (!locked && !_cashDeclared && !_isReportGenerated && mounted) {
+    if (!locked && !wasDeclared && !_isReportGenerated && mounted) {
       await Future.delayed(const Duration(milliseconds: 300));
       if (mounted) _showCashDeclarationDialog();
     }
