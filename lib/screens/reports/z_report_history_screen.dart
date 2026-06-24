@@ -433,7 +433,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         TextCellValue('Branch'), TextCellValue('Gross'), TextCellValue('Discounts'),
         TextCellValue('Net Sales'), TextCellValue('VATable'), TextCellValue('VAT 12%'),
         TextCellValue('TXN'), TextCellValue('Voided'), TextCellValue('Refunded'),
-        TextCellValue('Beginning'), TextCellValue('Expected'), TextCellValue('Ending'),
+        TextCellValue('Beginning'), TextCellValue('Expected'), TextCellValue('Ending'), TextCellValue('Over/Short'),
         TextCellValue('Avg/TXN'),
         TextCellValue('Voided Amount'),
         TextCellValue('Refunded Amount'),
