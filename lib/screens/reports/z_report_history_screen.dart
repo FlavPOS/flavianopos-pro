@@ -1,5 +1,7 @@
 // lib/screens/reports/z_report_history_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
 import 'package:excel/excel.dart' hide Border;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -463,10 +465,12 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         TextCellValue('Maya'),
         TextCellValue('Card'),
         TextCellValue('Generated At'),
+        TextCellValue('Denominations'),
       ]);
       for (final r in reports) {
         final vatable = r.netSales / 1.12;
         final vat = r.netSales - vatable;
+        final denomStr = await DatabaseHelper().getDenominationsForSession(r.reportId);
         summary.appendRow([
           TextCellValue(r.reportId),
           TextCellValue(r.reportDate.year.toString() + '-' + r.reportDate.month.toString().padLeft(2, '0') + '-' + r.reportDate.day.toString().padLeft(2, '0')),
@@ -492,15 +496,27 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
           DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "Maya", orElse: () => ZReportPaymentBreakdown(method: "Maya", count: 0, total: 0)).total),
           DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "Card", orElse: () => ZReportPaymentBreakdown(method: "Card", count: 0, total: 0)).total),
           TextCellValue(r.generatedAt.toIso8601String()),
+          TextCellValue(denomStr),
         ]);
       }
       final bytes = excel.encode();
       if (bytes == null) return;
-      final dir = await getTemporaryDirectory();
-      final file = File(dir.path + '/Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)],
-        text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+      // �� Web + Mobile compatible export
+      if (kIsWeb) {
+        // Web: use XFile.fromData (no file system needed)
+        final xfile = XFile.fromData(
+          Uint8List.fromList(bytes),
+          name: 'Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+        await Share.shareXFiles([xfile], text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+      } else {
+        // Mobile: save to temp file + share
+        final dir = await getTemporaryDirectory();
+        final file = File(dir.path + '/Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx');
+        await file.writeAsBytes(bytes);
+        await Share.shareXFiles([XFile(file.path)], text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+      }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✅ Exported ' + reports.length.toString() + ' Z Reports'),
         backgroundColor: Colors.green));

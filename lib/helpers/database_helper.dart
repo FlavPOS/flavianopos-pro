@@ -1341,4 +1341,27 @@ class DatabaseHelper {
     await db.update('adjustment_reasons', {'isActive': 1},
         where: 'id = ?', whereArgs: [id]);
   }
+
+  /// Returns a formatted string of all denominations for a given session.
+  /// Example: "1000x2=2000; 500x3=1500; 100x5=500"
+  Future<String> getDenominationsForSession(String sessionId) async {
+    final db = await database;
+    try {
+      final rows = await db.query(
+        'denomination_records',
+        where: 'sessionId = ?',
+        whereArgs: [sessionId],
+        orderBy: 'denomination DESC',
+      );
+      if (rows.isEmpty) return '';
+      return rows.map((r) {
+        final denom = (r['denomination'] as num?)?.toStringAsFixed(0) ?? '0';
+        final qty   = r['quantity'] ?? 0;
+        final total = (r['total'] as num?)?.toStringAsFixed(2) ?? '0.00';
+        return '${denom}x${qty}=${total}';
+      }).join('; ');
+    } catch (_) {
+      return '';
+    }
+  }
 }
