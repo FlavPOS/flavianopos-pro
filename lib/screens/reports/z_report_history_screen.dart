@@ -457,7 +457,14 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         TextCellValue('Net Sales'), TextCellValue('VATable'), TextCellValue('VAT 12%'),
         TextCellValue('TXN'), TextCellValue('Voided'), TextCellValue('Refunded'),
         TextCellValue('Beginning'), TextCellValue('Expected'), TextCellValue('Ending'),
-        TextCellValue('Over/Short'),
+        TextCellValue('Avg/TXN'),
+        TextCellValue('Voided Amount'),
+        TextCellValue('Refunded Amount'),
+        TextCellValue('Cash Sales'),
+        TextCellValue('GCash'),
+        TextCellValue('Maya'),
+        TextCellValue('Card'),
+        TextCellValue('Generated At'),
       ]);
       for (final r in reports) {
         final vatable = r.netSales / 1.12;
@@ -479,6 +486,14 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
           DoubleCellValue(r.expectedCash),
           DoubleCellValue(r.endingCash),
           DoubleCellValue(r.overShort),
+          DoubleCellValue(r.averageTransaction),
+          DoubleCellValue(r.voidedAmount),
+          DoubleCellValue(r.refundedAmount),
+          DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "Cash", orElse: () => ZReportPaymentBreakdown(method: "Cash", count: 0, total: 0)).total),
+          DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "GCash", orElse: () => ZReportPaymentBreakdown(method: "GCash", count: 0, total: 0)).total),
+          DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "Maya", orElse: () => ZReportPaymentBreakdown(method: "Maya", count: 0, total: 0)).total),
+          DoubleCellValue(r.paymentBreakdown.firstWhere((p) => p.method == "Card", orElse: () => ZReportPaymentBreakdown(method: "Card", count: 0, total: 0)).total),
+          TextCellValue(r.generatedAt.toIso8601String()),
         ]);
       }
       final bytes = excel.encode();
