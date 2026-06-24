@@ -1,5 +1,9 @@
 // lib/screens/reports/z_report_history_screen.dart
 import 'package:flutter/material.dart';
+import 'package:excel/excel.dart' hide Border;
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import '../../services/daily_lock_service.dart';
 import 'package:flutter/services.dart';
 import '../../models/z_report_model.dart';
@@ -78,6 +82,20 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Z Report History', style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.download),
+            tooltip: 'Export',
+            onSelected: (value) {
+              if (value == 'excel') _exportAllExcel();
+              if (value == 'pdf') _exportAllPdf();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(value: 'excel', child: Row(children: [Icon(Icons.table_chart, color: Colors.green), SizedBox(width: 8), Text('Export Excel')])),
+              PopupMenuItem<String>(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf, color: Colors.red), SizedBox(width: 8), Text('Export PDF')])),
+            ],
+          ),
+        ],
         backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
       ),
       body: reports.isEmpty
@@ -419,5 +437,86 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         },
       ),
     );
+  }
+
+  /// 🆕 Export ALL Z Reports to Excel
+  Future<void> _exportAllExcel() async {
+    try {
+      final reports = ZReportRecord.history;
+      if (reports.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No Z Reports to export')));
+        return;
+      }
+      final excel = Excel.createExcel();
+      excel.delete('Sheet1');
+      final summary = excel['Summary'];
+      summary.appendRow([
+        TextCellValue('Report ID'), TextCellValue('Date'), TextCellValue('Cashier'),
+        TextCellValue('Branch'), TextCellValue('Gross'), TextCellValue('Discounts'),
+        TextCellValue('Net Sales'), TextCellValue('VATable'), TextCellValue('VAT 12%'),
+        TextCellValue('TXN'), TextCellValue('Voided'), TextCellValue('Refunded'),
+        TextCellValue('Beginning'), TextCellValue('Expected'), TextCellValue('Ending'),
+        TextCellValue('Over/Short'),
+      ]);
+      for (final r in reports) {
+        final vatable = r.netSales / 1.12;
+        final vat = r.netSales - vatable;
+        summary.appendRow([
+          TextCellValue(r.reportId),
+          TextCellValue(r.reportDate.year.toString() + '-' + r.reportDate.month.toString().padLeft(2, '0') + '-' + r.reportDate.day.toString().padLeft(2, '0')),
+          TextCellValue(r.cashier),
+          TextCellValue(r.branch),
+          DoubleCellValue(r.grossSales),
+          DoubleCellValue(r.totalDiscount),
+          DoubleCellValue(r.netSales),
+          DoubleCellValue(vatable),
+          DoubleCellValue(vat),
+          IntCellValue(r.totalTransactions),
+          IntCellValue(r.voidedCount),
+          IntCellValue(r.refundedCount),
+          DoubleCellValue(r.beginningCash),
+          DoubleCellValue(r.expectedCash),
+          DoubleCellValue(r.endingCash),
+          DoubleCellValue(r.overShort),
+        ]);
+      }
+      final bytes = excel.encode();
+      if (bytes == null) return;
+      final dir = await getTemporaryDirectory();
+      final file = File(dir.path + '/Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)],
+        text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('✅ Exported ' + reports.length.toString() + ' Z Reports'),
+        backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ Export failed: ' + e.toString()),
+        backgroundColor: Colors.red));
+    }
+  }
+
+  /// 🆕 Export ALL Z Reports to PDF
+  Future<void> _exportAllPdf() async {
+    try {
+      final reports = ZReportRecord.history;
+      if (reports.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No Z Reports to export')));
+        return;
+      }
+      for (final r in reports) {
+        await ZReportPdf.printFromRecord(r);
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('✅ Generated ' + reports.length.toString() + ' PDF reports'),
+        backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ PDF export failed: ' + e.toString()),
+        backgroundColor: Colors.red));
+    }
   }
 }
