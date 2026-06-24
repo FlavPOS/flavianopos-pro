@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
 import 'package:flutter/services.dart';
 import '../../models/z_report_model.dart';
+import '../../models/denomination_model.dart';
+import '../../helpers/database_helper.dart';
 import '../../utils/z_report_pdf.dart';
 
 class ZReportHistoryScreen extends StatefulWidget {
@@ -187,15 +189,11 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                                 actionLabel: "Re-declare cash for " + r.reportId + " (reason required)",
                               );
                               if (username != null && context.mounted) {
-                                await DailyLockService.resetCashDeclared();
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text("✅ Cash declaration reset by " + username + ". Open Z Report to recount."),
-                                    backgroundColor: Colors.green,
-                                    duration: const Duration(seconds: 4),
-                                  ));
-                                  Navigator.pop(context);  // Back to dashboard
-                                }
+                                await _showHistoryDenominationDialog(
+                                  r,
+                                  username,
+                                  "Manager-authorized recount for " + r.reportId,
+                                );
                               }
                             },
                             icon: const Icon(Icons.refresh, size: 18),
@@ -268,4 +266,147 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
       ]));
   }
   bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// 🆕 Re-declare cash count from History — self-contained audit flow
+  Future<void> _showHistoryDenominationDialog(ZReportRecord r, String username, String reason) async {
+    final tempCtrls = <double, TextEditingController>{};
+    for (final d in DenominationRecord.phDenominations) {
+      tempCtrls[d] = TextEditingController();
+    }
+
+    double computeTotal() {
+      double total = 0;
+      for (final d in DenominationRecord.phDenominations) {
+        final qty = int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0;
+        total += d * qty;
+      }
+      return total;
+    }
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final total = computeTotal();
+          return AlertDialog(
+            title: Row(children: [
+              Icon(Icons.account_balance_wallet, color: Colors.orange.shade700, size: 28),
+              const SizedBox(width: 8),
+              const Expanded(child: Text('Re-Declare Cash Count')),
+            ]),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade200),
+                      ),
+                      child: Text(
+                        '🔄 Recount for ' + r.reportId + '\nAuthorized by: ' + username + '\nReason: ' + reason,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...DenominationRecord.phDenominations.map((d) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(children: [
+                        SizedBox(width: 56, child: Text(
+                          d >= 1 ? 'P' + d.toInt().toString() : d.toStringAsFixed(2) + 'c',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                        )),
+                        const SizedBox(width: 8),
+                        const Text('x'),
+                        const SizedBox(width: 8),
+                        Expanded(child: TextField(
+                          controller: tempCtrls[d],
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: '0',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                          ),
+                          onChanged: (_) => setDialogState(() {}),
+                        )),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 70, child: Text(
+                          'P' + (d * (int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0)).toStringAsFixed(2),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 11),
+                        )),
+                      ]),
+                    )),
+                    const Divider(thickness: 2),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('NEW COUNT:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('P' + total.toStringAsFixed(2),
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.orange.shade800)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade700,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: total == 0 ? null : () async {
+                  final newOverShort = total - r.expectedCash;
+                  final now = DateTime.now().toUtc().toIso8601String();
+                  await DatabaseHelper().updateZReport(r.reportId, {
+                    'endingCash': total,
+                    'overShort': newOverShort,
+                  });
+                  final db = await DatabaseHelper().database;
+                  await db.insert('expense_audit_trail', {
+                    'id': 'AUDIT-' + DateTime.now().millisecondsSinceEpoch.toString(),
+                    'expenseId': 'Z_REDECLARE',
+                    'expenseNumber': r.reportId,
+                    'action': 'Z_REPORT_REDECLARED',
+                    'oldValue': r.endingCash.toStringAsFixed(2),
+                    'newValue': total.toStringAsFixed(2),
+                    'performedBy': username,
+                    'performedDate': now,
+                    'branch': widget.branch,
+                  });
+                  if (context.mounted) Navigator.pop(ctx);
+                  await ZReportRecord.loadFromDB();
+                  if (mounted) {
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Re-declared by ' + username + ': P' + total.toStringAsFixed(2)),
+                      backgroundColor: Colors.green,
+                    ));
+                  }
+                },
+                icon: const Icon(Icons.save),
+                label: const Text('Save New Count'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }

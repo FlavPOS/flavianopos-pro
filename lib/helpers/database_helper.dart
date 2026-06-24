@@ -1027,6 +1027,11 @@ class DatabaseHelper {
     debugPrint('💾 INSERTING z_report: id=${r["reportId"]} reportDate="${r["reportDate"]}"'); return await db.insert('z_reports', r, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+
+  Future<int> updateZReport(String reportId, Map<String, dynamic> updates) async {
+    final db = await database;
+    return await db.update("z_reports", updates, where: "reportId = ?", whereArgs: [reportId]);
+  }
   Future<List<Map<String, dynamic>>> getAllZReports() async {
     final db = await database;
     return await db.query('z_reports', orderBy: 'generatedAt DESC');
