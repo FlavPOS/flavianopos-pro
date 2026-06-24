@@ -1364,4 +1364,23 @@ class DatabaseHelper {
       return '';
     }
   }
+
+  /// 💰 Returns Map<denomination, quantity> for a Z Report by sessionId (= reportId).
+  Future<Map<double, int>> getDenominationMapForSession(String sessionId) async {
+    final db = await database;
+    final result = <double, int>{};
+    try {
+      final rows = await db.query(
+        'denomination_records',
+        where: 'sessionId = ? AND type = ?',
+        whereArgs: [sessionId, 'ending'],
+      );
+      for (final r in rows) {
+        final denom = (r['denomination'] as num?)?.toDouble() ?? 0;
+        final qty = (r['quantity'] as num?)?.toInt() ?? 0;
+        if (qty > 0) result[denom] = qty;
+      }
+    } catch (_) {}
+    return result;
+  }
 }
