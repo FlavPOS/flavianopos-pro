@@ -7,7 +7,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../../services/daily_lock_service.dart';
-import 'package:flutter/services.dart';
 import '../../models/z_report_model.dart';
 import '../../models/denomination_model.dart';
 import '../../helpers/database_helper.dart';
@@ -33,49 +32,6 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
     return '$h:${dt.minute.toString().padLeft(2, '0')} $ampm';
   }
 
-  Future<void> _exportCSV(ZReportRecord r) async {
-    final buf = StringBuffer();
-    buf.writeln('Z REPORT - ${r.reportId}');
-    buf.writeln('Date,${_formatDate(r.reportDate)}');
-    buf.writeln('Branch,${r.branch}');
-    buf.writeln('Cashier,${r.cashier}');
-    buf.writeln('Generated,${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}');
-    buf.writeln('');
-    buf.writeln('SALES SUMMARY');
-    buf.writeln('Gross Sales,${r.grossSales.toStringAsFixed(2)}');
-    buf.writeln('Discounts,${r.totalDiscount.toStringAsFixed(2)}');
-    buf.writeln('Net Sales,${r.netSales.toStringAsFixed(2)}');
-    buf.writeln('Transactions,${r.totalTransactions}');
-    buf.writeln('Average/TXN,${r.averageTransaction.toStringAsFixed(2)}');
-    buf.writeln('');
-    buf.writeln('PAYMENT BREAKDOWN');
-    for (final p in r.paymentBreakdown) {
-      buf.writeln('${p.method},${p.count},${p.total.toStringAsFixed(2)}');
-    }
-    buf.writeln('');
-    buf.writeln('CASH COUNT');
-    buf.writeln('Beginning Cash,${r.beginningCash.toStringAsFixed(2)}');
-    buf.writeln('Expected Cash,${r.expectedCash.toStringAsFixed(2)}');
-    buf.writeln('Ending Cash,${r.endingCash.toStringAsFixed(2)}');
-    buf.writeln('Over/Short,${r.overShort.toStringAsFixed(2)}');
-    buf.writeln('');
-    buf.writeln('VOIDS');
-    buf.writeln('Count,${r.voidedCount}');
-    buf.writeln('Amount,${r.voidedAmount.toStringAsFixed(2)}');
-    buf.writeln('');
-    buf.writeln('TRANSACTIONS');
-    buf.writeln('TXN ID,Time,Payment,Amount,Status');
-    for (final t in r.transactionLog) {
-      buf.writeln('${t.txnId},${t.dateTime.hour}:${t.dateTime.minute.toString().padLeft(2, '0')},${t.paymentMethod},${t.amount.toStringAsFixed(2)},${t.status}');
-    }
-
-    await Clipboard.setData(ClipboardData(text: buf.toString()));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${r.reportId} CSV copied!'), behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -230,15 +186,6 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                         const SizedBox(height: 10),
                       ],
                       Row(children: [
-                        Expanded(child: OutlinedButton.icon(
-                          onPressed: () => _exportCSV(r),
-                          icon: const Icon(Icons.table_chart, size: 16),
-                          label: const Text('CSV', style: TextStyle(fontSize: 12)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                        )),
-                        const SizedBox(width: 8),
                         Expanded(child: ElevatedButton.icon(
                           onPressed: () async { final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId); await ZReportPdf.printFromRecord(r, denominations: denomMap); },
                           icon: const Icon(Icons.print, size: 16),
