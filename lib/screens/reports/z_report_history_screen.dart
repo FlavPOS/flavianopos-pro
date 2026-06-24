@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import '../../models/z_report_model.dart';
 import '../../models/denomination_model.dart';
 import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 import '../../utils/z_report_pdf.dart';
 
 class ZReportHistoryScreen extends StatefulWidget {
@@ -378,6 +380,15 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                     'endingCash': total,
                     'overShort': newOverShort,
                   });
+
+                  // 🔥 Sync to Firebase (multi-store BIR audit)
+                  try {
+                    await ZReportRecord.loadFromDB();
+                    final updated = ZReportRecord.history.firstWhere((rec) => rec.reportId == r.reportId, orElse: () => r);
+                    await SyncBridge.enqueueZReport(updated, op: SyncOp.update);
+                  } catch (e) {
+                    debugPrint("⚠️ Firebase sync failed: $e");
+                  }
                   final db = await DatabaseHelper().database;
                   await db.insert('expense_audit_trail', {
                     'id': 'AUDIT-' + DateTime.now().millisecondsSinceEpoch.toString(),
