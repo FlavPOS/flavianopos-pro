@@ -1,5 +1,6 @@
 // lib/screens/reports/z_report_history_screen.dart
 import 'package:flutter/material.dart';
+import '../../services/daily_lock_service.dart';
 import 'package:flutter/services.dart';
 import '../../models/z_report_model.dart';
 import '../../utils/z_report_pdf.dart';
@@ -9,6 +10,7 @@ class ZReportHistoryScreen extends StatefulWidget {
   const ZReportHistoryScreen({super.key, required this.branch});
   @override
   State<ZReportHistoryScreen> createState() => _ZReportHistoryScreenState();
+
 }
 
 class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
@@ -173,6 +175,39 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                       const SizedBox(height: 10),
 
                       // Export button
+                      // 🔄 Re-Declare button (only today's Z Report)
+                      if (_isSameDay(r.reportDate, DateTime.now())) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () async {
+                              final username = await ManagerPinDialog.verify(
+                                context,
+                                title: "🔄 Re-Declare Cash Count",
+                                actionLabel: "Re-declare cash for " + r.reportId + " (reason required)",
+                              );
+                              if (username != null && context.mounted) {
+                                await DailyLockService.voidZReportAndUnlock(
+                                  context, currentZReportId: r.reportId);
+                                await DailyLockService.resetCashDeclared();
+                                if (context.mounted) {
+                                  Navigator.popUntil(context, (rt) => rt.isFirst);
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text("🔄 Re-Declare (Manager PIN)",
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange.shade700,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       Row(children: [
                         Expanded(child: OutlinedButton.icon(
                           onPressed: () => _exportCSV(r),
@@ -229,4 +264,5 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
       ]));
   }
+  bool _isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 }

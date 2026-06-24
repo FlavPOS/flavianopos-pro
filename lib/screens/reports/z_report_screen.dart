@@ -524,9 +524,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
     // 🔒 BIR persistence — restore cash declared state from database
     final wasDeclared = await DailyLockService.isCashDeclared();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-    }
     if (wasDeclared && mounted) {
       setState(() { _cashDeclared = true; });
     }
@@ -827,34 +824,8 @@ class _ZReportScreenState extends State<ZReportScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
           )),
         ]),
-        const SizedBox(height: 8),
-        // 🔓 Re-Open Z Report (Manager PIN required — for correcting errors)
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () async {
-              final reports = ZReportRecord.history;
-              if (reports.isEmpty) return;
-              final currentZId = reports.first.reportId;
-              final ok = await DailyLockService.voidZReportAndUnlock(
-                context, currentZReportId: currentZId,
-              );
-              if (ok && mounted) {
-                Navigator.pop(context); return;
-              }
-            },
-            icon: const Icon(Icons.refresh, size: 20),
-            label: const Text("🔓 Re-Open Z Report (Manager Authorization)",
-              style: TextStyle(fontWeight: FontWeight.bold)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.purple.shade700,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ),
         const SizedBox(height: 16),
+        const SizedBox(height: 8),
 
         // ✅ Info box
         Container(
@@ -1276,9 +1247,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     }
                     Navigator.pop(ctx);
                     DailyLockService.markCashDeclared();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    }
                     if (mounted) setState(() { _cashDeclared = true; });
                   },
                   icon: const Icon(Icons.save, size: 22),
