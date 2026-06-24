@@ -205,6 +205,64 @@ class DailyLockService {
     }
   }
 
+
+  /// 🆕 BIR-grade persistence — save declared denominations as JSON
+  static Future<void> saveCashDeclaredDenominations(Map<double, int> denoms) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      // Encode as "1000:2,500:1,100:3"
+      final encoded = denoms.entries
+          .where((e) => e.value > 0)
+          .map((e) => '${e.key}:${e.value}')
+          .join(',');
+      await prefs.setString('cashDeclaredDenoms_${branchId}_$today', encoded);
+      if (kDebugMode) debugPrint('✅ saveCashDeclaredDenominations: $encoded');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ saveCashDeclaredDenominations error: $e');
+    }
+  }
+
+  /// 🆕 Load declared denominations back (for blind audit re-display)
+  static Future<Map<double, int>> getCashDeclaredDenominations() async {
+    final result = <double, int>{};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final encoded = prefs.getString('cashDeclaredDenoms_${branchId}_$today') ?? '';
+      if (encoded.isEmpty) return result;
+      for (final pair in encoded.split(',')) {
+        final parts = pair.split(':');
+        if (parts.length == 2) {
+          final denom = double.tryParse(parts[0]) ?? 0;
+          final qty = int.tryParse(parts[1]) ?? 0;
+          if (denom > 0 && qty > 0) result[denom] = qty;
+        }
+      }
+      if (kDebugMode) debugPrint('✅ getCashDeclaredDenominations: $result');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ getCashDeclaredDenominations error: $e');
+    }
+    return result;
+  }
+
+  /// 🆕 Clear declared denominations when day is reset/reopened
+  static Future<void> clearCashDeclaredDenominations() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      await prefs.remove('cashDeclaredDenoms_${branchId}_$today');
+      if (kDebugMode) debugPrint('🔄 clearCashDeclaredDenominations: $branchId $today');
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ clearCashDeclaredDenominations error: $e');
+    }
+  }
   static Future<void> resetCashDeclared() async {
     try {
       final prefs = await SharedPreferences.getInstance();

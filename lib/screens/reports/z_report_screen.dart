@@ -557,6 +557,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
     final wasDeclared = await DailyLockService.isCashDeclared();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("wasDeclared=$wasDeclared"), backgroundColor: wasDeclared ? Colors.green : Colors.red, duration: const Duration(seconds: 6)));
     if (wasDeclared && mounted) {
+      // 💰 Load previously declared denominations back into controllers
+      final savedDenoms = await DailyLockService.getCashDeclaredDenominations();
+      for (final entry in savedDenoms.entries) {
+        _denomCtrls[entry.key]?.text = entry.value.toString();
+      }
       setState(() { _cashDeclared = true; });
     }
 
@@ -1300,12 +1305,23 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   onPressed: total == 0 ? null : () async {
+                    // 1. Copy denoms from temp controllers to persistent controllers
                     for (final d in DenominationRecord.phDenominations) {
                       _denomCtrls[d]?.text = tempCtrls[d]?.text ?? '';
                     }
-                    Navigator.pop(ctx); // Just close dialog — Patch B auto-pops Z Report module
-                    DailyLockService.markCashDeclared();
+                    // 2. Build denomination map
+                    final denomMap = <double, int>{};
+                    for (final d in DenominationRecord.phDenominations) {
+                      final qty = int.tryParse(tempCtrls[d]?.text.trim() ?? "") ?? 0;
+                      if (qty > 0) denomMap[d] = qty;
+                    }
+                    // 3. AWAIT both saves (so writes complete before dialog closes)
+                    await DailyLockService.markCashDeclared();
+                    await DailyLockService.saveCashDeclaredDenominations(denomMap);
+                    // 4. Set _cashDeclared = true BEFORE pop (so Patch B doesn't auto-exit)
                     if (mounted) setState(() { _cashDeclared = true; });
+                    // 5. Close dialog (returns control to initState's await)
+                    if (mounted) Navigator.pop(ctx);
                   },
                   icon: const Icon(Icons.save, size: 22),
                   label: const Text('Submit & Save Count',
