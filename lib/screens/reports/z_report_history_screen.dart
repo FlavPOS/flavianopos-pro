@@ -240,7 +240,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: ElevatedButton.icon(
-                          onPressed: () => ZReportPdf.printFromRecord(r),
+                          onPressed: () async { final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId); await ZReportPdf.printFromRecord(r, denominations: denomMap); },
                           icon: const Icon(Icons.print, size: 16),
                           label: const Text('Print / PDF', style: TextStyle(fontSize: 12)),
                           style: ElevatedButton.styleFrom(
@@ -399,6 +399,35 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                     'overShort': newOverShort,
                   });
 
+                  // 💰 Save re-declared denominations to denomination_records (linked to reportId)
+                  try {
+                    final db2 = await DatabaseHelper().database;
+                    // Delete previous denomination records for this reportId (avoid duplicates)
+                    await db2.delete('denomination_records', where: 'sessionId = ?', whereArgs: [r.reportId]);
+                    // Save the new breakdown
+                    final denomRecords = <Map<String, dynamic>>[];
+                    final nowDt = DateTime.now();
+                    for (final d in DenominationRecord.phDenominations) {
+                      final qty = int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0;
+                      if (qty > 0) {
+                        denomRecords.add(DenominationRecord(
+                          sessionId: r.reportId,
+                          type: 'ending',
+                          denomination: d,
+                          quantity: qty,
+                          total: d * qty,
+                          createdAt: nowDt,
+                        ).toMap());
+                      }
+                    }
+                    if (denomRecords.isNotEmpty) {
+                      await DatabaseHelper().insertDenominationBatch(denomRecords);
+                      debugPrint('💰 Re-declared & saved ' + denomRecords.length.toString() + ' denominations for ' + r.reportId);
+                    }
+                  } catch (e) {
+                    debugPrint('⚠️ Failed to save re-declared denominations: ' + e.toString());
+                  }
+
                   // 🔥 Sync to Firebase (multi-store BIR audit)
                   try {
                     await ZReportRecord.loadFromDB();
@@ -449,8 +478,9 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         return;
       }
       final excel = Excel.createExcel();
-      excel.delete('Sheet1');
       final summary = excel['Summary'];
+      excel.setDefaultSheet('Summary');
+      excel.delete('Sheet1');
       summary.appendRow([
         TextCellValue('Report ID'), TextCellValue('Date'), TextCellValue('Cashier'),
         TextCellValue('Branch'), TextCellValue('Gross'), TextCellValue('Discounts'),
@@ -537,7 +567,11 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         return;
       }
       for (final r in reports) {
-        await ZReportPdf.printFromRecord(r);
+        final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId);
+        final allDenomsCheck = await (await DatabaseHelper().database).query('denomination_records', where: 'sessionId = ?', whereArgs: [r.reportId]);
+        debugPrint('🗄️ DB has ' + allDenomsCheck.length.toString() + ' rows for ' + r.reportId + ': ' + allDenomsCheck.toString());
+        debugPrint('🖨️ History print for ' + r.reportId + '. denomMap has ' + denomMap.length.toString() + ' entries: ' + denomMap.toString());
+        await ZReportPdf.printFromRecord(r, denominations: denomMap);
       }
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('✅ Generated ' + reports.length.toString() + ' PDF reports'),
