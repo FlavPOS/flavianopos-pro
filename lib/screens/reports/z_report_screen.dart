@@ -634,18 +634,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
         title: const Text('📊 Z Report', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
         actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            tooltip: 'Export',
-            onSelected: (v) {
-              if (v == 'excel') _exportExcel();
-              if (v == 'pdf') _exportPdf();
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'excel', child: ListTile(leading: Icon(Icons.table_chart, color: Colors.green), title: Text('Export Excel'), contentPadding: EdgeInsets.zero)),
-              const PopupMenuItem(value: 'pdf', child: ListTile(leading: Icon(Icons.picture_as_pdf, color: Colors.red), title: Text('Export PDF'), contentPadding: EdgeInsets.zero)),
-            ],
-          ),
           IconButton(
             icon: Badge(
               label: Text('${ZReportRecord.history.length}', style: const TextStyle(fontSize: 9)),
@@ -656,8 +644,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
             onPressed: () => Navigator.push(context, MaterialPageRoute(
               builder: (_) => ZReportHistoryScreen(branch: widget.branch))),
           ),
-          IconButton(icon: const Icon(Icons.print), tooltip: 'Print / Save PDF',
-            onPressed: _printReport),
         ],
       ),
       body: _isReportGenerated ? _buildGeneratedView() : _buildCurrentDayView(),

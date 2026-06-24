@@ -88,11 +88,9 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             tooltip: 'Export',
             onSelected: (value) {
               if (value == 'excel') _exportAllExcel();
-              if (value == 'pdf') _exportAllPdf();
             },
             itemBuilder: (_) => const [
               PopupMenuItem<String>(value: 'excel', child: Row(children: [Icon(Icons.table_chart, color: Colors.green), SizedBox(width: 8), Text('Export Excel')])),
-              PopupMenuItem<String>(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf, color: Colors.red), SizedBox(width: 8), Text('Export PDF')])),
             ],
           ),
         ],
