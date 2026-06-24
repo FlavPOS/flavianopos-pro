@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart' hide Transaction;
 import '../helpers/database_helper.dart';
 import 'device_assignment_service.dart';
@@ -182,6 +183,74 @@ class DailyLockService {
       ));
     }
     return true;
+  }
+
+  /// 🆕 BIR-grade persistence — mark cash as declared today
+  /// Survives app restart, screen close, etc.
+  static Future<void> markCashDeclared() async {
+    try {
+      final db = await DatabaseHelper().database;
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final now = DateTime.now().toUtc().toIso8601String();
+
+      // Try update first (row exists)
+      final updated = await db.rawUpdate(
+        "UPDATE business_day_state SET cashDeclared=1, cashDeclaredAt=?, updatedAt=? WHERE branchId=?",
+        [now, now, branchId],
+      );
+
+      // If no row existed, insert one
+      if (updated == 0) {
+        await db.insert('business_day_state', {
+          'branchId': branchId,
+          'status': 'open',
+          'lockedAt': '',
+          'lockedByZReportId': '',
+          'unlockedAt': '',
+          'unlockedBy': '',
+          'unlockReason': '',
+          'cashDeclared': 1,
+          'cashDeclaredAt': now,
+          'updatedAt': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ markCashDeclared error: $e');
+    }
+  }
+
+  /// 🆕 Reset cash declared (used by Re-Declare button)
+  static Future<void> resetCashDeclared() async {
+    try {
+      final db = await DatabaseHelper().database;
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final now = DateTime.now().toUtc().toIso8601String();
+      await db.rawUpdate(
+        "UPDATE business_day_state SET cashDeclared=0, updatedAt=? WHERE branchId=?",
+        [now, branchId],
+      );
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ resetCashDeclared error: $e');
+    }
+  }
+
+  /// 🆕 Check if cash was already declared today (persistence check)
+  static Future<bool> isCashDeclared() async {
+    try {
+      final db = await DatabaseHelper().database;
+      final assign = await DeviceAssignmentService().read();
+      final branchId = assign['branchId'] ?? 'default';
+      final rows = await db.query('business_day_state',
+        where: 'branchId = ?', whereArgs: [branchId], limit: 1);
+      if (rows.isEmpty) return false;
+      final value = rows.first['cashDeclared'];
+      if (value is int) return value == 1;
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 }
 

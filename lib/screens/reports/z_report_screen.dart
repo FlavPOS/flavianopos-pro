@@ -45,13 +45,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
   @override
   void initState() {
     super.initState();
-    // 🔒 BIR blind audit — force cash declaration on screen open
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!_cashDeclared && !_isReportGenerated && _viewerAuthorized && mounted) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (mounted) _showCashDeclarationDialog();
-      }
-    });
     _checkZReportLock();
     // Initialize denomination controllers
     for (final d in DenominationRecord.phDenominations) {
@@ -528,6 +521,18 @@ class _ZReportScreenState extends State<ZReportScreen> {
       _checkingLock = false;
       _viewerAuthorized = !locked;
     });
+
+    // 🔒 BIR persistence — restore cash declared state from database
+    final wasDeclared = await DailyLockService.isCashDeclared();
+    if (wasDeclared && mounted) {
+      setState(() { _cashDeclared = true; });
+    }
+
+    // 🔒 BIR blind audit — show declaration popup if day is unlocked
+    if (!locked && !_cashDeclared && !_isReportGenerated && mounted) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) _showCashDeclarationDialog();
+    }
   }
 
   Future<void> _unlockView() async {
@@ -697,6 +702,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
                   actionLabel: "Recount drawer (with reason)",
                 );
                 if (username != null) {
+                  DailyLockService.resetCashDeclared();
                   if (mounted) {
                     setState(() {
                       _cashDeclared = false;
@@ -1078,7 +1084,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
           const Text('×', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
           const SizedBox(width: 6),
           SizedBox(width: 60, child: TextField(
-            controller: _denomCtrls[d], keyboardType: TextInputType.number,
+            controller: _denomCtrls[d], readOnly: _cashDeclared, keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textAlign: TextAlign.center,
             decoration: InputDecoration(
@@ -1261,12 +1267,13 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  onPressed: total == 0 ? null : () {
+                  onPressed: total == 0 ? null : () async {
                     for (final d in DenominationRecord.phDenominations) {
                       _denomCtrls[d]?.text = tempCtrls[d]?.text ?? '';
                     }
                     Navigator.pop(ctx);
-                    setState(() { _cashDeclared = true; });
+                    DailyLockService.markCashDeclared();
+                    if (mounted) setState(() { _cashDeclared = true; });
                   },
                   icon: const Icon(Icons.save, size: 22),
                   label: const Text('Submit & Save Count',
