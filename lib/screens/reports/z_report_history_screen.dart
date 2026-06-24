@@ -187,11 +187,14 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                                 actionLabel: "Re-declare cash for " + r.reportId + " (reason required)",
                               );
                               if (username != null && context.mounted) {
-                                await DailyLockService.voidZReportAndUnlock(
-                                  context, currentZReportId: r.reportId);
                                 await DailyLockService.resetCashDeclared();
                                 if (context.mounted) {
-                                  Navigator.popUntil(context, (rt) => rt.isFirst);
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text("✅ Cash declaration reset by " + username + ". Open Z Report to recount."),
+                                    backgroundColor: Colors.green,
+                                    duration: const Duration(seconds: 4),
+                                  ));
+                                  Navigator.pop(context);  // Back to dashboard
                                 }
                               }
                             },
