@@ -524,6 +524,9 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
     // 🔒 BIR persistence — restore cash declared state from database
     final wasDeclared = await DailyLockService.isCashDeclared();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    }
     if (wasDeclared && mounted) {
       setState(() { _cashDeclared = true; });
     }
@@ -1273,6 +1276,9 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     }
                     Navigator.pop(ctx);
                     DailyLockService.markCashDeclared();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    }
                     if (mounted) setState(() { _cashDeclared = true; });
                   },
                   icon: const Icon(Icons.save, size: 22),
