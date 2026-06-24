@@ -563,7 +563,12 @@ class _ZReportScreenState extends State<ZReportScreen> {
     // 🔒 BIR blind audit — show declaration popup if day is unlocked
     if (!locked && !wasDeclared && !_isReportGenerated && mounted) {
       await Future.delayed(const Duration(milliseconds: 300));
-      if (mounted) _showCashDeclarationDialog();
+      if (mounted) {
+        await _showCashDeclarationDialog();
+        if (mounted && !_cashDeclared) {
+          Navigator.pop(context);
+        }
+      }
     }
   }
 
@@ -1174,7 +1179,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
     await showDialog<void>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final total = computeTotal();
@@ -1252,6 +1257,41 @@ class _ZReportScreenState extends State<ZReportScreen> {
             actions: [
               SizedBox(
                 width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ZReportHistoryScreen(branch: widget.branch)));
+                  },
+                  icon: const Icon(Icons.history, size: 18),
+                  label: const Text('View Z Report History', style: TextStyle(fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.purple.shade700,
+                    side: BorderSide(color: Colors.purple.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                  },
+                  icon: const Icon(Icons.home, size: 18),
+                  label: const Text('Back to Dashboard', style: TextStyle(fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey.shade700,
+                    side: BorderSide(color: Colors.grey.shade400),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.purple.shade700,
@@ -1263,7 +1303,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     for (final d in DenominationRecord.phDenominations) {
                       _denomCtrls[d]?.text = tempCtrls[d]?.text ?? '';
                     }
-                    Navigator.pop(ctx);
+                    Navigator.pop(ctx); // Just close dialog — Patch B auto-pops Z Report module
                     DailyLockService.markCashDeclared();
                     if (mounted) setState(() { _cashDeclared = true; });
                   },
