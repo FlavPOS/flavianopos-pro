@@ -98,6 +98,7 @@ class ZReportPdf {
     required List<Map<String, dynamic>> transactions,
     required bool isGenerated,
     Map<double, int>? denominations,
+    bool isReprint = false,
   }) async {
     final pdf = pw.Document();
     final List<pw.Widget> w = [];
@@ -201,14 +202,42 @@ class ZReportPdf {
     w.add(pw.SizedBox(height: 6));
     w.add(zDivider());
     w.add(pw.SizedBox(height: 4));
-    w.add(pw.Center(child: pw.Text(isGenerated ? 'Z REPORT GENERATED' : 'Z REPORT PREVIEW',
-      style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))));
-    final rdm = reportDate.month;
-    final rdd = reportDate.day;
-    final rdy = reportDate.year;
-    final rdh = reportDate.hour;
-    final rdmin = reportDate.minute.toString().padLeft(2, '0');
-    w.add(pw.Center(child: pw.Text('$rdm/$rdd/$rdy $rdh:$rdmin', style: const pw.TextStyle(fontSize: 7))));
+    if (isReprint) {
+      // 🔁 REPRINT footer (audit trail: current print date + original report date)
+      final nowDt = DateTime.now();
+      final nm = nowDt.month;
+      final nd = nowDt.day;
+      final ny = nowDt.year;
+      final nh = nowDt.hour;
+      final nmin = nowDt.minute.toString().padLeft(2, '0');
+      final rdm = reportDate.month;
+      final rdd = reportDate.day;
+      final rdy = reportDate.year;
+      final rdh = reportDate.hour;
+      final rdmin = reportDate.minute.toString().padLeft(2, '0');
+      w.add(pw.Center(child: pw.Container(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+        child: pw.Text('REPRINT / COPY',
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+      )));
+      w.add(pw.SizedBox(height: 3));
+      w.add(pw.Center(child: pw.Text('Reprinted: $nm/$nd/$ny $nh:$nmin',
+        style: const pw.TextStyle(fontSize: 8))));
+      w.add(pw.Center(child: pw.Text('Original:  $rdm/$rdd/$rdy $rdh:$rdmin',
+        style: const pw.TextStyle(fontSize: 8))));
+    } else {
+      // 🟢 ORIGINAL footer (current day generation)
+      w.add(pw.Center(child: pw.Text(isGenerated ? 'Z REPORT GENERATED' : 'Z REPORT PREVIEW',
+        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))));
+      final rdm = reportDate.month;
+      final rdd = reportDate.day;
+      final rdy = reportDate.year;
+      final rdh = reportDate.hour;
+      final rdmin = reportDate.minute.toString().padLeft(2, '0');
+      w.add(pw.Center(child: pw.Text('$rdm/$rdd/$rdy $rdh:$rdmin',
+        style: const pw.TextStyle(fontSize: 7))));
+    }
     w.add(pw.SizedBox(height: 4));
     w.add(zDivider());
     w.add(pw.SizedBox(height: 4));
@@ -245,6 +274,7 @@ class ZReportPdf {
     required List<Map<String, dynamic>> transactions,
     required bool isGenerated,
     Map<double, int>? denominations,
+    bool isReprint = false,
   }) async {
     final bytes = await _buildPdfBytes(
       branch: branch, cashier: cashier, reportDate: reportDate,
@@ -255,7 +285,7 @@ class ZReportPdf {
       voidedList: voidedList, beginningCash: beginningCash,
       expectedCash: expectedCash, endingCash: endingCash,
       overShort: overShort, transactions: transactions,
-      isGenerated: isGenerated, denominations: denominations,
+      isGenerated: isGenerated, denominations: denominations, isReprint: isReprint,
     );
     final name = 'Z-Report-${reportDate.month}-${reportDate.day}-${reportDate.year}.pdf';
     downloadPdf(bytes, name);
@@ -282,7 +312,7 @@ class ZReportPdf {
       voidedCount: r.voidedCount, voidedAmount: r.voidedAmount, refundedCount: r.refundedCount, refundedAmount: r.refundedAmount,
       voidedList: vList, beginningCash: r.beginningCash,
       expectedCash: r.expectedCash, endingCash: r.endingCash,
-      overShort: r.overShort, transactions: tList, isGenerated: true, denominations: denominations,
+      overShort: r.overShort, transactions: tList, isGenerated: true, denominations: denominations, isReprint: true,
     );
   }
 }
