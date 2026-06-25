@@ -21,12 +21,14 @@ class AppUser {
   final DateTime joinDate;
   final DateTime? lastLogin;
   final List<String> permissions;
+  final bool allowPosTransaction;
 
   AppUser({
     required this.id, required this.name, required this.username,
     required this.pin, this.biometricEnabled = false, this.biometricEnrolled = false, this.preferredBiometricType = 'face', this.lastBiometricVerifiedAt, this.email = '', this.phone = '',
     required this.role, required this.branch, this.isActive = true,
     required this.joinDate, this.lastLogin, List<String>? permissions,
+    this.allowPosTransaction = false,
   }) : permissions = permissions ?? rolePresets[role] ?? [];
 
   static const List<String> allModules = [

@@ -631,6 +631,10 @@ class DatabaseHelper {
     }
     if (oldVersion < 14) {
       // Add adjustment tracking columns to cashier_sessions
+    try { await db.execute("ALTER TABLE users ADD COLUMN allowPosTransaction INTEGER DEFAULT 0"); } catch (_) {}
+    try { await db.execute('''CREATE TABLE IF NOT EXISTS session_audit_log (id TEXT PRIMARY KEY, action TEXT NOT NULL, userId TEXT NOT NULL, role TEXT DEFAULT '', sessionId TEXT DEFAULT '', performedBy TEXT DEFAULT '', performedByRole TEXT DEFAULT '', targetUserName TEXT DEFAULT '', reason TEXT DEFAULT '', remarks TEXT DEFAULT '', oldValue TEXT DEFAULT '', newValue TEXT DEFAULT '', branch TEXT DEFAULT '', branchId TEXT DEFAULT '', deviceId TEXT DEFAULT '', timestamp TEXT NOT NULL, synced INTEGER DEFAULT 0)'''); } catch (_) {}
+    try { await db.execute('CREATE INDEX IF NOT EXISTS idx_audit_action_time ON session_audit_log(action, timestamp)'); } catch (_) {}
+    try { await db.execute('CREATE INDEX IF NOT EXISTS idx_audit_user ON session_audit_log(userId, timestamp)'); } catch (_) {}
       try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN originalDeclared REAL DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN originalVariance REAL DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE cashier_sessions ADD COLUMN adjustedBy TEXT DEFAULT ''"); } catch (_) {}

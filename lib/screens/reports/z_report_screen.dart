@@ -2,6 +2,8 @@
 import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import '../../models/sync_queue_model.dart';
 import '../../helpers/sync_bridge.dart';
+import '../../services/session_validator_service.dart';
+import '../../services/audit_log_service.dart';
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
@@ -212,6 +214,14 @@ class _ZReportScreenState extends State<ZReportScreen> {
       return;
     }
     if (!mounted) return;
+    // 🔒 BLOCK 0 (NEW): Validate no active cashier sessions
+    final sessionValidation = await SessionValidator.canGenerateZReport();
+    if (!mounted) return;
+    if (!sessionValidation.allowed) {
+      await _showActiveSessionsBlockedDialog(sessionValidation.activeSessions);
+      return;
+    }
+
     // BLOCK 1: Check if any active shifts (multi-cashier check!)
     if (_shiftMustClose) {
       _snack('🚨 BLOCKED: ${_allActiveShifts.length} active shift(s) detected! All cashiers must close their shifts first.');
@@ -1344,6 +1354,116 @@ class _ZReportScreenState extends State<ZReportScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// 🔒 Show beautiful dialog listing active cashier sessions blocking Z Report
+  Future<void> _showActiveSessionsBlockedDialog(List<CashierSession> activeSessions) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red[700], size: 28),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Cannot Generate Z Report', style: TextStyle(fontSize: 16))),
+        ]),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red[200]!),
+                ),
+                child: Text(
+                  '${activeSessions.length} active cashier session(s) must complete End Shift first.',
+                  style: TextStyle(color: Colors.red[800], fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text('Active Cashiers:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 250),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: activeSessions.length,
+                  itemBuilder: (ctx, i) {
+                    final s = activeSessions[i];
+                    final openedTime = '${s.openedAt.hour.toString().padLeft(2, '0')}:${s.openedAt.minute.toString().padLeft(2, '0')}';
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange[200]!),
+                      ),
+                      child: Row(children: [
+                        CircleAvatar(
+                          backgroundColor: Colors.orange[700],
+                          radius: 18,
+                          child: Text(
+                            s.cashierName.isNotEmpty ? s.cashierName[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(s.cashierName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text('Branch: ${s.branch}', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                              Text('Opened: $openedTime', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                            ],
+                          ),
+                        ),
+                        Chip(
+                          label: Text(s.status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                          backgroundColor: s.status == 'open' ? Colors.red[100] : Colors.amber[100],
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                      ]),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '�� Have each cashier go to "End Shift" module to close their session.',
+                  style: TextStyle(color: Colors.blue[800], fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.purple[700],
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Understood'),
+          ),
+        ],
       ),
     );
   }
