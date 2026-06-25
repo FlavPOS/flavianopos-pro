@@ -1,5 +1,7 @@
 // lib/screens/reports/z_report_screen.dart
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import '../../models/sync_queue_model.dart';
+import '../../helpers/sync_bridge.dart';
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
@@ -359,6 +361,17 @@ class _ZReportScreenState extends State<ZReportScreen> {
       if (denomRecords.isNotEmpty) {
         await DatabaseHelper().insertDenominationBatch(denomRecords);
         debugPrint('💰 Saved ${denomRecords.length} denominations for $reportId');
+        // 🌐 Re-sync to Firebase with denominations now in DB
+        try {
+          final updatedReport = ZReportRecord.history.firstWhere(
+            (rec) => rec.reportId == reportId,
+            orElse: () => ZReportRecord.history.last,
+          );
+          await SyncBridge.enqueueZReport(updatedReport, op: SyncOp.update);
+          if (kDebugMode) debugPrint('🌐 Re-synced Z Report with denominations: $reportId');
+        } catch (resyncErr) {
+          if (kDebugMode) debugPrint('⚠️ Re-sync failed: $resyncErr');
+        }
       }
     } catch (e) {
       debugPrint('⚠️ Failed to save denominations: $e');
