@@ -30,9 +30,7 @@ class IncidentReportScreen extends StatefulWidget {
 class _IncidentReportScreenState extends State<IncidentReportScreen> {
   String _selectedReason = 'Customer overcharged';
   final _remarksCtrl = TextEditingController();
-  final _managerPinCtrl = TextEditingController();
   bool _processing = false;
-  bool _useOverride = false;
 
   static const List<String> _reasons = [
     'Customer overcharged',
@@ -50,33 +48,17 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
   @override
   void dispose() {
     _remarksCtrl.dispose();
-    _managerPinCtrl.dispose();
     super.dispose();
   }
 
   String get _varianceTypeLabel => widget.variance > 0 ? 'OVER' : 'SHORT';
 
   Future<void> _submit() async {
-    if (_remarksCtrl.text.trim().isEmpty) {
-      _snack('Please provide detailed remarks', Colors.orange);
+    if (_remarksCtrl.text.trim().length < 50) {
+      _snack('Please provide detailed explanation (min 50 characters)', Colors.orange);
       return;
     }
 
-    // Manager override check (optional)
-    if (_useOverride) {
-      if (_managerPinCtrl.text.trim().isEmpty) {
-        _snack('Enter Manager PIN for override', Colors.orange);
-        return;
-      }
-      final mgr = AppUser.allUsers.where((u) =>
-        (u.role == 'Admin' || u.role == 'Manager') &&
-        u.pin == _managerPinCtrl.text.trim()
-      ).firstOrNull;
-      if (mgr == null) {
-        _snack('Invalid Manager PIN', Colors.red);
-        return;
-      }
-    }
 
     setState(() => _processing = true);
 
@@ -135,7 +117,7 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        _snack('🔒 Cannot exit. File IR or use Manager Override.', Colors.red);
+        _snack('🔒 Cannot exit. File IR or use Re-Declare to recount.', Colors.red);
         return false;
       },
       child: Scaffold(
@@ -169,8 +151,6 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
               _remarksCard(),
               const SizedBox(height: 16),
 
-              // Manager Override (Optional)
-              _overrideCard(),
               const SizedBox(height: 24),
 
               // Submit Button
@@ -396,12 +376,14 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
           Row(children: [
             Icon(Icons.edit_note, color: Colors.purple[700], size: 18),
             const SizedBox(width: 8),
-            const Text('Detailed Remarks', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Your Detailed Explanation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ]),
           const SizedBox(height: 8),
           TextField(
             controller: _remarksCtrl,
+            maxLength: 500,
+            onChanged: (_) => setState(() {}),
             maxLines: 5,
             decoration: InputDecoration(
               hintText: 'Provide detailed explanation of what happened...',
@@ -415,52 +397,4 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
     );
   }
 
-  Widget _overrideCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(Icons.lock, color: Colors.amber[800], size: 18),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text('Manager Override (Optional)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            ),
-            Switch(
-              value: _useOverride,
-              onChanged: (v) => setState(() => _useOverride = v),
-              activeColor: Colors.amber[800],
-            ),
-          ]),
-          if (_useOverride) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Manager can approve variance closure',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _managerPinCtrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                hintText: 'Manager PIN',
-                prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                isDense: true,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
