@@ -19,7 +19,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
   late TextEditingController _emailCtrl;
   late TextEditingController _phoneCtrl;
   String _selectedRole = 'Cashier';
-  bool _allowPosTransaction = false;
   String _selectedBranch = 'Main Branch';
   bool _isActive = true;
   late List<String> _selectedPermissions;
@@ -37,7 +36,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
     _phoneCtrl = TextEditingController(text: u?.phone ?? '');
     if (u != null) {
       _selectedRole = u.role;
-      _allowPosTransaction = u.allowPosTransaction;
       _selectedBranch = u.branch;
       _isActive = u.isActive;
       _selectedPermissions = List<String>.from(u.permissions);
@@ -89,7 +87,7 @@ class _AddUserScreenState extends State<AddUserScreen> {
         phone: _phoneCtrl.text.trim(), role: _selectedRole,
         branch: _selectedBranch, isActive: _isActive,
         joinDate: widget.user?.joinDate ?? DateTime.now(),
-        lastLogin: widget.user?.lastLogin, permissions: _selectedPermissions, allowPosTransaction: _allowPosTransaction);
+        lastLogin: widget.user?.lastLogin, permissions: _selectedPermissions);
       Navigator.pop(context, user);
     }
   }
@@ -141,52 +139,6 @@ class _AddUserScreenState extends State<AddUserScreen> {
           SwitchListTile(title: const Text('Active', style: TextStyle(fontWeight: FontWeight.w500)),
             subtitle: Text(_isActive ? 'User can login' : 'User is disabled', style: const TextStyle(fontSize: 12)),
             value: _isActive, onChanged: (v) => setState(() => _isActive = v)),
-
-          // 🔒 BIR-grade POS Transaction permission (only for privileged roles)
-          if (['Admin', 'Manager', 'Supervisor'].contains(_selectedRole)) ...[
-            const SizedBox(height: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
-              child: SwitchListTile(
-                title: const Text('Allow POS Transaction',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text(
-                  'Permission to process sales transactions (BIR-compliant). Cashier role always allowed.',
-                  style: TextStyle(fontSize: 11),
-                ),
-                value: _allowPosTransaction,
-                onChanged: (v) => setState(() => _allowPosTransaction = v),
-                secondary: Icon(
-                  Icons.shopping_cart_checkout,
-                  color: _allowPosTransaction ? Colors.green : Colors.grey,
-                ),
-                activeColor: Colors.green,
-              ),
-            ),
-          ],
-          if (_selectedRole == 'Cashier') ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.shade200),
-              ),
-              child: Row(children: [
-                Icon(Icons.check_circle, color: Colors.green.shade700, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Cashier role: POS transactions always allowed',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                ),
-              ]),
-            ),
-          ],
           const SizedBox(height: 24),
           Row(children: [
             _header('Module Permissions', Icons.security), const Spacer(),

@@ -84,7 +84,6 @@ class AppUser {
     'biometricEnabled': biometricEnabled ? 1 : 0,
     'biometricEnrolled': biometricEnrolled ? 1 : 0,
     'preferredBiometricType': preferredBiometricType,
-    'allowPosTransaction': allowPosTransaction ? 1 : 0,
     'lastBiometricVerifiedAt': lastBiometricVerifiedAt?.toIso8601String(),
   };
 
@@ -112,7 +111,6 @@ class AppUser {
       joinDate: DateTime.tryParse(m['dateCreated'] ?? '') ?? DateTime.now(),
       lastLogin: m['lastLogin'] != null ? DateTime.tryParse(m['lastLogin']) : null,
       permissions: perms,
-      allowPosTransaction: (m["allowPosTransaction"] ?? 0) == 1,
       biometricEnabled: (m['biometricEnabled'] ?? 0) == 1,
       biometricEnrolled: (m['biometricEnrolled'] ?? 0) == 1,
       preferredBiometricType: m['preferredBiometricType'] ?? 'face',
