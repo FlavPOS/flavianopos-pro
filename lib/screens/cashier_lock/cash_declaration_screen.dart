@@ -1,4 +1,6 @@
 // lib/screens/cashier_lock/cash_declaration_screen.dart
+import '../../models/sync_queue_model.dart';
+import '../../helpers/sync_bridge.dart';
 import '../../services/daily_lock_service.dart';
 import '../../helpers/database_helper.dart';
 // End-of-shift cash declaration with denomination breakdown
@@ -749,6 +751,26 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
         'createdAt': DateTime.now().toUtc().toIso8601String(),
         'status': 'authorized',
       });
+      // 🌐 Sync audit trail to Firebase
+      try {
+        await SyncBridge.enqueueAuditTrail({
+          'id': 'AUDIT-RE-${DateTime.now().millisecondsSinceEpoch}',
+          'action': 'RE_DECLARE_CASH',
+          'sessionId': widget.session.id,
+          'entityType': 'cashier_session',
+          'entityId': widget.session.id,
+          'performedBy': managerUsername,
+          'performedByRole': 'Manager',
+          'targetUserName': widget.session.cashierName,
+          'reason': reason,
+          'remarks': remarks,
+          'oldValue': _variance.toStringAsFixed(2),
+          'newValue': '',
+          'branch': widget.session.branch,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'pinVerified': true,
+        }, op: SyncOp.create);
+      } catch (_) {}
     } catch (e) {
       _snack('⚠️ Audit log failed: $e', Colors.orange);
     }

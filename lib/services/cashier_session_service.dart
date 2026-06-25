@@ -1,4 +1,6 @@
 // lib/services/cashier_session_service.dart
+import '../models/sync_queue_model.dart';
+import '../helpers/sync_bridge.dart';
 
 import '../helpers/database_helper.dart';
 import '../models/cashier_session_model.dart';
@@ -92,6 +94,18 @@ class CashierSessionService {
       'status': 'closed',
       'closedAt': DateTime.now().toIso8601String(),
     });
+
+    // 🌐 Sync to Firebase (multi-store)
+    try {
+      final db = await DatabaseHelper().database;
+      final rows = await db.query('cashier_sessions', where: 'id = ?', whereArgs: [sessionId], limit: 1);
+      if (rows.isNotEmpty) {
+        final updated = CashierSession.fromMap(rows.first);
+        await SyncBridge.enqueueCashierSession(updated, op: SyncOp.update);
+      }
+    } catch (e) {
+      // Sync failure shouldn't break shift close
+    }
   }
 
   /// Save Incident Report
@@ -121,6 +135,7 @@ class CashierSessionService {
       createdAt: now,
     );
     await DatabaseHelper().insertIncidentReport(ir.toMap());
+    try { await SyncBridge.enqueueIncidentReport(ir, op: SyncOp.create); } catch (_) {}
     return ir;
   }
 

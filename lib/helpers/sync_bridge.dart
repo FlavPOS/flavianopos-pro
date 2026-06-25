@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import '../models/cashier_session_model.dart';
+import '../models/incident_report_model.dart';
 import '../helpers/database_helper.dart';
 import '../helpers/sync_queue_dao.dart';
 import '../models/sync_queue_model.dart';
@@ -575,6 +577,212 @@ class SyncBridge {
       await _markRowSynced('z_reports', 'reportId', reportId);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Z Report upload failed: $e');
+    }
+  }
+
+  // ═══════════════════ INCIDENT REPORTS (variance audit) ═══════════════════
+  static Future<void> enqueueIncidentReport(IncidentReport ir, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    final payload = {
+      'id': ir.id,
+      'irNumber': ir.irNumber,
+      'sessionId': ir.sessionId,
+      'cashierId': ir.cashierId,
+      'cashierName': ir.cashierName,
+      'branch': ir.branch,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
+      'companyCode': companyCode,
+      'variance': ir.variance,
+      'varianceType': ir.varianceType,
+      'reason': ir.reason,
+      'remarks': ir.remarks,
+      'attachmentPath': ir.attachmentPath,
+      'createdBy': ir.createdBy,
+      'createdAt': ir.createdAt.toIso8601String(),
+      'approvedBy': ir.approvedBy,
+      'approvedAt': ir.approvedAt?.toIso8601String() ?? '',
+      'status': ir.status,
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    if (kDebugMode) debugPrint("📋 Firebase IR: ${ir.irNumber} for ${ir.cashierName}");
+    final path = 'companies/$companyCode/incidentReports/$branchId/${ir.id}';
+    await _queue.enqueue(
+      entityType: 'incidentReport', entityId: ir.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    _fireAndForget(() => _uploadIncidentReportToFirebase(companyCode, branchId, ir.id, payload));
+  }
+
+  static Future<void> _uploadIncidentReportToFirebase(
+      String companyCode, String branchId, String irId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/incidentReports/$branchId/$irId').set(payload);
+      await _markQueueSynced('incidentReport', irId);
+      await _markRowSynced('incident_reports', 'id', irId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ IR upload failed: $e');
+    }
+  }
+
+  // ═══════════════════ CASHIER SESSIONS (shift records) ═══════════════════
+  static Future<void> enqueueCashierSession(CashierSession s, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    // �� Fetch denominations
+    final denomList = <Map<String, dynamic>>[];
+    try {
+      final db2 = await DatabaseHelper().database;
+      final rows = await db2.query(
+        "denomination_records",
+        where: "sessionId = ? AND type = ?",
+        whereArgs: [s.id, "ending"],
+        orderBy: "denomination DESC",
+      );
+      for (final dr in rows) {
+        denomList.add({
+          "denomination": (dr["denomination"] as num?)?.toDouble() ?? 0,
+          "quantity": (dr["quantity"] as num?)?.toInt() ?? 0,
+          "total": (dr["total"] as num?)?.toDouble() ?? 0,
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint("⚠️ Cashier session denom fetch failed: $e");
+    }
+
+    final payload = {
+      'id': s.id,
+      'shiftId': s.shiftId,
+      'cashierId': s.cashierId,
+      'cashierName': s.cashierName,
+      'branch': s.branch,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
+      'companyCode': companyCode,
+      'beginningCash': s.beginningCash,
+      'beginningSource': s.beginningSource,
+      'beginningRemarks': s.beginningRemarks,
+      'endingCashDeclared': s.endingCashDeclared,
+      'systemExpectedCash': s.systemExpectedCash,
+      'variance': s.variance,
+      'varianceType': s.varianceType,
+      'status': s.status,
+      'openedAt': s.openedAt.toIso8601String(),
+      'closedAt': s.closedAt?.toIso8601String() ?? '',
+      'cashSales': s.cashSales,
+      'gcashSales': s.gcashSales,
+      'mayaSales': s.mayaSales,
+      'cardSales': s.cardSales,
+      'otherSales': s.otherSales,
+      'totalRefunds': s.totalRefunds,
+      'totalVoids': s.totalVoids,
+      'totalDiscounts': s.totalDiscounts,
+      'totalExchanges': s.totalExchanges,
+      'transactionCount': s.transactionCount,
+      'denominations': denomList,
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    if (kDebugMode) debugPrint("💼 Firebase Cashier Session: ${s.id} status=${s.status} denoms=${denomList.length}");
+    final path = 'companies/$companyCode/cashierSessions/$branchId/${s.id}';
+    await _queue.enqueue(
+      entityType: 'cashierSession', entityId: s.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    _fireAndForget(() => _uploadCashierSessionToFirebase(companyCode, branchId, s.id, payload));
+  }
+
+  static Future<void> _uploadCashierSessionToFirebase(
+      String companyCode, String branchId, String sessionId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/cashierSessions/$branchId/$sessionId').set(payload);
+      await _markQueueSynced('cashierSession', sessionId);
+      await _markRowSynced('cashier_sessions', 'id', sessionId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Cashier Session upload failed: $e');
+    }
+  }
+
+  // ═══════════════════ AUDIT TRAIL (re-declare, manager override) ═══════════════════
+  static Future<void> enqueueAuditTrail(Map<String, dynamic> audit, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
+
+    final auditId = audit['id'] ?? 'AUDIT-${DateTime.now().millisecondsSinceEpoch}';
+    final payload = {
+      ...audit,
+      'id': auditId,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
+      'companyCode': companyCode,
+      'deviceId': ctx['deviceId'],
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+    if (kDebugMode) debugPrint("📜 Firebase Audit Trail: ${audit['action']} by ${audit['performedBy']}");
+    final path = 'companies/$companyCode/auditTrail/$branchId/$auditId';
+    await _queue.enqueue(
+      entityType: 'auditTrail', entityId: auditId, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    _fireAndForget(() => _uploadAuditTrailToFirebase(companyCode, branchId, auditId, payload));
+  }
+
+  static Future<void> _uploadAuditTrailToFirebase(
+      String companyCode, String branchId, String auditId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/auditTrail/$branchId/$auditId').set(payload);
+      await _markQueueSynced('auditTrail', auditId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Audit Trail upload failed: $e');
     }
   }
 }
