@@ -149,7 +149,6 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     return '${hours}h ${mins}m';
   }
 
-  @override
   Future<void> _reprintVoucher(CashierSession session) async {
     // Get denominations for this session
     final denomMap = _denomMap[session.id] ?? [];
@@ -194,6 +193,7 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     }
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),

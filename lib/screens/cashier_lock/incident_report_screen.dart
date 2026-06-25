@@ -54,7 +54,6 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
     super.dispose();
   }
 
-  String get _varianceType => widget.variance > 0 ? 'over' : 'short';
   String get _varianceTypeLabel => widget.variance > 0 ? 'OVER' : 'SHORT';
 
   Future<void> _submit() async {
@@ -136,22 +135,14 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        final exit = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Exit Incident Report?'),
-            content: const Text('You must file this report or correct the variance. Are you sure you want to exit?'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Stay')),
-              TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Exit', style: TextStyle(color: Colors.red))),
-            ],
-          ),
-        );
-        return exit ?? false;
+        _snack('🔒 Cannot exit. File IR or use Manager Override.', Colors.red);
+        return false;
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: const Padding(padding: EdgeInsets.all(14), child: Icon(Icons.lock_outline, color: Colors.white)),
           title: const Text('Incident Report — Cash Variance',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
           backgroundColor: Colors.red[800],

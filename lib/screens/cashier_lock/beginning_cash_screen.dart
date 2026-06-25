@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
 import 'package:flutter/services.dart';
 import '../../services/cashier_session_service.dart';
-import '../../models/cashier_session_model.dart';
 
 class BeginningCashScreen extends StatefulWidget {
   final String cashierId;

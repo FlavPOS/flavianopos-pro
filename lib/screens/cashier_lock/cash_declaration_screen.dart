@@ -1,4 +1,6 @@
 // lib/screens/cashier_lock/cash_declaration_screen.dart
+import '../../services/daily_lock_service.dart';
+import '../../helpers/database_helper.dart';
 // End-of-shift cash declaration with denomination breakdown
 
 import 'package:flutter/material.dart';
@@ -46,7 +48,7 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
   // Map denomination -> quantity controller
   final Map<double, TextEditingController> _qtyCtrls = {};
   bool _processing = false;
-  int _currentStep = 0;  // 0=denomination, 1=summary, 2=variance check
+  bool _isDeclared = false;
 
   @override
   void initState() {
@@ -74,7 +76,6 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
   }
 
   double get _variance => _totalCounted - widget.systemExpectedCash;
-  String get _varianceType => _variance == 0 ? 'balanced' : (_variance > 0 ? 'over' : 'short');
   bool get _requiresIR => CashierSessionService.requiresIR(_variance);
 
   Map<double, int> get _denominationsMap {
@@ -114,9 +115,17 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
       return;
     }
 
+    // 🔒 BIR Blind Entry — First tap REVEALS variance, doesnt close session
+    if (!_isDeclared) {
+      setState(() => _isDeclared = true);
+      _snack("🔓 Variance revealed. Review and confirm to end shift.", Colors.blue);
+      return;
+    }
+
     setState(() => _processing = true);
 
     try {
+      if (!mounted) return;
       // ═══ ALWAYS GENERATE VOUCHER PDF (BALANCED OR VARIANCE) ═══
       await CashVarianceVoucherPDF.generate(
         context: context,
@@ -180,8 +189,6 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
       behavior: SnackBarBehavior.floating,
     ));
   }
-
-  @override
 
   Future<String?> _askCashierPin() async {
     final pinCtrl = TextEditingController();
@@ -275,9 +282,13 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
   }
 
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+
     return WillPopScope(
       onWillPop: () async {
+        if (_isDeclared) {
+          _snack("🔒 Cannot exit. Use Re-Declare or Submit & End Shift.", Colors.red);
+          return false;
+        }
         final exit = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -294,6 +305,7 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
+          leading: _isDeclared ? const Padding(padding: EdgeInsets.all(14), child: Icon(Icons.lock_outline, color: Colors.white)) : null,
           title: const Text('End of Shift — Cash Declaration', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           backgroundColor: Colors.orange[800],
           foregroundColor: Colors.white,
@@ -308,7 +320,7 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
               const SizedBox(height: 16),
 
               // Sales summary card
-              _salesSummaryCard(),
+              if (_isDeclared) _salesSummaryCard(),
               const SizedBox(height: 16),
 
               // Denomination breakdown
@@ -316,27 +328,45 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
               const SizedBox(height: 16),
 
               // Variance check
-              _varianceCard(),
+              if (_isDeclared) _varianceCard(),
               const SizedBox(height: 24),
 
               // Submit button
+              // 🔄 Re-Declare button (Phase 2 only)
+              if (_isDeclared) ...[
+                SizedBox(
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _processing ? null : _reDeclareWithManagerPin,
+                    icon: const Icon(Icons.refresh, size: 22),
+                    label: const Text('🔄 Re-Declare Cash (Manager PIN)',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange[800],
+                      side: BorderSide(color: Colors.orange[800]!, width: 2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
                   onPressed: _processing ? null : _submit,
                   icon: _processing
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : Icon(_requiresIR ? Icons.warning : Icons.check, size: 24),
+                    : Icon(!_isDeclared ? Icons.lock_outline : (_requiresIR ? Icons.warning : Icons.check), size: 24),
                   label: Text(
                     _processing
                       ? 'Processing...'
-                      : _requiresIR /* IR flow */
+                      : !_isDeclared ? "🔒 Submit & Reveal Variance" : _requiresIR /* IR flow */
                         ? 'Continue to Incident Report'
                         : 'Submit & End Shift',
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _requiresIR /* IR flow */ ? Colors.red[700] : Colors.green[700],
+                    backgroundColor: !_isDeclared ? Colors.purple[700] : (_requiresIR ? Colors.red[700] : Colors.green[700]),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -567,6 +597,8 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
               width: 70,
               child: TextField(
                 controller: _qtyCtrls[denom],
+                readOnly: _isDeclared,
+                enabled: !_isDeclared,
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -677,6 +709,130 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// 🔄 Re-Declare Cash — Manager PIN + Reason + Audit Log
+  Future<void> _reDeclareWithManagerPin() async {
+    // 1. Verify Manager PIN
+    final managerUsername = await ManagerPinDialog.verify(
+      context,
+      title: "Re-Declare Cash Authorization",
+      actionLabel: "Approve Re-Declare for ${widget.session.cashierName}",
+    );
+    if (managerUsername == null) return;
+    if (!mounted) return;
+
+    // 2. Ask for reason
+    final reasonData = await _showReasonDialog();
+    if (reasonData == null) return;
+    final reason = reasonData['reason'] ?? '';
+    final remarks = reasonData['remarks'] ?? '';
+
+    // 3. Log to incident_reports (audit trail)
+    try {
+      final db = await DatabaseHelper().database;
+      final irId = 'IR-RE-${DateTime.now().millisecondsSinceEpoch}';
+      await db.insert('incident_reports', {
+        'id': irId,
+        'irNumber': irId,
+        'sessionId': widget.session.id,
+        'cashierId': widget.session.cashierId,
+        'cashierName': widget.session.cashierName,
+        'branch': widget.session.branch,
+        'variance': _variance,
+        'varianceType': _variance > 0 ? 'over' : (_variance < 0 ? 'short' : 'balanced'),
+        'reason': 'Re-Declare: $reason',
+        'remarks': remarks,
+        'createdBy': managerUsername,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'status': 'authorized',
+      });
+    } catch (e) {
+      _snack('⚠️ Audit log failed: $e', Colors.orange);
+    }
+
+    // 4. Reset to Phase 1: clear all denominations + unlock
+    setState(() {
+      _isDeclared = false;
+      for (final ctrl in _qtyCtrls.values) {
+        ctrl.text = '';
+      }
+    });
+    _snack('�� Re-Declare authorized by $managerUsername. Please count again.', Colors.blue);
+  }
+
+  /// 📝 Reason dialog for Re-Declare
+  Future<Map<String, String>?> _showReasonDialog() async {
+    String selectedReason = 'Cashier typed wrong quantity';
+    final remarksCtrl = TextEditingController();
+    final reasons = [
+      'Cashier typed wrong quantity',
+      'Drawer counted twice (duplicate)',
+      'Forgot to count coins',
+      'Mixed up beginning float',
+      'Other (specify in remarks)',
+    ];
+
+    return await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.edit_note, color: Colors.orange.shade700, size: 28),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Re-Declare Reason')),
+          ]),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Why is Re-Declare needed?',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                ...reasons.map((r) => RadioListTile<String>(
+                  title: Text(r, style: const TextStyle(fontSize: 13)),
+                  value: r,
+                  groupValue: selectedReason,
+                  onChanged: (v) => setDialogState(() => selectedReason = v ?? selectedReason),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                )),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: remarksCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Additional remarks (optional)',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade700,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, {
+                'reason': selectedReason,
+                'remarks': remarksCtrl.text.trim(),
+              }),
+              child: const Text('Confirm & Re-Declare'),
+            ),
+          ],
+        ),
       ),
     );
   }

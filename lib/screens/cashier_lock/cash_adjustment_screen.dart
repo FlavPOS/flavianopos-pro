@@ -55,7 +55,6 @@ class _CashAdjustmentScreenState extends State<CashAdjustmentScreen> {
   }
 
   double get _newVariance => _newTotal - widget.session.systemExpectedCash;
-  String get _newVarianceType => _newVariance == 0 ? 'balanced' : (_newVariance > 0 ? 'over' : 'short');
 
   Map<double, int> get _denominationsMap {
     final map = <double, int>{};
