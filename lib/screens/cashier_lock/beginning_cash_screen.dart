@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
 import 'package:flutter/services.dart';
+import '../../services/session_validator_service.dart';
+import '../../services/shift_reopen_service.dart';
 import '../../services/cashier_session_service.dart';
 
 class BeginningCashScreen extends StatefulWidget {
@@ -47,6 +49,21 @@ class _BeginningCashScreenState extends State<BeginningCashScreen> {
       await DailyLockService.showCashierLockedDialog(context, action: "open new shift");
       return;
     }
+
+    // 🔒 Layer 4 BIR Session Guard — Block 2nd shift same day (Manager Override allowed)
+    final validation = await SessionValidator.canOpenShift(widget.cashierId);
+    if (!mounted) return;
+
+    if (validation.requiresOverride && validation.existingSession != null) {
+      // Closed session today → require Manager PIN reopen
+      final reopened = await ShiftReopenService.showAlreadyClosedDialog(
+        context: context,
+        existingSession: validation.existingSession!,
+      );
+      if (!reopened) return;  // User cancelled or reopen failed
+      // Reopen approved → continue with new beginning cash encoding
+    }
+
     setState(() => _processing = true);
     try {
       final session = await CashierSessionService.openSession(
