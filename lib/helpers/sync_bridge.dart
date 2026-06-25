@@ -496,6 +496,28 @@ class SyncBridge {
     final branchId = ctx['branchId']!;
     if (companyCode.isEmpty || branchId.isEmpty) return;
 
+    // 💰 Fetch denominations from local SQLite to include in Firebase payload
+    final denomList = <Map<String, dynamic>>[];
+    try {
+      final db2 = await DatabaseHelper().database;
+      final rows = await db2.query(
+        "denomination_records",
+        where: "sessionId = ? AND type = ?",
+        whereArgs: [r.reportId, "ending"],
+        orderBy: "denomination DESC",
+      );
+      for (final dr in rows) {
+        denomList.add({
+          "denomination": (dr["denomination"] as num?)?.toDouble() ?? 0,
+          "quantity": (dr["quantity"] as num?)?.toInt() ?? 0,
+          "total": (dr["total"] as num?)?.toDouble() ?? 0,
+        });
+      }
+      if (kDebugMode) debugPrint("💰 Firebase Z Report: ${denomList.length} denoms attached");
+    } catch (e) {
+      if (kDebugMode) debugPrint("⚠️ Denom fetch for sync failed: $e");
+    }
+
     final payload = {
       'reportId': r.reportId,
       'reportDate': r.reportDate.toIso8601String(),
@@ -524,6 +546,7 @@ class SyncBridge {
       'deviceId': ctx['deviceId'],
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'isDeleted': op == SyncOp.delete,
+      "denominations": denomList,
     };
     final path = 'companies/$companyCode/zReports/$branchId/${r.reportId}';
     await _queue.enqueue(
