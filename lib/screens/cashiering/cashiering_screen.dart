@@ -708,7 +708,13 @@ class _CashieringScreenState extends State<CashieringScreen> {
     );
   }
 
-  void _processPayment() {
+  void _processPayment() async {
+    // 🛡️ EOD LOCK GUARD — paranoid double-check before payment
+    if (await DailyLockService.isLocked()) {
+      if (!mounted) return;
+      await DailyLockService.showCashierLockedDialog(context, action: "process payment");
+      return;
+    }
     if (_cart.isEmpty) { _showSnackBar('Cart is empty!'); return; }
     showDialog(
       context: context, barrierDismissible: false,
@@ -827,6 +833,25 @@ class _CashieringScreenState extends State<CashieringScreen> {
       content: Text(message), behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       duration: const Duration(seconds: 2)));
+  }
+
+
+  // ═════════════════════════════════════════════════════════════
+  // 🛡️ EOD LOCK GUARD — block cashiering after Z Report
+  // ═════════════════════════════════════════════════════════════
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (await DailyLockService.isLocked()) {
+        if (!mounted) return;
+        await DailyLockService.showCashierLockedDialog(
+          context, action: 'process transactions',
+        );
+        if (mounted) Navigator.of(context).pop();
+      }
+    });
   }
 
   @override

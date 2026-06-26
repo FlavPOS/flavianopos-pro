@@ -50,7 +50,26 @@ class _ZReportScreenState extends State<ZReportScreen> {
   @override
   void initState() {
     super.initState();
-    _checkZReportLock();
+    // 🛡️ ACTIVE SESSION FIRST GUARD — must run BEFORE Cash Declaration popup
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final validation = await SessionValidator.canGenerateZReport();
+      if (!mounted) return;
+      if (!validation.allowed && validation.activeSessions.isNotEmpty) {
+        final result = await _showActiveSessionsBlockedDialog(validation.activeSessions);
+        if (!mounted) return;
+        if (result == 'history') {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => ZReportHistoryScreen(branch: widget.branch)),
+          );
+        } else {
+          Navigator.of(context).pop();
+        }
+        return; // 🚫 STOP — do NOT show Cash Declaration dialog
+      }
+      // ✅ No active sessions → safe to proceed with lock check + cash declaration
+      if (mounted) await _checkZReportLock();
+    });
     // Initialize denomination controllers
     for (final d in DenominationRecord.phDenominations) {
       _denomCtrls[d] = TextEditingController();
@@ -578,7 +597,6 @@ class _ZReportScreenState extends State<ZReportScreen> {
 
     // 🔒 BIR persistence — restore cash declared state from database
     final wasDeclared = await DailyLockService.isCashDeclared();
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("wasDeclared=$wasDeclared"), backgroundColor: wasDeclared ? Colors.green : Colors.red, duration: const Duration(seconds: 6)));
     if (wasDeclared && mounted) {
       // 💰 Load previously declared denominations back into controllers
       final savedDenoms = await DailyLockService.getCashDeclaredDenominations();
@@ -1359,8 +1377,8 @@ class _ZReportScreenState extends State<ZReportScreen> {
   }
 
   /// 🔒 Show beautiful dialog listing active cashier sessions blocking Z Report
-  Future<void> _showActiveSessionsBlockedDialog(List<CashierSession> activeSessions) async {
-    await showDialog<void>(
+  Future<String?> _showActiveSessionsBlockedDialog(List<CashierSession> activeSessions) async {
+    return await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -1453,6 +1471,12 @@ class _ZReportScreenState extends State<ZReportScreen> {
           ),
         ),
         actions: [
+          // 📚 VIEW HISTORY FROM BLOCKED DIALOG — let user view past Z Reports
+          TextButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'history'),
+            icon: Icon(Icons.history, color: Colors.purple[700]),
+            label: Text('View History', style: TextStyle(color: Colors.purple[700], fontWeight: FontWeight.w600)),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx),
             style: ElevatedButton.styleFrom(

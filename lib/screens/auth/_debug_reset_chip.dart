@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../helpers/database_helper.dart';
@@ -60,6 +59,7 @@ class DebugResetChip extends StatelessWidget {
         'delivery_items','discount_records','discount_items','expenses',
         'expense_categories','expense_sub_categories','cashier_sessions',
         'denomination_records','incident_reports','z_reports','exchanges',
+        'business_day_state','audit_log',
       ];
       for (final t in tables) {
         try { await db.delete(t); } catch (_) {}
@@ -129,6 +129,7 @@ class DebugResetChip extends StatelessWidget {
         'delivery_items','discount_records','discount_items','expenses',
         'expense_categories','expense_sub_categories','cashier_sessions',
         'denomination_records','incident_reports','z_reports','exchanges',
+        'business_day_state','audit_log',
       ];
       for (final t in tables) {
         try { await db.delete(t); } catch (_) {}
@@ -148,7 +149,7 @@ class DebugResetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) return const SizedBox.shrink();
+    if (!const bool.fromEnvironment("ENABLE_DEBUG_TOOLS", defaultValue: false)) return const SizedBox.shrink();
     return PopupMenuButton<String>(
       icon: const Icon(Icons.build, color: Colors.red, size: 18),
       tooltip: 'Debug Tools',

@@ -56,6 +56,13 @@ class DatabaseHelper {
       await db.execute('''CREATE TABLE IF NOT EXISTS incident_reports (id TEXT PRIMARY KEY, irNumber TEXT UNIQUE, sessionId TEXT NOT NULL, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', branch TEXT DEFAULT '', variance REAL DEFAULT 0, varianceType TEXT DEFAULT '', reason TEXT DEFAULT '', remarks TEXT DEFAULT '', attachmentPath TEXT DEFAULT '', createdBy TEXT DEFAULT '', createdAt TEXT NOT NULL, approvedBy TEXT DEFAULT '', approvedAt TEXT, status TEXT DEFAULT 'pending')''');
     } catch (_) {}
 
+
+    // 🛡️ Business Day State (BULLETPROOF safety net for fresh installs)
+    try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS business_day_state (branchId TEXT PRIMARY KEY, status TEXT DEFAULT 'open', lockedAt TEXT DEFAULT '', lockedByZReportId TEXT DEFAULT '', unlockedAt TEXT DEFAULT '', unlockedBy TEXT DEFAULT '', unlockReason TEXT DEFAULT '', cashDeclared INTEGER DEFAULT 0, cashDeclaredAt TEXT DEFAULT '', updatedAt TEXT DEFAULT '')''');
+    } catch (_) {}
+    try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclared INTEGER DEFAULT 0"); } catch (_) {}
+    try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclaredAt TEXT DEFAULT ''"); } catch (_) {}
     try {
       await db.execute('''CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, allTransactionsJson TEXT DEFAULT '')''');
     try { await db.execute("ALTER TABLE z_reports ADD COLUMN refundedTransactionsJson TEXT DEFAULT ''"); } catch (_) {}
