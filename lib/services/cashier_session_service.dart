@@ -1,5 +1,6 @@
 // lib/services/cashier_session_service.dart
 import '../models/sync_queue_model.dart';
+import 'package:flutter/foundation.dart';
 import '../helpers/sync_bridge.dart';
 
 import '../helpers/database_helper.dart';
@@ -175,6 +176,38 @@ class CashierSessionService {
       'adjustmentReason': reason,
       'wasAdjusted': 1,
     });
+
+    // RE-DECLARE FIREBASE SYNC — push updated session + IR to cloud
+    try {
+      final sessionRow = await DatabaseHelper().getSessionById(sessionId);
+      if (sessionRow != null) {
+        final updatedSession = CashierSession.fromMap(sessionRow);
+        await SyncBridge.enqueueCashierSession(updatedSession, op: SyncOp.update);
+        if (kDebugMode) debugPrint("Re-Declare synced session to Firebase: $sessionId");
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint("Re-Declare session sync failed: $e");
+    }
+
+    // Also update related IR if exists (variance changed)
+    try {
+      final irRow = await DatabaseHelper().getIncidentReportBySession(sessionId);
+      if (irRow != null) {
+        final updatedIRMap = Map<String, dynamic>.from(irRow);
+        updatedIRMap['variance'] = newVariance;
+        updatedIRMap['varianceType'] = newVarianceType;
+        final existingRemarks = (updatedIRMap['remarks'] ?? '').toString();
+        updatedIRMap['remarks'] = existingRemarks.isEmpty
+            ? "Re-Declared by $adjustedBy: $reason"
+            : "$existingRemarks\n[Re-Declared by $adjustedBy: $reason]";
+        await DatabaseHelper().insertIncidentReport(updatedIRMap);
+        final updatedIR = IncidentReport.fromMap(updatedIRMap);
+        await SyncBridge.enqueueIncidentReport(updatedIR, op: SyncOp.update);
+        if (kDebugMode) debugPrint("Re-Declare synced IR to Firebase: ${updatedIR.id}");
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint("Re-Declare IR sync failed: $e");
+    }
   }
 
   /// Get ALL active (open) sessions across all cashiers

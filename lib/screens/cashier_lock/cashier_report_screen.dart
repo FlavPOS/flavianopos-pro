@@ -63,7 +63,16 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
       }
       for (final r in cloudRows) {
         final id = (r['id'] ?? '').toString();
-        if (id.isNotEmpty) merged[id] = r; // overrides local if same ID
+        // NEWER WINS BY TIMESTAMP — fixes Re-Declare race condition
+        final existing = merged[id];
+        if (existing == null) {
+          merged[id] = r;
+        } else {
+          final existingTime = (existing["updatedAt"] ?? existing["adjustedAt"] ?? "").toString();
+          final newTime = (r["updatedAt"] ?? r["adjustedAt"] ?? "").toString();
+          if (newTime.compareTo(existingTime) >= 0) merged[id] = r;
+          else merged[id] = existing;
+        }
       }
       
       final allRows = merged.values.toList();
