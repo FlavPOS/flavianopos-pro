@@ -510,35 +510,106 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
               ),
             ],
 
-            // IR (if any)
+            // EXPANDED IR DETAILS (when session has variance)
             if (ir != null) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red[200]!),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red[300]!, width: 1.5),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.warning, color: Colors.red[700], size: 16),
-                        const SizedBox(width: 6),
-                        Text('🚨 IR: ${ir.irNumber}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800])),
+                        Icon(Icons.warning_amber_rounded, color: Colors.red[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "INCIDENT REPORT",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red[800], letterSpacing: 0.5),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: ir.status == "approved" ? Colors.green[100] : (ir.status == "rejected" ? Colors.grey[300] : Colors.orange[100]),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: ir.status == "approved" ? Colors.green[400]! : (ir.status == "rejected" ? Colors.grey[500]! : Colors.orange[400]!)),
+                          ),
+                          child: Text(
+                            ir.status.toUpperCase(),
+                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: ir.status == "approved" ? Colors.green[800] : (ir.status == "rejected" ? Colors.grey[700] : Colors.orange[800])),
+                          ),
+                        ),
                       ],
                     ),
+                    const Divider(height: 16, thickness: 1),
+                    Row(children: [
+                      Icon(Icons.confirmation_number_outlined, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Text("IR No: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      Text(ir.irNumber, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    ]),
                     const SizedBox(height: 6),
-                    Text('Reason: ${ir.reason}', style: const TextStyle(fontSize: 11)),
-                    const SizedBox(height: 4),
-                    Text('Remarks: ${ir.remarks}', style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic)),
+                    Row(children: [
+                      Icon(Icons.attach_money, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Text("Variance: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      Text(
+                        "PHP ${ir.variance.abs().toStringAsFixed(2)} ${ir.varianceType.toUpperCase()}",
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: ir.varianceType == "over" ? Colors.blue[700] : Colors.red[700]),
+                      ),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Icon(Icons.notes, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Text("Reason: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      Expanded(child: Text(ir.reason.isEmpty ? "Not specified" : ir.reason, style: const TextStyle(fontSize: 11))),
+                    ]),
+                    if (ir.remarks.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Icon(Icons.comment_outlined, size: 14, color: Colors.red[700]),
+                        const SizedBox(width: 6),
+                        Text("Remarks: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                        Expanded(child: Text(ir.remarks, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic))),
+                      ]),
+                    ],
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Icon(Icons.person_outline, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Text("Filed by: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      Text(ir.createdBy.isEmpty ? "Unknown" : ir.createdBy, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Icon(Icons.access_time, size: 14, color: Colors.red[700]),
+                      const SizedBox(width: 6),
+                      Text("Created: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      Text(
+                        "${ir.createdAt.month}/${ir.createdAt.day}/${ir.createdAt.year} ${ir.createdAt.hour.toString().padLeft(2, "0")}:${ir.createdAt.minute.toString().padLeft(2, "0")}",
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ]),
+                    if (ir.approvedBy.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Icon(Icons.verified_user_outlined, size: 14, color: Colors.green[700]),
+                        const SizedBox(width: 6),
+                        Text("Approved by: ", style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                        Text(ir.approvedBy, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.green[800])),
+                      ]),
+                    ],
                   ],
                 ),
               ),
             ],
-
             // Re-Print Voucher Button
             const SizedBox(height: 12),
             SizedBox(
