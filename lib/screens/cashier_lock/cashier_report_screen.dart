@@ -7,6 +7,7 @@ import '../../models/incident_report_model.dart';
 import '../../models/denomination_model.dart';
 import '../../helpers/database_helper.dart';
 import '../../utils/cash_variance_voucher_pdf.dart';
+import '../../helpers/sync_bridge.dart';
 import 'cash_adjustment_screen.dart';
 
 class CashierReportScreen extends StatefulWidget {
@@ -40,7 +41,35 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     setState(() => _loading = true);
     try {
       // Get all closed sessions
-      final allRows = await DatabaseHelper().getAllSessions(status: 'closed');
+      // ═══════════════════ MERGED LOCAL + CLOUD SESSIONS ═══════════════════
+      // ✅ Phase 1: Local first (instant, works offline)
+      final localRows = await DatabaseHelper().getAllSessions(status: 'closed');
+      
+      // ✅ Phase 2: Cloud (non-blocking, only if online)
+      List<Map<String, dynamic>> cloudRows = [];
+      try {
+        final cloudData = await SyncBridge.readCashierSessionsFromFirebase();
+        // Filter only closed sessions from cloud
+        cloudRows = cloudData.where((m) => (m['status'] ?? '') == 'closed').toList();
+      } catch (e) {
+        debugPrint('⚠️ Cloud read skipped (offline?): $e');
+      }
+      
+      // ✅ Phase 3: Merge by ID (cloud wins on duplicate - source of truth)
+      final Map<String, Map<String, dynamic>> merged = {};
+      for (final r in localRows) {
+        final id = (r['id'] ?? '').toString();
+        if (id.isNotEmpty) merged[id] = r;
+      }
+      for (final r in cloudRows) {
+        final id = (r['id'] ?? '').toString();
+        if (id.isNotEmpty) merged[id] = r; // overrides local if same ID
+      }
+      
+      final allRows = merged.values.toList();
+      // Sort by openedAt descending (newest first)
+      allRows.sort((a, b) => (b['openedAt'] ?? '').toString().compareTo((a['openedAt'] ?? '').toString()));
+      debugPrint('📊 Merged sessions: ${localRows.length} local + ${cloudRows.length} cloud = ${allRows.length} unique');
       List<CashierSession> sessions = allRows.map((r) => CashierSession.fromMap(r)).toList();
 
       // Filter by period
@@ -81,14 +110,41 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
       sessions.sort((a, b) => (b.closedAt ?? DateTime.now()).compareTo(a.closedAt ?? DateTime.now()));
 
       // Load IRs for each session
+
+      // MERGED IR LOCAL + CLOUD
+      final localIRRows = await DatabaseHelper().getAllIncidentReports();
+      List<Map<String, dynamic>> cloudIRRows = [];
+      try {
+        cloudIRRows = await SyncBridge.readIncidentReportsFromFirebase();
+      } catch (e) {
+        debugPrint("Cloud IR read skipped: $e");
+      }
+      final Map<String, Map<String, dynamic>> mergedIRsByIRId = {};
+      for (final r in localIRRows) {
+        final id = (r["id"] ?? "").toString();
+        if (id.isNotEmpty) mergedIRsByIRId[id] = r;
+      }
+      for (final r in cloudIRRows) {
+        final id = (r["id"] ?? "").toString();
+        if (id.isNotEmpty) mergedIRsByIRId[id] = r;
+      }
+      final Map<String, IncidentReport?> preloadedIRMap = {};
+      for (final r in mergedIRsByIRId.values) {
+        final sessionId = (r["sessionId"] ?? "").toString();
+        if (sessionId.isNotEmpty) {
+          try {
+            preloadedIRMap[sessionId] = IncidentReport.fromMap(r);
+          } catch (e) {
+            debugPrint("Skipped malformed IR: $e");
+          }
+        }
+      }
+      debugPrint("Merged IRs total: ${preloadedIRMap.length}");
       Map<String, IncidentReport?> irMap = {};
       Map<String, List<DenominationRecord>> denomMap = {};
 
       for (final s in sessions) {
-        final irRow = await DatabaseHelper().getIncidentReportBySession(s.id);
-        if (irRow != null) {
-          irMap[s.id] = IncidentReport.fromMap(irRow);
-        }
+        irMap[s.id] = preloadedIRMap[s.id]; // O(1) lookup (was DB query per session)
 
         // Load ending denominations
         final denomRows = await DatabaseHelper().getDenominationsBySession(s.id, type: 'ending');

@@ -624,6 +624,52 @@ class SyncBridge {
     _fireAndForget(() => _uploadIncidentReportToFirebase(companyCode, branchId, ir.id, payload));
   }
 
+
+  // ═══════════════════ READ INCIDENT REPORTS FROM FIREBASE ═══════════════════
+  // ✅ NEW METHOD — Read incident reports from Firebase (used by Cashier Report)
+  // BIR-safe: skips records with isDeleted = true
+  static Future<List<Map<String, dynamic>>> readIncidentReportsFromFirebase() async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return [];
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return [];
+
+      final ctx = await _context();
+      final companyCode = ctx['companyCode']!;
+      final branchId = ctx['branchId']!;
+      if (companyCode.isEmpty || branchId.isEmpty) return [];
+
+      final snap = await db
+          .ref('companies/$companyCode/incidentReports/$branchId')
+          .get()
+          .timeout(const Duration(seconds: 10));
+
+      if (!snap.exists) return [];
+
+      final List<Map<String, dynamic>> irs = [];
+      for (final child in snap.children) {
+        try {
+          final raw = child.value as Map<dynamic, dynamic>;
+          final map = raw.map((k, v) => MapEntry(k.toString(), v));
+          // ✅ BIR-safe soft delete
+          if (map['isDeleted'] == true) continue;
+          irs.add(map);
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Skipped malformed IR: $e');
+        }
+      }
+      if (kDebugMode) debugPrint('☁️ Read ${irs.length} incident reports from Firebase');
+      return irs;
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Read Firebase incident reports failed: $e');
+      return [];
+    }
+  }
+
   static Future<void> _uploadIncidentReportToFirebase(
       String companyCode, String branchId, String irId,
       Map<String, dynamic> payload) async {
@@ -716,6 +762,52 @@ class SyncBridge {
       priority: SyncPriority.p4Transactional,
     );
     _fireAndForget(() => _uploadCashierSessionToFirebase(companyCode, branchId, s.id, payload));
+  }
+
+
+  // ═══════════════════ READ CASHIER SESSIONS FROM FIREBASE ═══════════════════
+  // ✅ NEW METHOD — Read sessions from Firebase (used by Cashier Report)
+  // BIR-safe: skips records with isDeleted = true (soft delete pattern)
+  static Future<List<Map<String, dynamic>>> readCashierSessionsFromFirebase() async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return [];
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return [];
+
+      final ctx = await _context();
+      final companyCode = ctx['companyCode']!;
+      final branchId = ctx['branchId']!;
+      if (companyCode.isEmpty || branchId.isEmpty) return [];
+
+      final snap = await db
+          .ref('companies/$companyCode/cashierSessions/$branchId')
+          .get()
+          .timeout(const Duration(seconds: 10));
+
+      if (!snap.exists) return [];
+
+      final List<Map<String, dynamic>> sessions = [];
+      for (final child in snap.children) {
+        try {
+          final raw = child.value as Map<dynamic, dynamic>;
+          final map = raw.map((k, v) => MapEntry(k.toString(), v));
+          // ✅ BIR-safe soft delete: skip records marked as deleted
+          if (map['isDeleted'] == true) continue;
+          sessions.add(map);
+        } catch (e) {
+          if (kDebugMode) debugPrint('⚠️ Skipped malformed session: $e');
+        }
+      }
+      if (kDebugMode) debugPrint('☁️ Read ${sessions.length} sessions from Firebase');
+      return sessions;
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ Read Firebase sessions failed: $e');
+      return [];
+    }
   }
 
   static Future<void> _uploadCashierSessionToFirebase(
