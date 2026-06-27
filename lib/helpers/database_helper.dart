@@ -39,6 +39,25 @@ class DatabaseHelper {
   // ═══════════════════════════════════════════════════════════════════════════
   Future<void> _ensureAllTables(Database db) async {
     // Store Profile table
+    // ALWAYS RUN USER COLUMN MIGRATIONS - runs on EVERY DB open
+    // try/catch makes them idempotent (safe if column already exists)
+    // This fixes existing devices where onUpgrade was skipped
+    try { await db.execute("ALTER TABLE users ADD COLUMN allowPosTransaction INTEGER DEFAULT 0"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN isDeleted INTEGER DEFAULT 0"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN updatedAt TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN deletedAt TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN deletedBy TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN deletedReason TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN syncStatus TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN lastModifiedAt TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN lastSyncedAt TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN firebaseId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN firebasePath TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN companyId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN branchId_sync TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN deviceId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN createdBy_sync TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE users ADD COLUMN updatedBy_sync TEXT DEFAULT ''"); } catch (_) {}
     try {
       await db.execute('CREATE TABLE IF NOT EXISTS store_profile (id INTEGER PRIMARY KEY, storeName TEXT DEFAULT "", branch TEXT DEFAULT "", businessType TEXT DEFAULT "Retail Store", owner TEXT DEFAULT "", address TEXT DEFAULT "", phone TEXT DEFAULT "", email TEXT DEFAULT "", tin TEXT DEFAULT "", logoPath TEXT DEFAULT "", receiptHeader TEXT DEFAULT "", receiptFooter TEXT DEFAULT "Thank you for shopping!", vatRegistered INTEGER DEFAULT 0, updatedAt TEXT)');
     } catch (_) {}

@@ -128,7 +128,22 @@ class _JoinExistingBranchScreenState extends State<JoinExistingBranchScreen> {
       permissions: perms,
     );
 
-    AppUser.addUser(newUser);
+    // DIRECT INSERT JOIN BRANCH - bypass silent error swallowing
+    try {
+      final newId = await DatabaseHelper().insertUser(newUser.toMap());
+      debugPrint('JOIN BRANCH: insertUser returned $newId for ${newUser.username}');
+      AppUser.allUsers.insert(0, newUser);
+    } catch (e) {
+      debugPrint('JOIN BRANCH CRITICAL: insertUser failed: $e');
+      if (mounted) {
+        await showDialog(context: context, builder: (ctx) => AlertDialog(
+          title: const Text('Save Error!'),
+          content: Text('Failed to save user locally:\n\n$e'),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ));
+      }
+      rethrow;
+    }
     // Give a moment for async insertUser to flush
     await Future.delayed(const Duration(milliseconds: 50));
   }
