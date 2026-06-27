@@ -1,6 +1,7 @@
 // lib/services/cashier_session_service.dart
 import '../models/sync_queue_model.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers/sync_bridge.dart';
 
 import '../helpers/database_helper.dart';
@@ -179,6 +180,20 @@ class CashierSessionService {
 
     // RE-DECLARE FIREBASE SYNC — push updated session + IR to cloud
     try {
+    
+    // DEBUG SYNC TRACE — verify setup mode + Firebase config
+    try {
+      final prefs2 = await SharedPreferences.getInstance();
+      final mode = prefs2.getString("setupMode") ?? "NULL";
+      final hasFbCfg = prefs2.getString("firebaseConfigJson") != null;
+      debugPrint("=== RE-DECLARE SYNC TRACE ===");
+      debugPrint("setupMode = $mode");
+      debugPrint("hasFirebaseConfig = $hasFbCfg");
+      debugPrint("sessionId = $sessionId");
+      debugPrint("============================");
+    } catch (e) {
+      debugPrint("Debug trace error: $e");
+    }
       final sessionRow = await DatabaseHelper().getSessionById(sessionId);
       if (sessionRow != null) {
         final updatedSession = CashierSession.fromMap(sessionRow);

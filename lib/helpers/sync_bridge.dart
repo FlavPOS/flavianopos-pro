@@ -582,7 +582,9 @@ class SyncBridge {
 
   // ═══════════════════ INCIDENT REPORTS (variance audit) ═══════════════════
   static Future<void> enqueueIncidentReport(IncidentReport ir, {required String op}) async {
-    if (!await _isMultiple()) return;
+    // BYPASS MODE CHECK FOR SYNC — sync if Firebase config exists
+    final _fbCfg = await _cfgSvc.load();
+    if (_fbCfg == null) return;
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
     final branchId = ctx['branchId']!;
@@ -691,7 +693,9 @@ class SyncBridge {
 
   // ═══════════════════ CASHIER SESSIONS (shift records) ═══════════════════
   static Future<void> enqueueCashierSession(CashierSession s, {required String op}) async {
-    if (!await _isMultiple()) return;
+    // BYPASS MODE CHECK FOR SYNC — sync if Firebase config exists
+    final _fbCfg = await _cfgSvc.load();
+    if (_fbCfg == null) return;
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
     final branchId = ctx['branchId']!;
