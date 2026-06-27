@@ -328,13 +328,28 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
       for (final s in _sessions) {
         final ir = _irMap[s.id];
         
-        // Get denominations
-        final denomRows = await DatabaseHelper().getDenominationsBySession(s.id, type: "ending");
-        final denomStr = denomRows.map((r) {
+        // EXCEL CLOUD DENOMS FALLBACK — try local first, then cloud session payload
+        var denomRows = await DatabaseHelper().getDenominationsBySession(s.id, type: "ending");
+        var denomStr = denomRows.map((r) {
           final d = (r["denomination"] as num?)?.toDouble() ?? 0;
           final q = r["quantity"] ?? 0;
           return "PHP " + d.toStringAsFixed(2) + " x " + q.toString();
         }).join(", ");
+        // If empty, try to find from cloud session payload (already in _sessions if loaded from cloud)
+        if (denomStr.isEmpty) {
+          try {
+            final cloudData = await SyncBridge.readCashierSessionsFromFirebase();
+            final cloudSession = cloudData.firstWhere((m) => (m["id"] ?? "").toString() == s.id, orElse: () => {});
+            final cloudDenoms = cloudSession["denominations"];
+            if (cloudDenoms is List) {
+              denomStr = cloudDenoms.map((d) {
+                final den = (d["denomination"] as num?)?.toDouble() ?? 0;
+                final qty = d["quantity"] ?? 0;
+                return "PHP " + den.toStringAsFixed(2) + " x " + qty.toString();
+              }).join(", ");
+            }
+          } catch (e) { debugPrint("Cloud denom fetch failed: $e"); }
+        }
         
         // Format dates
         final openedStr = "" +
