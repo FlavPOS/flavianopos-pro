@@ -105,12 +105,129 @@ class _UsersScreenState extends State<UsersScreen> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
         ElevatedButton(onPressed: () {
-          setState(() { AppUser.deleteUser(user.id); });
+          _softDeleteWithReason(user); return;
           Navigator.pop(ctx);
           _showSnackBar('${user.name} deleted', color: Colors.red);
         }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
           child: const Text('Delete')),
       ]));
+  }
+
+
+  // PHASE 2: SOFT DELETE WITH REASON DIALOG (BIR-audit safe)
+  void _softDeleteWithReason(AppUser user) async {
+    Navigator.of(context).pop(); // Close the original confirm dialog
+    
+    final reasonOptions = [
+      "Resigned",
+      "Terminated",
+      "Transferred to another branch",
+      "Duplicate account",
+      "Other",
+    ];
+    String selectedReason = reasonOptions.first;
+    final notesCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange[700]),
+            const SizedBox(width: 8),
+            const Expanded(child: Text("Delete User?", style: TextStyle(fontSize: 16))),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  border: Border.all(color: Colors.orange[200]!),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text("Deleting: ${user.name}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text("Role: ${user.role}", style: const TextStyle(fontSize: 12)),
+                  Text("Branch: ${user.branch}", style: const TextStyle(fontSize: 12)),
+                ]),
+              ),
+              const SizedBox(height: 14),
+              const Text("Reason for deletion:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
+                child: DropdownButton<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  items: reasonOptions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  onChanged: (v) { if (v != null) setLocal(() => selectedReason = v); },
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text("Notes (optional):", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: notesCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: "Additional details for audit",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.all(10),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(6)),
+                child: Row(children: [
+                  Icon(Icons.info_outline, size: 16, color: Colors.blue[700]),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(
+                    "BIR-safe: User hidden from UI but kept in DB for audit",
+                    style: TextStyle(fontSize: 10, color: Colors.blue[800], fontStyle: FontStyle.italic),
+                  )),
+                ]),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text("Soft Delete"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final notes = notesCtrl.text.trim();
+    final fullReason = notes.isEmpty ? selectedReason : "$selectedReason - $notes";
+
+    try {
+      await DatabaseHelper().softDeleteUser(
+        user.id,
+        deletedBy: "Admin",
+        reason: fullReason,
+      );
+      final rows = await DatabaseHelper().getAllUsers();
+      AppUser.allUsers.clear();
+      AppUser.allUsers.addAll(rows.map((r) => AppUser.fromMap(r)));
+      if (mounted) {
+        setState(() {});
+        _showSnackBar("${user.name} deleted (audit-safe)", color: Colors.orange);
+      }
+    } catch (e) {
+      if (mounted) _showSnackBar("Delete failed: $e", color: Colors.red);
+    }
   }
 
   void _exportExcel() {

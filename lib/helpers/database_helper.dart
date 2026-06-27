@@ -778,8 +778,44 @@ class DatabaseHelper {
 
   Future<int> insertUser(Map<String, dynamic> u) async { final db = await database; return await db.insert('users', u, conflictAlgorithm: ConflictAlgorithm.replace); }
   Future<int> updateUser(String id, Map<String, dynamic> u) async { final db = await database; return await db.update('users', u, where: 'id = ?', whereArgs: [id]); }
+  /// PHASE 2: Soft delete user (BIR-safe audit pattern)
+  /// Sets isDeleted=1, captures who/when/why
+  /// User remains in DB for audit, hidden from UI
+  Future<int> softDeleteUser(String id, {required String deletedBy, required String reason}) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    return await db.update('users', {
+      'isDeleted': 1,
+      'deletedAt': now,
+      'deletedBy': deletedBy,
+      'deletedReason': reason,
+      'updatedAt': now,
+      'isActive': 0,
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// PHASE 2: Restore soft-deleted user (Admin only)
+  Future<int> restoreUser(String id, {required String restoredBy}) async {
+    final db = await database;
+    final now = DateTime.now().toUtc().toIso8601String();
+    return await db.update('users', {
+      'isDeleted': 0,
+      'deletedAt': '',
+      'deletedBy': '',
+      'deletedReason': '',
+      'updatedAt': now,
+      'isActive': 1,
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// PHASE 2: Get soft-deleted users (for Admin restore view)
+  Future<List<Map<String, dynamic>>> getDeletedUsers() async {
+    final db = await database;
+    return await db.query('users', where: 'isDeleted = ?', whereArgs: [1], orderBy: 'deletedAt DESC');
+  }
+
   Future<int> deleteUser(String id) async { final db = await database; return await db.delete('users', where: 'id = ?', whereArgs: [id]); }
-  Future<List<Map<String, dynamic>>> getAllUsers() async { final db = await database; return await db.query('users', orderBy: 'fullName ASC'); }
+  Future<List<Map<String, dynamic>>> getAllUsers() async { final db = await database; return await db.query('users', where: 'isDeleted = ? OR isDeleted IS NULL', whereArgs: [0], orderBy: 'fullName ASC'); }
   Future<Map<String, dynamic>?> getUserById(String id) async { final db = await database; final r = await db.query('users', where: 'id = ?', whereArgs: [id]); return r.isNotEmpty ? r.first : null; }
   Future<Map<String, dynamic>?> authenticateUser(String username, String password) async { final db = await database; final r = await db.query('users', where: 'username = ? AND password = ? AND isActive = 1', whereArgs: [username, password]); return r.isNotEmpty ? r.first : null; }
   Future<void> bulkInsertUsers(List<Map<String, dynamic>> users) async { final db = await database; final b = db.batch(); for (final u in users) { b.insert('users', u, conflictAlgorithm: ConflictAlgorithm.replace); } await b.commit(noResult: true); }
