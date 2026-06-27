@@ -256,7 +256,7 @@ class _CashAdjustmentScreenState extends State<CashAdjustmentScreen> {
               Text('₱${_newTotal.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[700])),
             ]),
             const Divider(),
-            ..._buildDenomRows([1000, 500, 200, 100, 50, 20, 10, 5, 1]),
+            ..._buildDenomRows(DenominationRecord.phDenominations),
           ]),
         ),
         const SizedBox(height: 16),
