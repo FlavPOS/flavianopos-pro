@@ -2,6 +2,12 @@
 // Cashier Report — View all shifts with full details
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+import 'dart:io';
+import 'package:excel/excel.dart' hide Border;
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../models/cashier_session_model.dart';
 import '../../models/incident_report_model.dart';
 import '../../models/denomination_model.dart';
@@ -264,6 +270,159 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     }
   }
 
+
+  // EXPORT ALL EXCEL CASHIER — flat table of all cashier sessions
+  Future<void> _exportAllExcel() async {
+    try {
+      if (_sessions.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No sessions to export")));
+        return;
+      }
+      
+      final excel = Excel.createExcel();
+      final sheet = excel["Cashier Report"];
+      excel.setDefaultSheet("Cashier Report");
+      excel.delete("Sheet1");
+      
+      // Header Row
+      sheet.appendRow([
+        TextCellValue("Shift ID"),
+        TextCellValue("Cashier"),
+        TextCellValue("Branch"),
+        TextCellValue("Opened At"),
+        TextCellValue("Closed At"),
+        TextCellValue("Status"),
+        TextCellValue("Beginning Cash"),
+        TextCellValue("Cash Sales"),
+        TextCellValue("GCash Sales"),
+        TextCellValue("Maya Sales"),
+        TextCellValue("Card Sales"),
+        TextCellValue("Other Sales"),
+        TextCellValue("Total Refunds"),
+        TextCellValue("Total Voids"),
+        TextCellValue("Total Discounts"),
+        TextCellValue("Total Exchanges"),
+        TextCellValue("Transaction Count"),
+        TextCellValue("System Expected"),
+        TextCellValue("Ending Declared"),
+        TextCellValue("Variance"),
+        TextCellValue("Variance Type"),
+        TextCellValue("Was Adjusted"),
+        TextCellValue("Original Declared"),
+        TextCellValue("Original Variance"),
+        TextCellValue("Adjusted By"),
+        TextCellValue("Adjusted At"),
+        TextCellValue("Adjustment Reason"),
+        TextCellValue("IR Number"),
+        TextCellValue("IR Status"),
+        TextCellValue("IR Reason"),
+        TextCellValue("IR Remarks"),
+        TextCellValue("IR Filed By"),
+        TextCellValue("IR Created At"),
+        TextCellValue("IR Approved By"),
+        TextCellValue("Denominations"),
+      ]);
+      
+      // Data Rows
+      for (final s in _sessions) {
+        final ir = _irMap[s.id];
+        
+        // Get denominations
+        final denomRows = await DatabaseHelper().getDenominationsBySession(s.id, type: "ending");
+        final denomStr = denomRows.map((r) {
+          final d = (r["denomination"] as num?)?.toDouble() ?? 0;
+          final q = r["quantity"] ?? 0;
+          return "PHP " + d.toStringAsFixed(2) + " x " + q.toString();
+        }).join(", ");
+        
+        // Format dates
+        final openedStr = "" +
+          s.openedAt.year.toString() + "-" +
+          s.openedAt.month.toString().padLeft(2, "0") + "-" +
+          s.openedAt.day.toString().padLeft(2, "0") + " " +
+          s.openedAt.hour.toString().padLeft(2, "0") + ":" +
+          s.openedAt.minute.toString().padLeft(2, "0");
+        
+        final closedStr = s.closedAt == null ? "" :
+          s.closedAt!.year.toString() + "-" +
+          s.closedAt!.month.toString().padLeft(2, "0") + "-" +
+          s.closedAt!.day.toString().padLeft(2, "0") + " " +
+          s.closedAt!.hour.toString().padLeft(2, "0") + ":" +
+          s.closedAt!.minute.toString().padLeft(2, "0");
+        
+        sheet.appendRow([
+          TextCellValue(s.shiftId),
+          TextCellValue(s.cashierName),
+          TextCellValue(s.branch),
+          TextCellValue(openedStr),
+          TextCellValue(closedStr),
+          TextCellValue(s.status),
+          DoubleCellValue(s.beginningCash),
+          DoubleCellValue(s.cashSales),
+          DoubleCellValue(s.gcashSales),
+          DoubleCellValue(s.mayaSales),
+          DoubleCellValue(s.cardSales),
+          DoubleCellValue(s.otherSales),
+          DoubleCellValue(s.totalRefunds),
+          DoubleCellValue(s.totalVoids),
+          DoubleCellValue(s.totalDiscounts),
+          DoubleCellValue(s.totalExchanges),
+          IntCellValue(s.transactionCount),
+          DoubleCellValue(s.systemExpectedCash),
+          DoubleCellValue(s.endingCashDeclared),
+          DoubleCellValue(s.variance),
+          TextCellValue(s.varianceType),
+          TextCellValue(""), // wasAdjusted - field may not be in model
+          TextCellValue(""), // originalDeclared
+          TextCellValue(""), // originalVariance
+          TextCellValue(""), // adjustedBy
+          TextCellValue(""), // adjustedAt
+          TextCellValue(""), // adjustmentReason
+          TextCellValue(ir?.irNumber ?? ""),
+          TextCellValue(ir?.status ?? ""),
+          TextCellValue(ir?.reason ?? ""),
+          TextCellValue(ir?.remarks ?? ""),
+          TextCellValue(ir?.createdBy ?? ""),
+          TextCellValue(ir == null ? "" : ir.createdAt.toIso8601String()),
+          TextCellValue(ir?.approvedBy ?? ""),
+          TextCellValue(denomStr),
+        ]);
+      }
+      
+      final bytes = excel.encode();
+      if (bytes == null) return;
+      
+      final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final filename = "CashierReport_" + timestamp + ".xlsx";
+      
+      // Web + Mobile compatible export
+      if (kIsWeb) {
+        final xfile = XFile.fromData(
+          Uint8List.fromList(bytes),
+          name: filename,
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        await Share.shareXFiles([xfile], 
+          text: "Cashier Report Export (" + _sessions.length.toString() + " sessions)");
+      } else {
+        final dir = await getTemporaryDirectory();
+        final file = File(dir.path + "/" + filename);
+        await file.writeAsBytes(bytes);
+        await Share.shareXFiles([XFile(file.path)],
+          text: "Cashier Report Export (" + _sessions.length.toString() + " sessions)");
+      }
+      
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Exported " + _sessions.length.toString() + " sessions"),
+        backgroundColor: Colors.green));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Export failed: " + e.toString()),
+        backgroundColor: Colors.red));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -273,6 +432,24 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
         backgroundColor: Colors.indigo[700],
         foregroundColor: Colors.white,
         actions: [
+          // EXPORT BUTTON ADDED — Excel export
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: "Export",
+            onSelected: (value) {
+              if (value == "excel") _exportAllExcel();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: "excel",
+                child: Row(children: [
+                  Icon(Icons.table_chart, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text("Export Excel"),
+                ]),
+              ),
+            ],
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadSessions),
         ],
       ),
