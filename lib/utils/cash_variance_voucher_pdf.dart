@@ -308,7 +308,7 @@ class CashVarianceVoucherPDF {
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
-            child: pw.Column(children: List.generate(15, (i) =>
+            child: pw.Column(children: List.generate(8, (i) =>
               pw.Container(
                 height: 18,
                 decoration: pw.BoxDecoration(
@@ -326,7 +326,7 @@ class CashVarianceVoucherPDF {
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
-            child: pw.Column(children: List.generate(8, (i) =>
+            child: pw.Column(children: List.generate(5, (i) =>
               pw.Container(
                 height: 18,
                 decoration: pw.BoxDecoration(
@@ -344,7 +344,7 @@ class CashVarianceVoucherPDF {
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
             decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
-            child: pw.Column(children: List.generate(5, (i) =>
+            child: pw.Column(children: List.generate(3, (i) =>
               pw.Container(
                 height: 18,
                 decoration: pw.BoxDecoration(

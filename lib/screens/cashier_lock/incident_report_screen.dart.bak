@@ -6,9 +6,6 @@ import 'package:flutter/services.dart';
 import '../../models/cashier_session_model.dart';
 import '../../models/user_model.dart';
 import '../../services/cashier_session_service.dart';
-import '../../utils/cash_variance_voucher_pdf.dart';
-import '../../models/incident_report_model.dart';
-import '../../helpers/database_helper.dart';
 
 class IncidentReportScreen extends StatefulWidget {
   final CashierSession session;
@@ -92,28 +89,6 @@ class _IncidentReportScreenState extends State<IncidentReportScreen> {
         variance: widget.variance,
       );
 
-
-      // GENERATE COMBINED PDF AFTER IR — Voucher + Notes + IR Page 3
-      try {
-        final irRow = await DatabaseHelper().getIncidentReportBySession(widget.session.id);
-        if (irRow != null) {
-          final ir = IncidentReport.fromMap(irRow);
-          if (mounted) {
-            await CashVarianceVoucherPDF.generate(
-              context: context,
-              session: widget.session,
-              totalCounted: widget.totalCounted,
-              systemExpected: widget.systemExpected,
-              variance: widget.variance,
-              denominations: widget.denominations,
-              isReprint: false,
-              incidentReport: ir,
-            );
-          }
-        }
-      } catch (e) {
-        debugPrint("Combined PDF generation failed: $e");
-      }
       if (mounted) {
         Navigator.pop(context, {
           'success': true,
