@@ -776,6 +776,11 @@ class SyncBridge {
   // PHASE 3: Read users from Firebase (multi-device sync)
   // Returns ALL users including soft-deleted (UI will filter)
   // BIR-safe: same pattern as readCashierSessionsFromFirebase
+
+  // PHASE 3 FIX: READ FROM BOTH PATHS
+  // Reads users from companies/{code}/users (User Module created)
+  // AND companies/{code}/usersByBranch/{branch}/{user} (Branch Wizard created)
+  // Deduplicates by userId
   static Future<List<Map<String, dynamic>>> readUsersFromFirebase() async {
     try {
       final cfg = await _cfgSvc.load();
@@ -790,28 +795,57 @@ class SyncBridge {
       final companyCode = ctx['companyCode']!;
       if (companyCode.isEmpty) return [];
 
-      final snap = await db
-          .ref('companies/$companyCode/users')
-          .get()
-          .timeout(const Duration(seconds: 10));
+      final List<Map<String, dynamic>> allUsers = [];
+      final Set<String> seenIds = {};
 
-      if (!snap.exists) return [];
+      // PATH 1: companies/{code}/users/ (User Module created users)
+      try {
+        final snap1 = await db
+            .ref('companies/$companyCode/users')
+            .get()
+            .timeout(const Duration(seconds: 10));
+        if (snap1.exists) {
+          for (final child in snap1.children) {
+            try {
+              final raw = child.value as Map<dynamic, dynamic>;
+              final map = raw.map((k, v) => MapEntry(k.toString(), v));
+              final id = (map["userId"] ?? map["id"] ?? "").toString();
+              if (id.isEmpty || seenIds.contains(id)) continue;
+              seenIds.add(id);
+              allUsers.add(map);
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
 
-      final List<Map<String, dynamic>> users = [];
-      for (final child in snap.children) {
-        try {
-          final raw = child.value as Map<dynamic, dynamic>;
-          final map = raw.map((k, v) => MapEntry(k.toString(), v));
-          // Note: include isDeleted=true users in this list
-          // The UI/merge logic will filter them out
-          users.add(map);
-        } catch (_) {}
-      }
-      return users;
+      // PATH 2: companies/{code}/usersByBranch/{branch}/{user} (Branch Wizard)
+      try {
+        final snap2 = await db
+            .ref('companies/$companyCode/usersByBranch')
+            .get()
+            .timeout(const Duration(seconds: 10));
+        if (snap2.exists) {
+          for (final branchNode in snap2.children) {
+            for (final userNode in branchNode.children) {
+              try {
+                final raw = userNode.value as Map<dynamic, dynamic>;
+                final map = raw.map((k, v) => MapEntry(k.toString(), v));
+                final id = (map["userId"] ?? map["id"] ?? "").toString();
+                if (id.isEmpty || seenIds.contains(id)) continue;
+                seenIds.add(id);
+                allUsers.add(map);
+              } catch (_) {}
+            }
+          }
+        }
+      } catch (_) {}
+
+      return allUsers;
     } catch (_) {
       return [];
     }
   }
+
 
   static Future<List<Map<String, dynamic>>> readCashierSessionsFromFirebase() async {
     try {
