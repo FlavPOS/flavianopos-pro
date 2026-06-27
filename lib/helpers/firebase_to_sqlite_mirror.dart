@@ -70,6 +70,9 @@ class FirebaseToSqliteMirror {
   }) async {
     final db = await DatabaseHelper().database;
     final now = DateTime.now().toUtc().toIso8601String();
+    // SKIP MIRROR USERS - prevents placeholder password from overwriting real PIN
+    // Real users handled by Join Branch + User Module Phase 3B merge
+    return;
     for (final u in users) {
       final id = (u['userId'] ?? '').toString();
       if (id.isEmpty) continue;

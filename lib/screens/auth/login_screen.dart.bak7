@@ -149,34 +149,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-
-  // VISIBLE DEBUG BUTTON - shows all users in SQLite
-  Future<void> _showDebugInfo() async {
-    final db = DatabaseHelper();
-    final allRows = await (await db.database).rawQuery("SELECT id, username, password, pin, isActive, isDeleted, fullName, role, branch FROM users LIMIT 20");
-    final typedUsername = _usernameController.text.trim();
-    final typedPin = _pinController.text;
-    
-    if (mounted) {
-      await showDialog(context: context, builder: (ctx) => AlertDialog(
-        title: const Text("DEBUG INFO"),
-        content: SingleChildScrollView(
-          child: Text(
-            "TYPED:\n"
-            "username='$typedUsername' (${typedUsername.length} chars)\n"
-            "pin='$typedPin' (${typedPin.length} chars)\n\n"
-            "SQLITE USERS (${allRows.length} found):\n"
-            "${allRows.isEmpty ? '⚠️ EMPTY - No users in DB!\n' : ''}"
-            "${allRows.map((r) => "id=${r['id']}\nusername='${r['username']}'\npassword='${r['password']}'\npin='${r['pin']}'\nisActive=${r['isActive']}\nisDeleted=${r['isDeleted']}\nfullName=${r['fullName']}\nrole=${r['role']}\nbranch=${r['branch']}\n---").join('\n')}",
-            style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close")),
-        ],
-      ));
-    }
-  }
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
     final isT = sw > 600;
@@ -253,16 +225,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ]),
                   ),
                   const SizedBox(height: 24),
-                  const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: _showDebugInfo,
-                    icon: const Icon(Icons.bug_report, size: 18),
-                    label: const Text("Debug DB (tap to see users)"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
                   Text('\u00a9 2026 FlavianoPOS - PRO v1.0', style: TextStyle(color: Colors.white70, fontSize: isT ? 14 : 12)),
                   const SizedBox(height: 20),
                 ]),

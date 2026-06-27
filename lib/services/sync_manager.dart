@@ -325,6 +325,12 @@ class SyncManager {
 
   Future<void> _onUserUpdate(DatabaseEvent event, String branchId) async {
     try {
+    // SKIP USER INSERT FROM LISTENER - prevents placeholder password overwrite
+    // Real users are populated by:
+    //   1. Join Existing Branch (saves real PIN)
+    //   2. User Module Phase 3B cloud merge (preserves PIN)
+    // This listener used to insert placeholder credentials that broke login
+    return;
       final val = event.snapshot.value;
       if (val is! Map) return;
       final m = val.map((k, v) => MapEntry(k.toString(), v));
