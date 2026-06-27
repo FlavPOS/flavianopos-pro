@@ -215,26 +215,30 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
   }
 
   Future<void> _reprintVoucher(CashierSession session) async {
-    // Get denominations for this session
-    final denomMap = _denomMap[session.id] ?? [];
-    if (denomMap.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No denomination data found for this shift'), backgroundColor: Colors.orange),
-      );
-      return;
-    }
-
-    // Convert List<DenominationRecord> back to Map<double, int>
+    // DIRECT DB QUERY FOR REPRINT — always fresh from SQLite
+    final denomRows = await DatabaseHelper().getDenominationsBySession(session.id, type: "ending");
     final Map<double, int> denominations = {};
-    for (final d in denomMap) {
-      denominations[d.denomination] = d.quantity;
+    for (final row in denomRows) {
+      final d = (row["denomination"] as num?)?.toDouble() ?? 0;
+      final q = (row["quantity"] as int?) ?? 0;
+      if (d > 0) denominations[d] = q;
     }
-
+    if (denominations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Reprint without denomination breakdown (no data found)"),
+          backgroundColor: Colors.amber,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Generating voucher...'), duration: Duration(seconds: 2)),
       );
 
+      // REPRINT WITH WATERMARK + IR (if exists)
+      final ir = _irMap[session.id];
       await CashVarianceVoucherPDF.generate(
         context: context,
         session: session,
@@ -242,6 +246,8 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
         systemExpected: session.systemExpectedCash,
         variance: session.variance,
         denominations: denominations,
+        isReprint: true,
+        incidentReport: ir,
       );
 
       if (mounted) {

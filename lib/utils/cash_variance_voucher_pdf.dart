@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/cashier_session_model.dart';
+import '../models/incident_report_model.dart';
 import '../models/settings_model.dart';
 
 class CashVarianceVoucherPDF {
@@ -26,6 +27,8 @@ class CashVarianceVoucherPDF {
     required double systemExpected,
     required double variance,
     required Map<double, int> denominations,
+    bool isReprint = false,
+    IncidentReport? incidentReport,
   }) async {
     try {
       final pdf = pw.Document();
@@ -45,6 +48,27 @@ class CashVarianceVoucherPDF {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(28),
         build: (pw.Context ctx) => [
+          // WATERMARK + FOOTER WIRED — Re-Print Copy banner
+          if (isReprint)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.red700,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Center(
+                child: pw.Text(
+                  '*** RE-PRINT COPY *** (NOT THE ORIGINAL)',
+                  style: pw.TextStyle(
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+            ),
           // HEADER
           pw.Center(child: pw.Column(children: [
             pw.Text(business, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
@@ -181,6 +205,8 @@ class CashVarianceVoucherPDF {
           pw.SizedBox(height: 24),
 
           // Notes section
+          // Reprint footer
+          if (isReprint) _reprintFooter(),
         ],
       ));
 
@@ -191,6 +217,27 @@ class CashVarianceVoucherPDF {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(28),
         build: (pw.Context ctx) => [
+          // WATERMARK + FOOTER WIRED — Re-Print Copy banner
+          if (isReprint)
+            pw.Container(
+              padding: const pw.EdgeInsets.all(8),
+              margin: const pw.EdgeInsets.only(bottom: 12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.red700,
+                borderRadius: pw.BorderRadius.circular(4),
+              ),
+              child: pw.Center(
+                child: pw.Text(
+                  '*** RE-PRINT COPY *** (NOT THE ORIGINAL)',
+                  style: pw.TextStyle(
+                    fontSize: 14,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.white,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ),
+            ),
           // Header (compact for page 2)
           pw.Center(child: pw.Column(children: [
             pw.Text(business, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
@@ -355,6 +402,140 @@ class CashVarianceVoucherPDF {
       ));
       } // end if variance > 0.01
 
+      // INCIDENT REPORT PAGE — Page 3, only if incidentReport != null
+      if (incidentReport != null) {
+        final ir = incidentReport;
+        pdf.addPage(pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(28),
+          build: (pw.Context ctx) => [
+            // Reprint banner (if reprint)
+            if (isReprint)
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                margin: const pw.EdgeInsets.only(bottom: 12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red700,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Center(
+                  child: pw.Text(
+                    '*** RE-PRINT COPY *** (NOT THE ORIGINAL)',
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.white,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+              ),
+
+            // IR HEADER
+            pw.Center(child: pw.Column(children: [
+              pw.Text(business, style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+              if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 9)),
+              pw.SizedBox(height: 10),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.red800,
+                  borderRadius: pw.BorderRadius.circular(20),
+                ),
+                child: pw.Text('INCIDENT REPORT',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.white)),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text('(Official Audit Document - BIR)',
+                style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+            ])),
+            pw.SizedBox(height: 16),
+
+            // IR Info Box
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(color: PdfColors.grey100, borderRadius: pw.BorderRadius.circular(6)),
+              child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                _row('IR Number:', ir.irNumber),
+                _row('Status:', ir.status.toUpperCase()),
+                _row('Created:', '${ir.createdAt.year}-${ir.createdAt.month.toString().padLeft(2, "0")}-${ir.createdAt.day.toString().padLeft(2, "0")} ${ir.createdAt.hour.toString().padLeft(2, "0")}:${ir.createdAt.minute.toString().padLeft(2, "0")}'),
+                _row('Linked Shift:', ir.sessionId.length > 30 ? '...${ir.sessionId.substring(ir.sessionId.length - 28)}' : ir.sessionId),
+                _row('Cashier:', ir.cashierName.isEmpty ? 'N/A' : ir.cashierName),
+                _row('Branch:', ir.branch.isEmpty ? 'N/A' : ir.branch),
+              ]),
+            ),
+            pw.SizedBox(height: 14),
+
+            // Variance Details
+            _section('VARIANCE DETAILS', [
+              _row('Amount:', 'PHP ${ir.variance.abs().toStringAsFixed(2)}', bold: true),
+              _row('Type:', ir.varianceType.toUpperCase(), bold: true),
+            ]),
+            pw.SizedBox(height: 8),
+
+            // Reason
+            _section('REASON', [
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+                child: pw.Text(
+                  ir.reason.isEmpty ? '(No reason provided)' : ir.reason,
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+              ),
+            ]),
+            pw.SizedBox(height: 8),
+
+            // Remarks (with Re-Declare audit trail!)
+            if (ir.remarks.isNotEmpty)
+              _section('REMARKS & AUDIT TRAIL', [
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+                  child: pw.Text(
+                    ir.remarks,
+                    style: const pw.TextStyle(fontSize: 10),
+                  ),
+                ),
+              ]),
+            pw.SizedBox(height: 14),
+
+            // Audit Info
+            _section('AUDIT INFORMATION', [
+              _row('Filed by:', ir.createdBy.isEmpty ? '(Unknown)' : ir.createdBy),
+              if (ir.approvedBy.isNotEmpty) _row('Approved by:', ir.approvedBy),
+              if (ir.approvedAt != null) _row('Approved at:', '${ir.approvedAt!.year}-${ir.approvedAt!.month.toString().padLeft(2, "0")}-${ir.approvedAt!.day.toString().padLeft(2, "0")} ${ir.approvedAt!.hour.toString().padLeft(2, "0")}:${ir.approvedAt!.minute.toString().padLeft(2, "0")}'),
+            ]),
+            pw.SizedBox(height: 20),
+
+            // Signature blocks
+            pw.Text('SIGNATURES', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 16),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              _signature('Filed by', ir.createdBy.isEmpty ? '_____________' : ir.createdBy, 'Cashier / Staff'),
+              _signature('Reviewed by', '_____________', 'Manager'),
+              _signature('Approved by', ir.approvedBy.isEmpty ? '_____________' : ir.approvedBy, 'Vault Custodian'),
+            ]),
+            pw.SizedBox(height: 16),
+
+            // Reprint footer
+            if (isReprint) _reprintFooter(),
+
+            // Page Footer
+            pw.SizedBox(height: 12),
+            pw.Divider(),
+            pw.Center(child: pw.Text(
+              'Page 3 of 3 | ${ir.irNumber}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+            )),
+            pw.Center(child: pw.Text(
+              'Generated by FlavianoPOS PRO | BIR-Audit Compliant',
+              style: pw.TextStyle(fontSize: 8, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600),
+            )),
+          ],
+        ));
+      }
+
       final bytes = await pdf.save();
       await Printing.sharePdf(bytes: bytes, filename: 'CashVariance_$voucherNo.pdf');
     } catch (e) {
@@ -396,6 +577,55 @@ class CashVarianceVoucherPDF {
     );
   }
 
+
+  // RE-PRINT WATERMARK — adds diagonal "RE-PRINT COPY" overlay on each page
+  static pw.Widget _watermarkOverlay() {
+    return pw.Positioned.fill(
+      child: pw.Center(
+        child: pw.Transform.rotate(
+          angle: -0.6,
+          child: pw.Opacity(
+            opacity: 0.15,
+            child: pw.Text(
+              'RE-PRINT COPY',
+              style: pw.TextStyle(
+                fontSize: 90,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.red700,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // RE-PRINT FOOTER — "Please attach to Original Copy" message
+  static pw.Widget _reprintFooter() {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(top: 12),
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.red50,
+        border: pw.Border.all(color: PdfColors.red700, width: 1.5),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          pw.Text(
+            'PLEASE ATTACH THIS TO ORIGINAL COPY',
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.red900,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
   static pw.Widget _section(String title, List<pw.Widget> items) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(top: 6),
