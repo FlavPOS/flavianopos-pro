@@ -34,6 +34,7 @@ class _UsersScreenState extends State<UsersScreen> {
 
   Future<void> _loadUsers() async {
     // PHASE 3B CLOUD MERGE - fetch cloud users + upsert into SQLite
+    // PRESERVE LOCAL PIN: cloud does NOT store PINs for security
     try {
       final cloudUsers = await SyncBridge.readUsersFromFirebase();
       if (cloudUsers.isNotEmpty) {
@@ -41,25 +42,38 @@ class _UsersScreenState extends State<UsersScreen> {
           final id = (cu["userId"] ?? cu["id"] ?? "").toString();
           if (id.isEmpty) continue;
           
+          // CRITICAL: Get existing local user FIRST to preserve PIN
+          final existingLocal = await DatabaseHelper().getUserById(id);
+          final localPin = (existingLocal?["pin"] ?? existingLocal?["password"] ?? "").toString();
+          
+          // Cloud PIN (if any) — use only if non-empty
+          final cloudPin = (cu["pin"] ?? cu["password"] ?? "").toString();
+          final safePin = cloudPin.isNotEmpty ? cloudPin : localPin;
+          
+          // Skip merge if no PIN available at all (would lock user out)
+          if (safePin.isEmpty && existingLocal != null) {
+            continue; // keep existing local row untouched
+          }
+          
           // Convert cloud format to local SQLite format
           final localMap = {
             "id": id,
-            "username": cu["username"] ?? "",
-            "password": cu["password"] ?? cu["pin"] ?? "",
-            "pin": cu["pin"] ?? cu["password"] ?? "",
-            "fullName": cu["fullName"] ?? cu["name"] ?? "",
-            "role": cu["role"] ?? cu["roleName"] ?? "Cashier",
-            "branch": cu["branchName"] ?? cu["branch"] ?? "",
-            "email": cu["email"] ?? "",
-            "phone": cu["phone"] ?? "",
+            "username": cu["username"] ?? existingLocal?["username"] ?? "",
+            "password": safePin,
+            "pin": safePin,
+            "fullName": cu["fullName"] ?? cu["name"] ?? existingLocal?["fullName"] ?? "",
+            "role": cu["role"] ?? cu["roleName"] ?? existingLocal?["role"] ?? "Cashier",
+            "branch": cu["branchName"] ?? cu["branch"] ?? existingLocal?["branch"] ?? "",
+            "email": cu["email"] ?? existingLocal?["email"] ?? "",
+            "phone": cu["phone"] ?? existingLocal?["phone"] ?? "",
             "isActive": (cu["isActive"] == true || cu["isActive"] == 1) ? 1 : 0,
             "isDeleted": (cu["isDeleted"] == true || cu["isDeleted"] == 1) ? 1 : 0,
             "deletedAt": cu["deletedAt"]?.toString() ?? "",
             "deletedBy": cu["deletedBy"]?.toString() ?? "",
             "deletedReason": cu["deletedReason"]?.toString() ?? "",
             "updatedAt": cu["updatedAt"]?.toString() ?? "",
-            "dateCreated": cu["createdAt"]?.toString() ?? DateTime.now().toIso8601String(),
-            "permissions": cu["permissions"] is List ? cu["permissions"].join(",") : (cu["permissions"]?.toString() ?? ""),
+            "dateCreated": cu["createdAt"]?.toString() ?? existingLocal?["dateCreated"]?.toString() ?? DateTime.now().toIso8601String(),
+            "permissions": cu["permissions"] is List ? cu["permissions"].join(",") : (cu["permissions"]?.toString() ?? existingLocal?["permissions"]?.toString() ?? ""),
           };
           
           await DatabaseHelper().insertUser(localMap);
