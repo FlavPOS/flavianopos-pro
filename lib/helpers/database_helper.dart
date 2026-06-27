@@ -828,7 +828,7 @@ class DatabaseHelper {
   Future<int> deleteUser(String id) async { final db = await database; return await db.delete('users', where: 'id = ?', whereArgs: [id]); }
   Future<List<Map<String, dynamic>>> getAllUsers() async { final db = await database; return await db.query('users', where: 'isDeleted = ? OR isDeleted IS NULL', whereArgs: [0], orderBy: 'fullName ASC'); }
   Future<Map<String, dynamic>?> getUserById(String id) async { final db = await database; final r = await db.query('users', where: 'id = ?', whereArgs: [id]); return r.isNotEmpty ? r.first : null; }
-  Future<Map<String, dynamic>?> authenticateUser(String username, String password) async { final db = await database; final r = await db.query('users', where: 'username = ? AND password = ? AND isActive = 1', whereArgs: [username, password]); return r.isNotEmpty ? r.first : null; }
+  Future<Map<String, dynamic>?> authenticateUser(String username, String password) async { final db = await database; final r = await db.query('users', where: 'LOWER(username) = LOWER(?) AND password = ? AND isActive = 1', whereArgs: [username, password]); return r.isNotEmpty ? r.first : null; }
   Future<void> bulkInsertUsers(List<Map<String, dynamic>> users) async { final db = await database; final b = db.batch(); for (final u in users) { b.insert('users', u, conflictAlgorithm: ConflictAlgorithm.replace); } await b.commit(noResult: true); }
 
   // ═══════════════════════════════════════════════════════════════════════════

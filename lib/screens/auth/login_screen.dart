@@ -179,6 +179,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       SizedBox(height: isT ? 28 : 24),
                       TextField(
                         controller: _usernameController, textInputAction: TextInputAction.next,
+                          textCapitalization: TextCapitalization.none,
+                          autocorrect: false,
+                          enableSuggestions: false,
                         style: TextStyle(fontSize: isT ? 17 : 15, color: Colors.white),
                         decoration: InputDecoration(
                           prefixIcon: Icon(Icons.person_outline, color: const Color(0xFF8B5CF6), size: isT ? 26 : 22),
