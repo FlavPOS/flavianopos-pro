@@ -21,6 +21,12 @@ class AppUser {
   final DateTime joinDate;
   final DateTime? lastLogin;
   final List<String> permissions;
+  // Soft delete + sync fields (added Phase 1)
+  final bool isDeleted;
+  final DateTime? updatedAt;
+  final DateTime? deletedAt;
+  final String deletedBy;
+  final String deletedReason;
   final bool allowPosTransaction;
 
   AppUser({
@@ -29,6 +35,11 @@ class AppUser {
     required this.role, required this.branch, this.isActive = true,
     required this.joinDate, this.lastLogin, List<String>? permissions,
     this.allowPosTransaction = false,
+    this.isDeleted = false,
+    this.updatedAt,
+    this.deletedAt,
+    this.deletedBy = '',
+    this.deletedReason = '',
   }) : permissions = permissions ?? rolePresets[role] ?? [];
 
   static const List<String> allModules = [
@@ -85,6 +96,11 @@ class AppUser {
     'biometricEnrolled': biometricEnrolled ? 1 : 0,
     'preferredBiometricType': preferredBiometricType,
     'lastBiometricVerifiedAt': lastBiometricVerifiedAt?.toIso8601String(),
+    'isDeleted': isDeleted ? 1 : 0,
+    'updatedAt': updatedAt?.toIso8601String() ?? DateTime.now().toUtc().toIso8601String(),
+    'deletedAt': deletedAt?.toIso8601String() ?? '',
+    'deletedBy': deletedBy,
+    'deletedReason': deletedReason,
   };
 
   factory AppUser.fromMap(Map<String, dynamic> m) {
@@ -115,6 +131,13 @@ class AppUser {
       biometricEnrolled: (m['biometricEnrolled'] ?? 0) == 1,
       preferredBiometricType: m['preferredBiometricType'] ?? 'face',
       lastBiometricVerifiedAt: m['lastBiometricVerifiedAt'] != null ? DateTime.tryParse(m['lastBiometricVerifiedAt']) : null,
+      isDeleted: (m['isDeleted'] ?? 0) == 1,
+      updatedAt: m['updatedAt'] != null && m['updatedAt'].toString().isNotEmpty
+        ? DateTime.tryParse(m['updatedAt']) : null,
+      deletedAt: m['deletedAt'] != null && m['deletedAt'].toString().isNotEmpty
+        ? DateTime.tryParse(m['deletedAt']) : null,
+      deletedBy: m['deletedBy'] ?? '',
+      deletedReason: m['deletedReason'] ?? '',
     );
   }
 
