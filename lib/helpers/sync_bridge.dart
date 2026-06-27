@@ -772,6 +772,47 @@ class SyncBridge {
   // ═══════════════════ READ CASHIER SESSIONS FROM FIREBASE ═══════════════════
   // ✅ NEW METHOD — Read sessions from Firebase (used by Cashier Report)
   // BIR-safe: skips records with isDeleted = true (soft delete pattern)
+
+  // PHASE 3: Read users from Firebase (multi-device sync)
+  // Returns ALL users including soft-deleted (UI will filter)
+  // BIR-safe: same pattern as readCashierSessionsFromFirebase
+  static Future<List<Map<String, dynamic>>> readUsersFromFirebase() async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return [];
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return [];
+
+      final ctx = await _context();
+      final companyCode = ctx['companyCode']!;
+      if (companyCode.isEmpty) return [];
+
+      final snap = await db
+          .ref('companies/$companyCode/users')
+          .get()
+          .timeout(const Duration(seconds: 10));
+
+      if (!snap.exists) return [];
+
+      final List<Map<String, dynamic>> users = [];
+      for (final child in snap.children) {
+        try {
+          final raw = child.value as Map<dynamic, dynamic>;
+          final map = raw.map((k, v) => MapEntry(k.toString(), v));
+          // Note: include isDeleted=true users in this list
+          // The UI/merge logic will filter them out
+          users.add(map);
+        } catch (_) {}
+      }
+      return users;
+    } catch (_) {
+      return [];
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> readCashierSessionsFromFirebase() async {
     try {
       final cfg = await _cfgSvc.load();

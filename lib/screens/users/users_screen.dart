@@ -1,6 +1,8 @@
 // lib/screens/users/users_screen.dart
 import '../../services/device_assignment_service.dart';
 import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 import 'package:flutter/material.dart';
 import '../../models/user_model.dart';
 import 'add_user_screen.dart';
@@ -31,6 +33,41 @@ class _UsersScreenState extends State<UsersScreen> {
   String _viewerBranch = "";
 
   Future<void> _loadUsers() async {
+    // PHASE 3B CLOUD MERGE - fetch cloud users + upsert into SQLite
+    try {
+      final cloudUsers = await SyncBridge.readUsersFromFirebase();
+      if (cloudUsers.isNotEmpty) {
+        for (final cu in cloudUsers) {
+          final id = (cu["userId"] ?? cu["id"] ?? "").toString();
+          if (id.isEmpty) continue;
+          
+          // Convert cloud format to local SQLite format
+          final localMap = {
+            "id": id,
+            "username": cu["username"] ?? "",
+            "password": cu["password"] ?? cu["pin"] ?? "",
+            "pin": cu["pin"] ?? cu["password"] ?? "",
+            "fullName": cu["fullName"] ?? cu["name"] ?? "",
+            "role": cu["role"] ?? cu["roleName"] ?? "Cashier",
+            "branch": cu["branchName"] ?? cu["branch"] ?? "",
+            "email": cu["email"] ?? "",
+            "phone": cu["phone"] ?? "",
+            "isActive": (cu["isActive"] == true || cu["isActive"] == 1) ? 1 : 0,
+            "isDeleted": (cu["isDeleted"] == true || cu["isDeleted"] == 1) ? 1 : 0,
+            "deletedAt": cu["deletedAt"]?.toString() ?? "",
+            "deletedBy": cu["deletedBy"]?.toString() ?? "",
+            "deletedReason": cu["deletedReason"]?.toString() ?? "",
+            "updatedAt": cu["updatedAt"]?.toString() ?? "",
+            "dateCreated": cu["createdAt"]?.toString() ?? DateTime.now().toIso8601String(),
+            "permissions": cu["permissions"] is List ? cu["permissions"].join(",") : (cu["permissions"]?.toString() ?? ""),
+          };
+          
+          await DatabaseHelper().insertUser(localMap);
+        }
+      }
+    } catch (e) {
+      // Non-blocking: continue with local users only
+    }
     await AppUser.loadFromDB();
     // 🎯 Branch isolation: find viewer (most-recent login)
     try {
@@ -218,6 +255,13 @@ class _UsersScreenState extends State<UsersScreen> {
         deletedBy: "Admin",
         reason: fullReason,
       );
+      
+      // PHASE 3C SYNC DELETE TO FIREBASE - propagate to other devices
+      try {
+        SyncBridge.enqueueUser(user, op: SyncOp.delete);
+      } catch (e) {
+        // Non-blocking: local delete still succeeded
+      }
       final rows = await DatabaseHelper().getAllUsers();
       AppUser.allUsers.clear();
       AppUser.allUsers.addAll(rows.map((r) => AppUser.fromMap(r)));
