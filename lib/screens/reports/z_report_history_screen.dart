@@ -199,7 +199,36 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
   }
 
   // Helper: builds the full content of a Z report (was inline in itemBuilder)
+
+  // RICH Z REPORT POPUP - full report content matching PDF layout
   Widget _buildFullReportCard(ZReportRecord r) {
+    final isOver = r.overShort > 0;
+    final isBalanced = r.overShort == 0;
+    final overShortColor = isBalanced ? Colors.green[700]! : (isOver ? Colors.blue[700]! : Colors.orange[700]!);
+    final overShortLabel = isBalanced ? "BALANCED" : (isOver ? "OVER" : "SHORT");
+    
+    // Helper for currency
+    String fmt(double v) => "PHP " + v.toStringAsFixed(2);
+    
+    // Get payment by method
+    double getPayment(String method) {
+      final p = r.paymentBreakdown.firstWhere(
+        (x) => x.method == method,
+        orElse: () => ZReportPaymentBreakdown(method: method, count: 0, total: 0),
+      );
+      return p.total;
+    }
+    int getPaymentCount(String method) {
+      final p = r.paymentBreakdown.firstWhere(
+        (x) => x.method == method,
+        orElse: () => ZReportPaymentBreakdown(method: method, count: 0, total: 0),
+      );
+      return p.count;
+    }
+    
+    final vatable = r.netSales / 1.12;
+    final vat = r.netSales - vatable;
+    
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
@@ -212,7 +241,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header info
+            // Header row
             Row(children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -223,17 +252,10 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: r.overShort == 0 ? Colors.green[50] : (r.overShort > 0 ? Colors.blue[50] : Colors.orange[50]),
+                  color: overShortColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  r.overShort == 0 ? "BALANCED" : (r.overShort > 0 ? "OVER" : "SHORT"),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: r.overShort == 0 ? Colors.green[700] : (r.overShort > 0 ? Colors.blue[700] : Colors.orange[700]),
-                  ),
-                ),
+                child: Text(overShortLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: overShortColor)),
               ),
             ]),
             const SizedBox(height: 8),
@@ -246,25 +268,75 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
               const SizedBox(width: 4),
               Text(r.cashier, style: TextStyle(fontSize: 12, color: Colors.grey[800])),
             ]),
-            const SizedBox(height: 8),
-            // Quick stats
-            Row(children: [
-              _quickStat('Net', "P" + r.netSales.toStringAsFixed(0), Colors.green[600]!),
-              _quickStat('TXN', r.totalTransactions.toString(), Colors.blue[600]!),
-              _quickStat('Voids', r.voidedCount.toString(), Colors.red[600]!),
-              _quickStat('Refunds', r.refundedCount.toString(), Colors.orange[600]!),
-            ]),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
+            
+            // SALES SUMMARY
+            _zSectionTitle("SALES SUMMARY"),
+            _zRow("Gross Sales", fmt(r.grossSales)),
+            _zRow("Less: Discounts", "-" + fmt(r.totalDiscount)),
+            const SizedBox(height: 10),
+            
+            // NET SALES
+            _zSectionTitle("NET SALES"),
+            _zRow("Net Sales", fmt(r.netSales), bold: true),
+            _zRow("VATable Sales", fmt(vatable)),
+            _zRow("VAT (12%)", fmt(vat)),
+            _zRow("Total Transactions", r.totalTransactions.toString()),
+            _zRow("Average per Transaction", fmt(r.averageTransaction)),
+            const SizedBox(height: 10),
+            
+            // PAYMENT BREAKDOWN
+            _zSectionTitle("PAYMENT BREAKDOWN"),
+            _zRow("Cash (" + getPaymentCount("Cash").toString() + ")", fmt(getPayment("Cash"))),
+            _zRow("GCash (" + getPaymentCount("GCash").toString() + ")", fmt(getPayment("GCash"))),
+            _zRow("Maya (" + getPaymentCount("Maya").toString() + ")", fmt(getPayment("Maya"))),
+            _zRow("Card (" + getPaymentCount("Card").toString() + ")", fmt(getPayment("Card"))),
+            const Divider(height: 16),
+            _zRow("TOTAL", fmt(r.netSales), bold: true),
+            const SizedBox(height: 10),
+            
+            // VOIDED & REFUNDED
+            _zSectionTitle("VOIDED & REFUNDED"),
+            _zRow("Voided Transactions", r.voidedCount.toString()),
+            _zRow("Voided Amount", fmt(r.voidedAmount)),
+            _zRow("Refunded Transactions", r.refundedCount.toString()),
+            _zRow("Refunded Amount", fmt(r.refundedAmount)),
+            const SizedBox(height: 10),
+            
+            // CASH COUNT
+            _zSectionTitle("CASH COUNT"),
+            _zRow("Beginning Cash", fmt(r.beginningCash)),
+            _zRow("+ Cash Sales", "+" + fmt(getPayment("Cash"))),
+            _zRow("Expected Cash", fmt(r.expectedCash), bold: true),
+            _zRow("Ending Cash", fmt(r.endingCash), bold: true),
+            const SizedBox(height: 10),
+            
+            // OVER/SHORT BADGE
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: overShortColor.withOpacity(0.1),
+                border: Border.all(color: overShortColor, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                Text(overShortLabel, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: overShortColor)),
+                Text(fmt(r.overShort.abs()), style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: overShortColor)),
+              ]),
+            ),
+            const SizedBox(height: 14),
+            
             // Re-Print button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.print, size: 16),
-                label: const Text('Re-Print Voucher'),
+                label: const Text('Re-Print Voucher', style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purple[700],
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: () async {
                   final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId);
@@ -273,15 +345,53 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              "Generated: ${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}",
+            Center(child: Text(
+              "Generated: " + _formatDate(r.generatedAt) + " " + _formatTime(r.generatedAt),
               style: TextStyle(fontSize: 10, color: Colors.grey[600], fontStyle: FontStyle.italic),
-            ),
+            )),
           ],
         ),
       ),
     );
   }
+  
+  // Helper: section title (uppercase, bold, with divider)
+  Widget _zSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple[800], letterSpacing: 0.5)),
+          const SizedBox(height: 4),
+          Container(height: 1, color: Colors.grey[300]),
+        ],
+      ),
+    );
+  }
+  
+  // Helper: label-value row
+  Widget _zRow(String label, String value, {bool bold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[800],
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          )),
+          Text(value, style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: bold ? Colors.black : Colors.grey[800],
+          )),
+        ],
+      ),
+    );
+  }
+
 
   Widget build(BuildContext context) {
     final allReports = ZReportRecord.history;
