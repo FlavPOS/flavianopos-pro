@@ -3,6 +3,7 @@
 // Main screen with dashboard cards + navigation to sub-screens
 // ============================================================
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
 import '../../models/stock_transfer_model.dart';
 import 'create_transfer_screen.dart';
 import 'receive_transfer_screen.dart';
@@ -24,7 +25,10 @@ class _StockTransferScreenState extends State<StockTransferScreen> {
   void initState() { super.initState(); _loadStats(); }
 
   Future<void> _loadStats() async {
-    final stats = await StockTransferStorage.getDashboardStats();
+    // STX BRANCH FILTERED STATS - filter dashboard by current device branch
+    final assign = await DeviceAssignmentService().read();
+    final currentBranchId = (assign["branchId"] ?? "").toString();
+    final stats = await StockTransferStorage.getDashboardStatsForBranch(currentBranchId);
     setState(() { _stats = stats; _isLoading = false; });
   }
 

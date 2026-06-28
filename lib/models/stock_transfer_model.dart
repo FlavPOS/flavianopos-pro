@@ -79,6 +79,9 @@ class StockTransfer {
   final String fromBranchName;
   final String toBranchId;
   final String toBranchName;
+  // STX DEVICE FIELDS - device-based filtering
+  final String fromDeviceId;
+  final String toDeviceId;
   String status;
   final String preparedBy;
   String approvedBy;
@@ -93,6 +96,7 @@ class StockTransfer {
     required this.id, required this.transferNo, required this.transferDate,
     required this.fromBranchId, required this.fromBranchName,
     required this.toBranchId, required this.toBranchName,
+    this.fromDeviceId = "", this.toDeviceId = "",
     this.status = 'Draft', required this.preparedBy, this.approvedBy = '',
     this.receivedBy = '', this.receivedDate, this.remarks = '',
     required this.items, required this.createdAt, DateTime? updatedAt,
@@ -114,6 +118,7 @@ class StockTransfer {
     'transferDate': transferDate.toIso8601String(),
     'fromBranchId': fromBranchId, 'fromBranchName': fromBranchName,
     'toBranchId': toBranchId, 'toBranchName': toBranchName,
+    'fromDeviceId': fromDeviceId, 'toDeviceId': toDeviceId,
     'status': status, 'preparedBy': preparedBy, 'approvedBy': approvedBy,
     'receivedBy': receivedBy,
     'receivedDate': receivedDate?.toIso8601String(),
@@ -128,6 +133,7 @@ class StockTransfer {
     transferDate: DateTime.tryParse(j['transferDate'] ?? '') ?? DateTime.now(),
     fromBranchId: j['fromBranchId'] ?? '', fromBranchName: j['fromBranchName'] ?? '',
     toBranchId: j['toBranchId'] ?? '', toBranchName: j['toBranchName'] ?? '',
+    fromDeviceId: j['fromDeviceId'] ?? '', toDeviceId: j['toDeviceId'] ?? '',
     status: j['status'] ?? 'Draft', preparedBy: j['preparedBy'] ?? '',
     approvedBy: j['approvedBy'] ?? '', receivedBy: j['receivedBy'] ?? '',
     receivedDate: j['receivedDate'] != null ? DateTime.tryParse(j['receivedDate']) : null,
@@ -142,6 +148,7 @@ class StockTransfer {
     'transferDate': transferDate.toIso8601String(),
     'fromBranchId': fromBranchId, 'fromBranchName': fromBranchName,
     'toBranchId': toBranchId, 'toBranchName': toBranchName,
+    'fromDeviceId': fromDeviceId, 'toDeviceId': toDeviceId,
     'status': status, 'preparedBy': preparedBy, 'approvedBy': approvedBy,
     'receivedBy': receivedBy,
     'receivedDate': receivedDate?.toIso8601String(),
@@ -155,6 +162,7 @@ class StockTransfer {
     transferDate: DateTime.tryParse(m['transferDate'] ?? '') ?? DateTime.now(),
     fromBranchId: m['fromBranchId'] ?? '', fromBranchName: m['fromBranchName'] ?? '',
     toBranchId: m['toBranchId'] ?? '', toBranchName: m['toBranchName'] ?? '',
+    fromDeviceId: m['fromDeviceId'] ?? '', toDeviceId: m['toDeviceId'] ?? '',
     status: m['status'] ?? 'Draft', preparedBy: m['preparedBy'] ?? '',
     approvedBy: m['approvedBy'] ?? '', receivedBy: m['receivedBy'] ?? '',
     receivedDate: m['receivedDate'] != null ? DateTime.tryParse(m['receivedDate']) : null,
@@ -320,6 +328,64 @@ class StockTransferStorage {
   static Future<List<TransferLedgerEntry>> getLedgerByBatch(String batchNumber) async {
     final rows = await DatabaseHelper().getLedgerByBatch(batchNumber);
     return rows.map((r) => TransferLedgerEntry.fromMap(r)).toList();
+  }
+
+
+  // STX BRANCH FILTERED - get inbound transfers for current device's branch only
+  static Future<List<StockTransfer>> getInboundForBranch(String branchId) async {
+    if (branchId.isEmpty) return [];
+    final db = await DatabaseHelper().database;
+    final rows = await db.query(
+      'stock_transfers',
+      where: 'toBranchId = ? AND status = ?',
+      whereArgs: [branchId, 'In Transit'],
+      orderBy: 'transferDate DESC',
+    );
+    final List<StockTransfer> result = [];
+    for (final row in rows) {
+      final itemRows = await DatabaseHelper().getTransferItems(row['id'] as String);
+      final items = itemRows.map((r) => TransferItem.fromMap(r)).toList();
+      result.add(StockTransfer.fromMap(row, items));
+    }
+    return result;
+  }
+
+  // STX BRANCH FILTERED - dashboard stats for current device's branch only
+  static Future<Map<String, int>> getDashboardStatsForBranch(String branchId) async {
+    if (branchId.isEmpty) {
+      return {'inTransit': 0, 'receivedToday': 0, 'outboundToday': 0, 'pendingReceive': 0};
+    }
+    final all = await getAll();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // INBOUND (to current branch): In Transit
+    final inTransit = all.where((t) =>
+      t.toBranchId == branchId && t.status == 'In Transit'
+    ).length;
+    
+    // RECEIVED today (to current branch)
+    final receivedToday = all.where((t) =>
+      t.toBranchId == branchId && 
+      t.status == 'Received' && 
+      t.receivedDate != null && 
+      t.receivedDate!.isAfter(today)
+    ).length;
+    
+    // OUTBOUND today (from current branch)
+    final outboundToday = all.where((t) =>
+      t.fromBranchId == branchId && 
+      t.transferDate.isAfter(today) && 
+      t.status != 'Cancelled'
+    ).length;
+    
+    // PENDING RECEIVE (to current branch, In Transit - same as inTransit)
+    return {
+      'inTransit': inTransit,
+      'receivedToday': receivedToday,
+      'outboundToday': outboundToday,
+      'pendingReceive': inTransit,
+    };
   }
 
   static Future<Map<String, int>> getDashboardStats() async {

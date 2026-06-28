@@ -59,6 +59,9 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE users ADD COLUMN createdBy_sync TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE users ADD COLUMN updatedBy_sync TEXT DEFAULT ''"); } catch (_) {}
     try {
+    // STOCK TRANSFER DEVICE MIGRATION - device-based filtering support
+    try { await db.execute("ALTER TABLE stock_transfers ADD COLUMN fromDeviceId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE stock_transfers ADD COLUMN toDeviceId TEXT DEFAULT ''"); } catch (_) {}
       await db.execute('CREATE TABLE IF NOT EXISTS store_profile (id INTEGER PRIMARY KEY, storeName TEXT DEFAULT "", branch TEXT DEFAULT "", businessType TEXT DEFAULT "Retail Store", owner TEXT DEFAULT "", address TEXT DEFAULT "", phone TEXT DEFAULT "", email TEXT DEFAULT "", tin TEXT DEFAULT "", logoPath TEXT DEFAULT "", receiptHeader TEXT DEFAULT "", receiptFooter TEXT DEFAULT "Thank you for shopping!", vatRegistered INTEGER DEFAULT 0, updatedAt TEXT)');
     } catch (_) {}
 

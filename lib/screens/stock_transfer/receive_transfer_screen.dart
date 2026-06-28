@@ -1,5 +1,6 @@
 // ============================================================
 import '../../models/batch_model.dart';
+import '../../services/device_assignment_service.dart';
 import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 // RECEIVE INBOUND TRANSFER - QuickPOS Pro
@@ -25,7 +26,10 @@ class _ReceiveTransferScreenState extends State<ReceiveTransferScreen> {
   void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
-    final all = await StockTransferStorage.getByStatus('In Transit');
+    // STX BRANCH FILTERED RECEIVE - only show transfers TO this device branch
+    final assign = await DeviceAssignmentService().read();
+    final currentBranchId = (assign["branchId"] ?? "").toString();
+    final all = await StockTransferStorage.getInboundForBranch(currentBranchId);
     setState(() { _transfers = all; _isLoading = false; });
   }
 

@@ -9,6 +9,8 @@ import '../../models/stock_transfer_model.dart';
 import '../../models/product_model.dart';
 import '../../models/batch_model.dart';
 import '../../models/branch_model.dart';
+import '../../services/device_assignment_service.dart';
+import '../../services/device_id_service.dart';
 
 class CreateTransferScreen extends StatefulWidget {
   final String currentUser;
@@ -23,6 +25,7 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
   final _remarksCtrl = TextEditingController();
   final _approvedByCtrl = TextEditingController();
   String? _fromBranchId, _fromBranchName, _toBranchId, _toBranchName;
+  String _currentDeviceId = '';
   DateTime _transferDate = DateTime.now();
   final List<_TransferLineItem> _lineItems = [];
   bool _isSaving = false;
@@ -32,6 +35,7 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
   void initState() {
     super.initState();
     _loadTransferNo();
+    _loadCurrentBranchFromDevice();
     final branches = Branch.allBranches;
     for (final b in branches) {
       if (b.name == widget.currentBranch || b.id == widget.currentBranch) {
@@ -39,6 +43,26 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
         _fromBranchName = b.name;
         break;
       }
+    }
+  }
+
+  // STX LOCKED FROM BRANCH - auto-load from device assignment
+  Future<void> _loadCurrentBranchFromDevice() async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final deviceBranchId = (assign['branchId'] ?? '').toString();
+      final deviceBranchName = (assign['branchName'] ?? '').toString();
+      final deviceId = await DeviceIdService().getOrCreate();
+      
+      if (mounted && deviceBranchId.isNotEmpty) {
+        setState(() {
+          _fromBranchId = deviceBranchId;
+          _fromBranchName = deviceBranchName;
+          _currentDeviceId = deviceId;
+        });
+      }
+    } catch (e) {
+      // Fallback to widget.currentBranch (existing behavior)
     }
   }
 
@@ -150,6 +174,7 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
         status: 'In Transit', preparedBy: widget.currentUser,
         approvedBy: _approvedByCtrl.text.trim(), remarks: _remarksCtrl.text.trim(),
         items: transferItems, createdAt: now,
+        fromDeviceId: _currentDeviceId, toDeviceId: '',
       );
       for (final li in _lineItems) {
         final products = Product.allProducts;
@@ -246,15 +271,35 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
             )),
           ]),
           const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _fromBranchId,
-            decoration: InputDecoration(labelText: 'From Branch *', prefixIcon: const Icon(Icons.store),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true),
-            items: branches.map((b) => DropdownMenuItem(value: b.id,
-              child: Text(b.name, style: const TextStyle(fontSize: 13)))).toList(),
-            onChanged: (v) { final b = branches.firstWhere((x) => x.id == v);
-              setState(() { _fromBranchId = b.id; _fromBranchName = b.name; }); },
-            validator: (v) => v == null ? 'Required' : null,
+          // STX LOCKED FROM BRANCH - device branch, read-only
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.blue[300]!, width: 1),
+              borderRadius: BorderRadius.circular(10),
+              color: Colors.blue[50],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(children: [
+              Icon(Icons.store, color: Colors.blue[700], size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('From Branch', style: TextStyle(fontSize: 10, color: Colors.blue[700], fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _fromBranchName?.isNotEmpty == true ? _fromBranchName! : 'Loading...',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.blue[900]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.lock_outline, color: Colors.blue[600], size: 18),
+            ]),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
