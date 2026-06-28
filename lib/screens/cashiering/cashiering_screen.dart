@@ -13,6 +13,8 @@ import 'payment_dialog.dart';
 import 'receipt_screen.dart';
 import '../../models/discount_record_model.dart';
 import '../../models/transaction_model.dart';
+import "../../services/branch_inventory_service.dart";
+import "../../services/device_assignment_service.dart";
 
 class TransactionDiscount {
   final String type;
@@ -776,6 +778,32 @@ class _CashieringScreenState extends State<CashieringScreen> {
             paymentMethod: method, amountPaid: amountPaid, change: amountPaid - total,
             cashier: widget.userName, branch: widget.branch, dateTime: now,
           ));
+
+          // ═══════════════════════════════════════════════════════════════
+          // 🏪 PHASE B1: Branch-Aware Stock Decrement (Dual Write)
+          // ═══════════════════════════════════════════════════════════════
+          () async {
+            try {
+              final assign = await DeviceAssignmentService().read();
+              final binvBranchId = (assign["branchId"] ?? "").toString();
+              if (binvBranchId.isNotEmpty) {
+                for (final item in cartCopy) {
+                  final ok = await BranchInventoryService.decrementStock(
+                    binvBranchId,
+                    item.product.id,
+                    item.quantity,
+                  );
+                  print("[POS-B1] decrement ${item.product.name} qty=${item.quantity} ok=$ok");
+                }
+                print("[POS-B1] ✅ Branch stock decremented for branchId=$binvBranchId");
+              } else {
+                print("[POS-B1] ⚠️ no branchId assigned, BINV decrement SKIPPED");
+              }
+            } catch (e) {
+              print("[POS-B1] ❌ ERROR in BINV decrement: $e");
+            }
+          }();
+          // ═══════════════════════════════════════════════════════════════
 
           // ── Deduct Stock ──────────────────────────────────
           for (final item in cartCopy) {
