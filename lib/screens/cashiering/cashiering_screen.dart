@@ -70,6 +70,41 @@ class CashieringScreen extends StatefulWidget {
 }
 
 class _CashieringScreenState extends State<CashieringScreen> {
+  // ═══ PHASE B1.2: Branch-Aware Stock Cache ═══
+  Map<String, int> _branchStock = {};
+  String _binvBranchId = "";
+  bool _binvLoaded = false;
+
+  Future<void> _loadBranchStock() async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final bid = (assign["branchId"] ?? "").toString();
+      _binvBranchId = bid;
+      if (bid.isEmpty) {
+        print("[POS-B1.2] no branchId, fallback to global stock");
+        if (mounted) setState(() => _binvLoaded = true);
+        return;
+      }
+      final map = await BranchInventoryService.getStockMapForBranch(bid);
+      if (!mounted) return;
+      setState(() {
+        _branchStock = map;
+        _binvLoaded = true;
+      });
+      print("[POS-B1.2] loaded ${map.length} products for branch=$bid");
+    } catch (e) {
+      print("[POS-B1.2] ERROR: $e");
+      if (mounted) setState(() => _binvLoaded = true);
+    }
+  }
+
+  int _stockOf(Product p) {
+    if (!_binvLoaded) return p.stockQty;
+    if (_binvBranchId.isNotEmpty) return _branchStock[p.id] ?? 0;
+    return p.stockQty;
+  }
+  // ═══ END PHASE B1.2 ═══
+
   List<Product> get _products => Product.allProducts;
   final List<CartItem> _cart = [];
   final _searchController = TextEditingController();
@@ -111,7 +146,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
       setState(() {
         final idx = _cart.indexWhere((item) => item.product.id == product.id);
         if (idx >= 0) {
-          if (AppSettings.allowNegativeStock || _cart[idx].quantity < product.stockQty) {
+          if (AppSettings.allowNegativeStock || _cart[idx].quantity < _stockOf(product)) {
             _cart[idx].quantity++;
           } else { _showSnackBar("Maximum stock reached"); }
         } else {
@@ -141,7 +176,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
               child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Price: ${product.sellingPrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 13, color: Colors.green[700], fontWeight: FontWeight.bold)),
-                  Text('Stock: ${product.stockQty}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  Text('Stock: ${_stockOf(product)}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 ]),
                 if (currentQty > 0)
                   Container(
@@ -165,14 +200,14 @@ class _CashieringScreenState extends State<CashieringScreen> {
                 onChanged: (v) { qty = int.tryParse(v) ?? 1; setDialogState(() {}); },
               )),
               IconButton(
-                onPressed: () { if (AppSettings.allowNegativeStock || qty < product.stockQty) { qty++; qtyController.text = '$qty'; setDialogState(() {}); } },
+                onPressed: () { if (AppSettings.allowNegativeStock || qty < _stockOf(product)) { qty++; qtyController.text = '$qty'; setDialogState(() {}); } },
                 icon: const Icon(Icons.add_circle_outline, size: 32), color: Colors.green,
               ),
             ]),
             const SizedBox(height: 12),
             Wrap(spacing: 8, runSpacing: 6, alignment: WrapAlignment.center, children: [
               for (final q in [1, 2, 3, 5, 10, 20, 50])
-                if (AppSettings.allowNegativeStock || q <= product.stockQty)
+                if (AppSettings.allowNegativeStock || q <= _stockOf(product))
                   GestureDetector(
                     onTap: () { qty = q; qtyController.text = '$q'; setDialogState(() {}); },
                     child: Container(
@@ -203,9 +238,9 @@ class _CashieringScreenState extends State<CashieringScreen> {
             ElevatedButton.icon(
               onPressed: () {
                 if (qty <= 0) return;
-                if (!AppSettings.allowNegativeStock && qty > product.stockQty) {
+                if (!AppSettings.allowNegativeStock && qty > _stockOf(product)) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Max stock is ${product.stockQty}'), backgroundColor: Colors.red));
+                    SnackBar(content: Text('Max stock is ${_stockOf(product)}'), backgroundColor: Colors.red));
                   return;
                 }
                 setState(() {
@@ -231,7 +266,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
   }
   void _incrementItem(int index) {
     setState(() {
-      if (AppSettings.allowNegativeStock || _cart[index].quantity < _cart[index].product.stockQty) {
+      if (AppSettings.allowNegativeStock || _cart[index].quantity < _stockOf(_cart[index].product)) {
         _cart[index].quantity++;
       } else {
         _showSnackBar('Maximum stock reached');
@@ -818,6 +853,9 @@ class _CashieringScreenState extends State<CashieringScreen> {
               ));
             }
           }
+          // 🔄 Phase B1.2: refresh branch stock cache after sale
+          _loadBranchStock();
+
           // ── Update Active Cashier Session ──
           () async {
             try {
@@ -870,6 +908,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
   @override
   void initState() {
     super.initState();
+    _loadBranchStock();  // Phase B1.2: load branch-aware stock
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       if (await DailyLockService.isLocked()) {
