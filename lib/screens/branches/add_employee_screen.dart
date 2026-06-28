@@ -109,7 +109,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
               validator: (v) => v == null || v.isEmpty ? 'Required' : null),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _role,
+              initialValue: _role,
               decoration: _dec('Role', Icons.badge),
               items: roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
               onChanged: (v) => setState(() => _role = v!),

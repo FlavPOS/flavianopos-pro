@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import '../../models/sync_queue_model.dart';
 import '../../helpers/sync_bridge.dart';
 import '../../services/session_validator_service.dart';
-import '../../services/audit_log_service.dart';
 import '../../models/settings_model.dart';
 import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
@@ -708,6 +707,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
       ),
     );
   }
+  @override
   Widget build(BuildContext context) {
     if (_checkingLock) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (!_viewerAuthorized) return _buildLockedScreen();
@@ -776,7 +776,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
                     setState(() {
                       _cashDeclared = false;
                       _redeclareCount++;
-                      _redeclareReason = "Manager " + username + " recounted (#" + _redeclareCount.toString() + ")";
+                      _redeclareReason = "Manager $username recounted (#$_redeclareCount)";
                     });
                   }
                   if (mounted) _showCashDeclarationDialog();
@@ -1060,7 +1060,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
           Switch(
             value: _useDenominations,
             onChanged: null,  // 🔒 Locked
-            activeColor: Colors.purple[700],
+            activeThumbColor: Colors.purple[700],
           ),
         ]),
         const Divider(),

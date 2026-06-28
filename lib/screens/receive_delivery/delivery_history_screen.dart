@@ -29,7 +29,11 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
   Future<void> _applyFilters() async { final r = await DeliveryStorage.getFiltered(dateFrom: _dateFrom, dateTo: _dateTo, searchQuery: _searchCtrl.text); setState(() => _filtered = r); }
   Future<void> _pickDate(bool isFrom) async {
     final p = await showDatePicker(context: context, initialDate: (isFrom ? _dateFrom : _dateTo) ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
-    if (p != null) { setState(() { if (isFrom) _dateFrom = p; else _dateTo = p; }); _applyFilters(); }
+    if (p != null) { setState(() { if (isFrom) {
+      _dateFrom = p;
+    } else {
+      _dateTo = p;
+    } }); _applyFilters(); }
   }
   void _clearFilters() { setState(() { _dateFrom = null; _dateTo = null; _searchCtrl.clear(); _filtered = _records; }); }
   void _snack(String msg, Color bg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: bg));

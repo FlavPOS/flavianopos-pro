@@ -31,12 +31,12 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
 
   bool get _isEditing => widget.product != null;
 
-  List<String> _categories = [
+  final List<String> _categories = [
     'Beverages', 'Snacks', 'Rice & Grains', 'Canned Goods', 'Personal Care',
     'Dairy', 'Frozen Foods', 'Condiments', 'Household', 'Others',
   ];
 
-  List<String> _units = [
+  final List<String> _units = [
     'pcs', 'kg', 'g', 'L', 'ml', 'pack', 'box', 'bottle', 'can', 'sachet', 'dozen',
   ];
 

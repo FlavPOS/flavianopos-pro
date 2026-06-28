@@ -127,6 +127,11 @@ class BranchInventoryService {
 
   // ===== FIREBASE SYNC (DIRECT, NO QUEUE) =====
 
+  // ═══ DEBUG: Last sync status ═══
+  static String lastSyncStatus = "never";
+  static String lastSyncDetail = "";
+  static DateTime? lastSyncTime;
+
   static Future<void> _syncToFirebase(String branchId, String productId) async {
     print('[BINV-SYNC] START: $branchId/$productId');
     try {
@@ -183,8 +188,14 @@ class BranchInventoryService {
       await db.ref(path).set(payload);
 
       print('[BINV-SYNC] SUCCESS: $path');
+      lastSyncStatus = "SUCCESS";
+      lastSyncDetail = path;
+      lastSyncTime = DateTime.now();
     } catch (e) {
       print('[BINV-SYNC] EXCEPTION: $e');
+      lastSyncStatus = "EXCEPTION";
+      lastSyncDetail = e.toString();
+      lastSyncTime = DateTime.now();
     }
   }
 

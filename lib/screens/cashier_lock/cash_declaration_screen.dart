@@ -283,6 +283,7 @@ class _CashDeclarationScreenState extends State<CashDeclarationScreen> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
 
     return WillPopScope(

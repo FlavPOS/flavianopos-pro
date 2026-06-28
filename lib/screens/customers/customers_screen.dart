@@ -278,6 +278,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -304,7 +305,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
           const SizedBox(width: 8),
           _summaryCard('Wholesale', '${_groupCount('Wholesale')}', Icons.store, Colors.indigo),
           const SizedBox(width: 8),
-          _summaryCard('Revenue', '${_formatCompact(_totalRevenue)}', Icons.trending_up, Colors.green),
+          _summaryCard('Revenue', _formatCompact(_totalRevenue), Icons.trending_up, Colors.green),
         ])),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: TextField(controller: _searchController,

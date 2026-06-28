@@ -353,7 +353,7 @@ class ManagerPinDialog {
     if (users.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("❌ Invalid PIN!\nMust be an Admin or Manager.\nGo to Users Module to verify."), duration: const Duration(seconds: 8),
+          content: Text("❌ Invalid PIN!\nMust be an Admin or Manager.\nGo to Users Module to verify."), duration: Duration(seconds: 8),
           backgroundColor: Colors.red,
         ));
       }

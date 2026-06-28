@@ -182,13 +182,13 @@ class PLSummaryTab extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
             child: Row(children: [
-              Expanded(flex: 4, child: Text(_iconForReason(e.key) + ' ' + e.key, style: const TextStyle(fontSize: 12))),
+              Expanded(flex: 4, child: Text('${_iconForReason(e.key)} ${e.key}', style: const TextStyle(fontSize: 12))),
               Expanded(flex: 3, child: Text(_fmt(e.value), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
               Expanded(flex: 2, child: Text(_pct(pctShrink.toDouble()), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
               Expanded(flex: 2, child: Text(_pct(pctRev.toDouble()), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.red.shade600))),
             ]),
           );
-        }).toList(),
+        }),
         const Divider(),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
@@ -223,7 +223,7 @@ class PLSummaryTab extends StatelessWidget {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(children: [
-                  Expanded(flex: 4, child: Text('▼ ' + catEntry.key, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  Expanded(flex: 4, child: Text('▼ ${catEntry.key}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                   Expanded(flex: 3, child: Text(_fmt(catTotal), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                   Expanded(flex: 2, child: Text(_pct(catPctExp.toDouble()), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
                   Expanded(flex: 2, child: Text(_pct(catPctRev.toDouble()), textAlign: TextAlign.right, style: TextStyle(fontSize: 11, color: Colors.purple.shade700, fontWeight: FontWeight.bold))),
@@ -235,16 +235,16 @@ class PLSummaryTab extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(left: 16, top: 4, bottom: 4),
                   child: Row(children: [
-                    Expanded(flex: 4, child: Text('└─ ' + subEntry.key, style: TextStyle(fontSize: 11, color: Colors.grey.shade700))),
+                    Expanded(flex: 4, child: Text('└─ ${subEntry.key}', style: TextStyle(fontSize: 11, color: Colors.grey.shade700))),
                     Expanded(flex: 3, child: Text(_fmt(subEntry.value), textAlign: TextAlign.right, style: const TextStyle(fontSize: 11))),
                     Expanded(flex: 2, child: Text(_pct(subPctExp.toDouble()), textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: Colors.grey.shade600))),
                     Expanded(flex: 2, child: Text(_pct(subPctRev.toDouble()), textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: Colors.grey.shade600))),
                   ]),
                 );
-              }).toList(),
+              }),
             ]),
           );
-        }).toList(),
+        }),
         const Divider(),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),

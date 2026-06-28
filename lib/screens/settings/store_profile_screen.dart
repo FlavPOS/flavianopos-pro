@@ -250,7 +250,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               _buildField('Branch', _branchNameController, Icons.location_on, enabled: false),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: _businessType,
+                initialValue: _businessType,
                 decoration: InputDecoration(
                   labelText: 'Business Type',
                   prefixIcon: const Icon(Icons.business),
@@ -275,7 +275,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 subtitle: const Text('Apply VAT to receipts'),
                 value: _vatRegistered,
                 onChanged: (v) => setState(() => _vatRegistered = v),
-                activeColor: Colors.purple,
+                activeThumbColor: Colors.purple,
               ),
               const SizedBox(height: 16),
               const Text('Receipt Customization', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),

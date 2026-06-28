@@ -2,7 +2,6 @@ import '../../utils/download_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:excel/excel.dart' as xl;
 import '../../models/product_model.dart';
 import '../../models/transaction_model.dart';

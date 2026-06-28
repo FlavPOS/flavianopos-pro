@@ -2,9 +2,7 @@
 // Incident Report screen for cash variance > ₱50
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../models/cashier_session_model.dart';
-import '../../models/user_model.dart';
 import '../../services/cashier_session_service.dart';
 import '../../utils/cash_variance_voucher_pdf.dart';
 import '../../models/incident_report_model.dart';

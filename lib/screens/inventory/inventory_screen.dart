@@ -438,7 +438,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 child: Text(
                   _isHeadOffice
                       ? "🏢 ALL"
-                      : (widget.branch.isEmpty ? "🏪 BRANCH" : "🏪 " + widget.branch.toUpperCase()),
+                      : (widget.branch.isEmpty ? "🏪 BRANCH" : "🏪 ${widget.branch.toUpperCase()}"),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,

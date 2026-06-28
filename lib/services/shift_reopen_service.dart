@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import '../models/cashier_session_model.dart';
 import '../helpers/database_helper.dart';
-import '../helpers/sync_bridge.dart';
-import '../models/sync_queue_model.dart';
 import '../services/daily_lock_service.dart';
 import '../services/audit_log_service.dart';
 

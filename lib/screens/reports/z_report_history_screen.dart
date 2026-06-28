@@ -6,7 +6,6 @@ import 'package:excel/excel.dart' hide Border;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
-import '../../services/daily_lock_service.dart';
 import '../../models/z_report_model.dart';
 import '../../models/denomination_model.dart';
 import '../../helpers/database_helper.dart';
@@ -208,7 +207,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
     final overShortLabel = isBalanced ? "BALANCED" : (isOver ? "OVER" : "SHORT");
     
     // Helper for currency
-    String fmt(double v) => "PHP " + v.toStringAsFixed(2);
+    String fmt(double v) => "PHP ${v.toStringAsFixed(2)}";
     
     // Get payment by method
     double getPayment(String method) {
@@ -273,7 +272,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             // SALES SUMMARY
             _zSectionTitle("SALES SUMMARY"),
             _zRow("Gross Sales", fmt(r.grossSales)),
-            _zRow("Less: Discounts", "-" + fmt(r.totalDiscount)),
+            _zRow("Less: Discounts", "-${fmt(r.totalDiscount)}"),
             const SizedBox(height: 10),
             
             // NET SALES
@@ -287,10 +286,10 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             
             // PAYMENT BREAKDOWN
             _zSectionTitle("PAYMENT BREAKDOWN"),
-            _zRow("Cash (" + getPaymentCount("Cash").toString() + ")", fmt(getPayment("Cash"))),
-            _zRow("GCash (" + getPaymentCount("GCash").toString() + ")", fmt(getPayment("GCash"))),
-            _zRow("Maya (" + getPaymentCount("Maya").toString() + ")", fmt(getPayment("Maya"))),
-            _zRow("Card (" + getPaymentCount("Card").toString() + ")", fmt(getPayment("Card"))),
+            _zRow("Cash (${getPaymentCount("Cash")})", fmt(getPayment("Cash"))),
+            _zRow("GCash (${getPaymentCount("GCash")})", fmt(getPayment("GCash"))),
+            _zRow("Maya (${getPaymentCount("Maya")})", fmt(getPayment("Maya"))),
+            _zRow("Card (${getPaymentCount("Card")})", fmt(getPayment("Card"))),
             const Divider(height: 16),
             _zRow("TOTAL", fmt(r.netSales), bold: true),
             const SizedBox(height: 10),
@@ -306,7 +305,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             // CASH COUNT
             _zSectionTitle("CASH COUNT"),
             _zRow("Beginning Cash", fmt(r.beginningCash)),
-            _zRow("+ Cash Sales", "+" + fmt(getPayment("Cash"))),
+            _zRow("+ Cash Sales", "+${fmt(getPayment("Cash"))}"),
             _zRow("Expected Cash", fmt(r.expectedCash), bold: true),
             _zRow("Ending Cash", fmt(r.endingCash), bold: true),
             const SizedBox(height: 10),
@@ -346,7 +345,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             ),
             const SizedBox(height: 8),
             Center(child: Text(
-              "Generated: " + _formatDate(r.generatedAt) + " " + _formatTime(r.generatedAt),
+              "Generated: ${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}",
               style: TextStyle(fontSize: 10, color: Colors.grey[600], fontStyle: FontStyle.italic),
             )),
           ],
@@ -393,6 +392,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
   }
 
 
+  @override
   Widget build(BuildContext context) {
     final allReports = ZReportRecord.history;
     final reports = _filteredReports; // Z REPORT WIRED
@@ -608,7 +608,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                         border: Border.all(color: Colors.orange.shade200),
                       ),
                       child: Text(
-                        '🔄 Recount for ' + r.reportId + '\nAuthorized by: ' + username + '\nReason: ' + reason,
+                        '🔄 Recount for ${r.reportId}\nAuthorized by: $username\nReason: $reason',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -617,7 +617,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(children: [
                         SizedBox(width: 56, child: Text(
-                          d >= 1 ? 'P' + d.toInt().toString() : d.toStringAsFixed(2) + 'c',
+                          d >= 1 ? 'P${d.toInt()}' : '${d.toStringAsFixed(2)}c',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                         )),
                         const SizedBox(width: 8),
@@ -636,7 +636,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                         )),
                         const SizedBox(width: 8),
                         SizedBox(width: 70, child: Text(
-                          'P' + (d * (int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0)).toStringAsFixed(2),
+                          'P${(d * (int.tryParse(tempCtrls[d]?.text.trim() ?? '') ?? 0)).toStringAsFixed(2)}',
                           textAlign: TextAlign.right,
                           style: const TextStyle(fontSize: 11),
                         )),
@@ -653,7 +653,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('NEW COUNT:', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('P' + total.toStringAsFixed(2),
+                          Text('P${total.toStringAsFixed(2)}',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.orange.shade800)),
                         ],
                       ),
@@ -700,10 +700,10 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                     }
                     if (denomRecords.isNotEmpty) {
                       await DatabaseHelper().insertDenominationBatch(denomRecords);
-                      debugPrint('💰 Re-declared & saved ' + denomRecords.length.toString() + ' denominations for ' + r.reportId);
+                      debugPrint('💰 Re-declared & saved ${denomRecords.length} denominations for ${r.reportId}');
                     }
                   } catch (e) {
-                    debugPrint('⚠️ Failed to save re-declared denominations: ' + e.toString());
+                    debugPrint('⚠️ Failed to save re-declared denominations: $e');
                   }
 
                   // 🔥 Sync to Firebase (multi-store BIR audit)
@@ -716,7 +716,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                   }
                   final db = await DatabaseHelper().database;
                   await db.insert('expense_audit_trail', {
-                    'id': 'AUDIT-' + DateTime.now().millisecondsSinceEpoch.toString(),
+                    'id': 'AUDIT-${DateTime.now().millisecondsSinceEpoch}',
                     'expenseId': 'Z_REDECLARE',
                     'expenseNumber': r.reportId,
                     'action': 'Z_REPORT_REDECLARED',
@@ -731,7 +731,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
                   if (mounted) {
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Re-declared by ' + username + ': P' + total.toStringAsFixed(2)),
+                      content: Text('Re-declared by $username: P${total.toStringAsFixed(2)}'),
                       backgroundColor: Colors.green,
                     ));
                   }
@@ -752,8 +752,10 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
       final allReports = ZReportRecord.history;
     final reports = _filteredReports; // Z REPORT WIRED
       if (reports.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No Z Reports to export')));
+        }
         return;
       }
       final excel = Excel.createExcel();
@@ -782,7 +784,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         final denomStr = await DatabaseHelper().getDenominationsForSession(r.reportId);
         summary.appendRow([
           TextCellValue(r.reportId),
-          TextCellValue(r.reportDate.year.toString() + '-' + r.reportDate.month.toString().padLeft(2, '0') + '-' + r.reportDate.day.toString().padLeft(2, '0')),
+          TextCellValue('${r.reportDate.year}-${r.reportDate.month.toString().padLeft(2, '0')}-${r.reportDate.day.toString().padLeft(2, '0')}'),
           TextCellValue(r.cashier),
           TextCellValue(r.branch),
           DoubleCellValue(r.grossSales),
@@ -815,24 +817,28 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         // Web: use XFile.fromData (no file system needed)
         final xfile = XFile.fromData(
           Uint8List.fromList(bytes),
-          name: 'Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx',
+          name: 'Z_Reports_${DateTime.now().millisecondsSinceEpoch}.xlsx',
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         );
-        await Share.shareXFiles([xfile], text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+        await Share.shareXFiles([xfile], text: 'Z Report History Export (${reports.length} reports)');
       } else {
         // Mobile: save to temp file + share
         final dir = await getTemporaryDirectory();
-        final file = File(dir.path + '/Z_Reports_' + DateTime.now().millisecondsSinceEpoch.toString() + '.xlsx');
+        final file = File('${dir.path}/Z_Reports_${DateTime.now().millisecondsSinceEpoch}.xlsx');
         await file.writeAsBytes(bytes);
-        await Share.shareXFiles([XFile(file.path)], text: 'Z Report History Export (' + reports.length.toString() + ' reports)');
+        await Share.shareXFiles([XFile(file.path)], text: 'Z Report History Export (${reports.length} reports)');
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('✅ Exported ' + reports.length.toString() + ' Z Reports'),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('✅ Exported ${reports.length} Z Reports'),
         backgroundColor: Colors.green));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('❌ Export failed: ' + e.toString()),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ Export failed: $e'),
         backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -842,21 +848,27 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
       final allReports = ZReportRecord.history;
     final reports = _filteredReports; // Z REPORT WIRED
       if (reports.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No Z Reports to export')));
+        }
         return;
       }
       for (final r in reports) {
         final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId);
         await ZReportPdf.printFromRecord(r, denominations: denomMap);
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('✅ Generated ' + reports.length.toString() + ' PDF reports'),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('✅ Generated ${reports.length} PDF reports'),
         backgroundColor: Colors.green));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('❌ PDF export failed: ' + e.toString()),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('❌ PDF export failed: $e'),
         backgroundColor: Colors.red));
+      }
     }
   }
 }

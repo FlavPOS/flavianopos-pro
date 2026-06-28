@@ -24,7 +24,7 @@ class ExpensePrintDialog {
             style: TextStyle(fontSize: 12, color: Colors.grey.shade700,
               fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text('PHP ' + expense.amount.toStringAsFixed(2),
+          Text('PHP ${expense.amount.toStringAsFixed(2)}',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
               color: Color(0xFF6A1B9A))),
           const SizedBox(height: 4),
@@ -55,7 +55,7 @@ class ExpensePrintDialog {
                 catch (e) {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text('Print failed: ' + e.toString()),
+                      SnackBar(content: Text('Print failed: $e'),
                         backgroundColor: Colors.red));
                   }
                 }
@@ -74,7 +74,7 @@ class ExpensePrintDialog {
                 catch (e) {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text('Save failed: ' + e.toString()),
+                      SnackBar(content: Text('Save failed: $e'),
                         backgroundColor: Colors.red));
                   }
                 }

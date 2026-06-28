@@ -114,7 +114,7 @@ class ZReportRecord {
     'overShort': overShort,
     'refundedCount': refundedCount,
     'refundedAmount': refundedAmount,
-    'refundedTransactionsJson': refundedTransactions.map((v) => v.txnId + '|' + v.reason + '|' + v.amount.toString()).join('||'),
+    'refundedTransactionsJson': refundedTransactions.map((v) => '${v.txnId}|${v.reason}|${v.amount}').join('||'),
     'allTransactionsJson': transactionLog.map((t) => '${t.txnId}|${t.dateTime.toIso8601String()}|${t.paymentMethod}|${t.amount}|${t.status}').join('||'),
   };
 

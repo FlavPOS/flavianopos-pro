@@ -267,7 +267,7 @@ class _EmployeeListScreenState extends State<EmployeeListScreen> {
             const SizedBox(width: 6),
             _statCard('Active', '$_activeCount', Icons.check_circle, Colors.green),
             const SizedBox(width: 6),
-            _statCard('Salary', '${_formatCompact(_totalSalary)}', Icons.money, Colors.orange),
+            _statCard('Salary', _formatCompact(_totalSalary), Icons.money, Colors.orange),
           ]),
           const SizedBox(height: 10),
           TextField(controller: _searchCtrl,

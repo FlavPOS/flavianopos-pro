@@ -35,7 +35,7 @@ class _DiscountMonitoringScreenState extends State<DiscountMonitoringScreen>
   void dispose() { _tabCtrl.dispose(); super.dispose(); }
 
   // 🎯 Status filter for void/refund/exchange awareness
-  String _statusFilter = 'Active';  // 'All', 'Active', 'Voided', 'Refunded'
+  final String _statusFilter = 'Active';  // 'All', 'Active', 'Voided', 'Refunded'
 
   /// Get transaction status by ID (returns 'completed' if not found)
   String _getTxnStatus(String transactionId) {

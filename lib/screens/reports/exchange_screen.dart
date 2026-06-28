@@ -11,8 +11,8 @@ import '../../helpers/database_helper.dart';
 // Helper class for replacement items list
 class _ReplacementEntry {
   final Product product;
-  int quantity;
-  _ReplacementEntry({required this.product, this.quantity = 1});
+  int quantity = 1;
+  _ReplacementEntry({required this.product});
   double get total => product.sellingPrice * quantity;
 }
 
@@ -387,7 +387,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 ])),
               Padding(padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('Replacement Total (${_totalQty} ${_totalQty == 1 ? "item" : "items"}):', style: const TextStyle(fontSize: 12)),
+                  Text('Replacement Total ($_totalQty ${_totalQty == 1 ? "item" : "items"}):', style: const TextStyle(fontSize: 12)),
                   Text(_replacementTotal.toStringAsFixed(2), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 ])),
               const Divider(),

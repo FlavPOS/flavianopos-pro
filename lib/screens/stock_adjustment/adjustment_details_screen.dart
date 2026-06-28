@@ -159,11 +159,11 @@ class _AdjustmentDetailsScreenState extends State<AdjustmentDetailsScreen> {
                                   alignment: TextAlign.center,
                                 ),
                                 _DataCell(
-                                  text: '${(summaryData[reasons[i]]!['totalCost'] as double).toStringAsFixed(2)}',
+                                  text: (summaryData[reasons[i]]!['totalCost'] as double).toStringAsFixed(2),
                                   alignment: TextAlign.right,
                                 ),
                                 _DataCell(
-                                  text: '${(summaryData[reasons[i]]!['totalRetail'] as double).toStringAsFixed(2)}',
+                                  text: (summaryData[reasons[i]]!['totalRetail'] as double).toStringAsFixed(2),
                                   alignment: TextAlign.right,
                                 ),
                               ],
@@ -195,13 +195,13 @@ class _AdjustmentDetailsScreenState extends State<AdjustmentDetailsScreen> {
                                 color: Colors.blue,
                               ),
                               _DataCell(
-                                text: '${grandTotalCost.toStringAsFixed(2)}',
+                                text: grandTotalCost.toStringAsFixed(2),
                                 alignment: TextAlign.right,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.blue,
                               ),
                               _DataCell(
-                                text: '${grandTotalRetail.toStringAsFixed(2)}',
+                                text: grandTotalRetail.toStringAsFixed(2),
                                 alignment: TextAlign.right,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.blue,

@@ -202,7 +202,7 @@ class _BranchesScreenState extends State<BranchesScreen> {
                 const SizedBox(width: 8),
                 _card(
                   'Sales',
-                  '${_formatCompact(_totalSales)}',
+                  _formatCompact(_totalSales),
                   Icons.trending_up,
                   Colors.orange,
                 ),

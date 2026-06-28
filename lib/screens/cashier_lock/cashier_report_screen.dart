@@ -79,8 +79,11 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
         } else {
           final existingTime = (existing["updatedAt"] ?? existing["adjustedAt"] ?? "").toString();
           final newTime = (r["updatedAt"] ?? r["adjustedAt"] ?? "").toString();
-          if (newTime.compareTo(existingTime) >= 0) merged[id] = r;
-          else merged[id] = existing;
+          if (newTime.compareTo(existingTime) >= 0) {
+            merged[id] = r;
+          } else {
+            merged[id] = existing;
+          }
         }
       }
       
@@ -303,8 +306,10 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
   Future<void> _exportAllExcel() async {
     try {
       if (_sessions.isEmpty) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("No sessions to export")));
+        }
         return;
       }
       
@@ -361,7 +366,7 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
         var denomStr = denomRows.map((r) {
           final d = (r["denomination"] as num?)?.toDouble() ?? 0;
           final q = r["quantity"] ?? 0;
-          return "PHP " + d.toStringAsFixed(2) + " x " + q.toString();
+          return "PHP ${d.toStringAsFixed(2)} x $q";
         }).join(", ");
         // If empty, try to find from cloud session payload (already in _sessions if loaded from cloud)
         if (denomStr.isEmpty) {
@@ -373,26 +378,17 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
               denomStr = cloudDenoms.map((d) {
                 final den = (d["denomination"] as num?)?.toDouble() ?? 0;
                 final qty = d["quantity"] ?? 0;
-                return "PHP " + den.toStringAsFixed(2) + " x " + qty.toString();
+                return "PHP ${den.toStringAsFixed(2)} x $qty";
               }).join(", ");
             }
           } catch (e) { debugPrint("Cloud denom fetch failed: $e"); }
         }
         
         // Format dates
-        final openedStr = "" +
-          s.openedAt.year.toString() + "-" +
-          s.openedAt.month.toString().padLeft(2, "0") + "-" +
-          s.openedAt.day.toString().padLeft(2, "0") + " " +
-          s.openedAt.hour.toString().padLeft(2, "0") + ":" +
-          s.openedAt.minute.toString().padLeft(2, "0");
+        final openedStr = "${s.openedAt.year}-${s.openedAt.month.toString().padLeft(2, "0")}-${s.openedAt.day.toString().padLeft(2, "0")} ${s.openedAt.hour.toString().padLeft(2, "0")}:${s.openedAt.minute.toString().padLeft(2, "0")}";
         
         final closedStr = s.closedAt == null ? "" :
-          s.closedAt!.year.toString() + "-" +
-          s.closedAt!.month.toString().padLeft(2, "0") + "-" +
-          s.closedAt!.day.toString().padLeft(2, "0") + " " +
-          s.closedAt!.hour.toString().padLeft(2, "0") + ":" +
-          s.closedAt!.minute.toString().padLeft(2, "0");
+          "${s.closedAt!.year}-${s.closedAt!.month.toString().padLeft(2, "0")}-${s.closedAt!.day.toString().padLeft(2, "0")} ${s.closedAt!.hour.toString().padLeft(2, "0")}:${s.closedAt!.minute.toString().padLeft(2, "0")}";
         
         sheet.appendRow([
           TextCellValue(s.shiftId),
@@ -437,7 +433,7 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
       if (bytes == null) return;
       
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-      final filename = "CashierReport_" + timestamp + ".xlsx";
+      final filename = "CashierReport_$timestamp.xlsx";
       
       // Web + Mobile compatible export
       if (kIsWeb) {
@@ -447,22 +443,26 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
           mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         );
         await Share.shareXFiles([xfile], 
-          text: "Cashier Report Export (" + _sessions.length.toString() + " sessions)");
+          text: "Cashier Report Export (${_sessions.length} sessions)");
       } else {
         final dir = await getTemporaryDirectory();
-        final file = File(dir.path + "/" + filename);
+        final file = File("${dir.path}/$filename");
         await file.writeAsBytes(bytes);
         await Share.shareXFiles([XFile(file.path)],
-          text: "Cashier Report Export (" + _sessions.length.toString() + " sessions)");
+          text: "Cashier Report Export (${_sessions.length} sessions)");
       }
       
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("Exported " + _sessions.length.toString() + " sessions"),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Exported ${_sessions.length} sessions"),
         backgroundColor: Colors.green));
+      }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text("Export failed: " + e.toString()),
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text("Export failed: $e"),
         backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -474,6 +474,7 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     super.dispose();
   }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),

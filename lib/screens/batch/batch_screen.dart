@@ -15,7 +15,7 @@ class BatchScreen extends StatefulWidget {
 }
 
 class _BatchScreenState extends State<BatchScreen> {
-  List<ProductBatch> _batches = List.from(ProductBatch.allBatches);
+  final List<ProductBatch> _batches = List.from(ProductBatch.allBatches);
   final _searchCtrl = TextEditingController();
   String _query = '';
   String _filterStatus = 'All';

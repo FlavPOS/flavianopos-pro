@@ -134,7 +134,7 @@ class PLMonthlyTab extends StatelessWidget {
             ]),
           ),
           // Month rows
-          ...report!.months.map((m) => _monthRow(context, m)).toList(),
+          ...report!.months.map((m) => _monthRow(context, m)),
           const Divider(height: 16),
           // Totals row
           _totalsRow(context),
@@ -303,7 +303,7 @@ class PLMonthlyTab extends StatelessWidget {
                 if (isBest) const Text(' 🏆', style: TextStyle(fontSize: 12)),
               ]),
             );
-          }).toList(),
+          }),
         ]),
       ),
     );

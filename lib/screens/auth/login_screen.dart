@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../services/daily_lock_service.dart';
 import '_debug_reset_chip.dart';
 import 'package:flutter/services.dart';
-import '../../widgets/app_logo.dart';
 import '../../widgets/pos_background.dart';
 import '../../helpers/database_helper.dart';
 import '../../models/user_model.dart';
@@ -177,6 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ));
     }
   }
+  @override
   Widget build(BuildContext context) {
     final sw = MediaQuery.of(context).size.width;
     final isT = sw > 600;

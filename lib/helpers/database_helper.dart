@@ -1468,7 +1468,7 @@ class DatabaseHelper {
         final denom = (r['denomination'] as num?)?.toStringAsFixed(0) ?? '0';
         final qty   = r['quantity'] ?? 0;
         final total = (r['total'] as num?)?.toStringAsFixed(2) ?? '0.00';
-        return '${denom}x${qty}=${total}';
+        return '${denom}x$qty=$total';
       }).join('; ');
     } catch (_) {
       return '';

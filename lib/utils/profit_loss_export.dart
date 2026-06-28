@@ -15,8 +15,9 @@ class ProfitLossExport {
   static String _fmt(double v) {
     final c = AppSettings.currency;
     String prefix;
-    if (c == 'PHP') prefix = 'PHP ';
-    else if (c == 'USD') prefix = 'USD ';
+    if (c == 'PHP') {
+      prefix = 'PHP ';
+    } else if (c == 'USD') prefix = 'USD ';
     else if (c == 'SGD') prefix = 'SGD ';
     else prefix = AppSettings.currencySymbol;
     return prefix + v.toStringAsFixed(2);
@@ -30,7 +31,7 @@ class ProfitLossExport {
       final business = AppSettings.businessName;
       final address = AppSettings.businessAddress;
       final tin = AppSettings.businessTin;
-      final dateFmt = (DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      String dateFmt(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
       pdf.addPage(pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -103,7 +104,7 @@ class ProfitLossExport {
               ...report.expensesByCategory.entries.expand((cat) {
                 final catTotal = cat.value.values.fold<double>(0, (a, b) => a + b);
                 return [
-                  _pdfRow('${cat.key}', _fmt(catTotal), bold: true),
+                  _pdfRow(cat.key, _fmt(catTotal), bold: true),
                   ...cat.value.entries.map((sub) => _pdfRow('   - ${sub.key}', _fmt(sub.value), small: true)),
                 ];
               }),

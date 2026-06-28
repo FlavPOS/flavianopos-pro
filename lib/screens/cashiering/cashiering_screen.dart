@@ -863,8 +863,9 @@ class _CashieringScreenState extends State<CashieringScreen> {
               if (session != null) {
                 double cashAdd = 0, gcashAdd = 0, mayaAdd = 0, cardAdd = 0, otherAdd = 0;
                 final pm = method.toLowerCase();
-                if (pm.contains('cash')) cashAdd = total;
-                else if (pm.contains('gcash')) gcashAdd = total;
+                if (pm.contains('cash')) {
+                  cashAdd = total;
+                } else if (pm.contains('gcash')) gcashAdd = total;
                 else if (pm.contains('maya')) mayaAdd = total;
                 else if (pm.contains('card')) cardAdd = total;
                 else otherAdd = total;

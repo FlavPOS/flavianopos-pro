@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'dart:typed_data';
 // // import 'dart:convert';
 import 'package:pdf/pdf.dart';
@@ -119,7 +118,7 @@ class ZReportPdf {
     // ─── Sales Summary ───
     w.add(zSection('SALES SUMMARY'));
     w.add(zRow('Gross Sales', grossSales.toStringAsFixed(2)));
-    w.add(zRow('Less: Discounts', '-' + totalDiscount.toStringAsFixed(2)));
+    w.add(zRow('Less: Discounts', '-${totalDiscount.toStringAsFixed(2)}'));
     w.add(zDivider());
     w.add(zRow('NET SALES', netSales.toStringAsFixed(2), bold: true));
     final vatable = netSales / 1.12;
@@ -137,7 +136,7 @@ class ZReportPdf {
     for (final e in paymentBreakdown.entries) {
       final cnt = e.value['count'];
       final tot = (e.value['total'] as double).toStringAsFixed(2);
-      w.add(zRow(e.key + ' (' + cnt.toString() + ')', tot));
+      w.add(zRow('${e.key} ($cnt)', tot));
     }
     w.add(zDivider());
     w.add(zRow('TOTAL', netSales.toStringAsFixed(2), bold: true));
@@ -154,7 +153,7 @@ class ZReportPdf {
     // ─── Cash Count ───
     w.add(zSection('CASH COUNT'));
     w.add(zRow('Beginning Cash', beginningCash.toStringAsFixed(2)));
-    w.add(zRow('Add: Cash Sales', '+' + (expectedCash - beginningCash).toStringAsFixed(2)));
+    w.add(zRow('Add: Cash Sales', '+${(expectedCash - beginningCash).toStringAsFixed(2)}'));
     w.add(zRow('Expected Cash', expectedCash.toStringAsFixed(2), bold: true));
     w.add(zRow('Ending Cash', endingCash.toStringAsFixed(2)));
     w.add(zDivider());
@@ -171,7 +170,7 @@ class ZReportPdf {
         for (final e in filtered) {
           final lineTotal = e.key * e.value;
           denomTotal += lineTotal;
-          final lbl = e.key >= 1 ? 'PHP ' + e.key.toInt().toString() + ' x ' + e.value.toString() : 'PHP ' + e.key.toStringAsFixed(2) + ' x ' + e.value.toString();
+          final lbl = e.key >= 1 ? 'PHP ${e.key.toInt()} x ${e.value}' : 'PHP ${e.key.toStringAsFixed(2)} x ${e.value}';
           w.add(zRow(lbl, lineTotal.toStringAsFixed(2)));
         }
         w.add(zDivider());

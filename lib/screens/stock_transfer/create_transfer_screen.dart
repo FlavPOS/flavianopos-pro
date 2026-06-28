@@ -72,7 +72,7 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
   void dispose() { _remarksCtrl.dispose(); _approvedByCtrl.dispose(); super.dispose(); }
 
   Future<void> _loadTransferNo() async {
-    final no = await StockTransferStorage.generateTransferNo();
+    final no = StockTransferStorage.generateTransferNo();
     setState(() => _transferNo = no);
   }
 

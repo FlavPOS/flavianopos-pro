@@ -127,7 +127,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
               Text(txn.total.toStringAsFixed(2), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange)),
             ])),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(value: refundMethod,
+          DropdownButtonFormField<String>(initialValue: refundMethod,
             decoration: InputDecoration(labelText: 'Refund Method', prefixIcon: const Icon(Icons.payment),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
             items: ['Cash', 'GCash', 'Maya', 'Card'].map((m) =>
@@ -329,7 +329,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         ]),
       body: Column(children: [
         Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-          _card('Today', '${_formatCompact(_todaySales)}', Icons.trending_up, Colors.teal),
+          _card('Today', _formatCompact(_todaySales), Icons.trending_up, Colors.teal),
           const SizedBox(width: 8),
           _card('TXN', '$_todayTxn', Icons.receipt_long, Colors.blue),
           const SizedBox(width: 8),

@@ -382,7 +382,7 @@ class _ReceiveTransferScreenState extends State<ReceiveTransferScreen> {
     transfer.receivedBy = widget.currentUser;
     transfer.receivedDate = now;
     transfer.updatedAt = now;
-    if (remarks.isNotEmpty) transfer.remarks += (transfer.remarks.isNotEmpty ? ' | ' : '') + 'Recv: $remarks';
+    if (remarks.isNotEmpty) transfer.remarks += '${transfer.remarks.isNotEmpty ? ' | ' : ''}Recv: $remarks';
 
     await StockTransferStorage.updateTransfer(transfer);
     if (ledgerEntries.isNotEmpty) await StockTransferStorage.saveLedger(ledgerEntries);

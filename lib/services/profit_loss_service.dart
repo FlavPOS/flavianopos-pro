@@ -112,7 +112,7 @@ class ProfitLossService {
 
       // 3. Display reversals as negative entries
       for (final entry in reversalsByReason.entries) {
-        shrinkageByReason['Reversal: ' + entry.key] = -entry.value;
+        shrinkageByReason['Reversal: ${entry.key}'] = -entry.value;
       }
     } catch (_) {}
 

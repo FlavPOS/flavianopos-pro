@@ -13,8 +13,9 @@ class CashVarianceVoucherPDF {
   static String _fmt(double v) {
     final c = AppSettings.currency;
     String prefix;
-    if (c == 'PHP') prefix = 'PHP ';
-    else if (c == 'USD') prefix = 'USD ';
+    if (c == 'PHP') {
+      prefix = 'PHP ';
+    } else if (c == 'USD') prefix = 'USD ';
     else if (c == 'SGD') prefix = 'SGD ';
     else prefix = AppSettings.currencySymbol;
     return prefix + v.toStringAsFixed(2);
