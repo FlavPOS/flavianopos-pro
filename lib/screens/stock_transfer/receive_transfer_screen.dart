@@ -1,6 +1,8 @@
 // ============================================================
 import '../../models/batch_model.dart';
 import '../../services/device_assignment_service.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../helpers/database_helper.dart';
 import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 // RECEIVE INBOUND TRANSFER - QuickPOS Pro
@@ -27,6 +29,82 @@ class _ReceiveTransferScreenState extends State<ReceiveTransferScreen> {
 
   Future<void> _load() async {
     // STX BRANCH FILTERED RECEIVE - only show transfers TO this device branch
+    // STX CLOUD MERGE - fetch transfers from Firebase, upsert into local SQLite
+    try {
+      final cloudTransfers = await SyncBridge.readStockTransfersFromFirebase();
+      if (cloudTransfers.isNotEmpty) {
+        final db = await DatabaseHelper().database;
+        for (final ct in cloudTransfers) {
+          final transferId = (ct['id'] ?? '').toString();
+          if (transferId.isEmpty) continue;
+          
+          // Convert cloud format to local SQLite format
+          final localMap = {
+            'id': transferId,
+            'transferNo': ct['transferNo']?.toString() ?? '',
+            'transferDate': ct['transferDate']?.toString() ?? DateTime.now().toIso8601String(),
+            'fromBranchId': ct['fromBranchId']?.toString() ?? '',
+            'fromBranchName': ct['fromBranchName']?.toString() ?? '',
+            'toBranchId': ct['toBranchId']?.toString() ?? '',
+            'toBranchName': ct['toBranchName']?.toString() ?? '',
+            'fromDeviceId': ct['fromDeviceId']?.toString() ?? '',
+            'toDeviceId': ct['toDeviceId']?.toString() ?? '',
+            'status': ct['status']?.toString() ?? 'Draft',
+            'preparedBy': ct['preparedBy']?.toString() ?? '',
+            'approvedBy': ct['approvedBy']?.toString() ?? '',
+            'receivedBy': ct['receivedBy']?.toString() ?? '',
+            'receivedDate': ct['receivedDate']?.toString(),
+            'remarks': ct['remarks']?.toString() ?? '',
+            'createdAt': ct['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+            'updatedAt': ct['updatedAt']?.toString() ?? DateTime.now().toIso8601String(),
+          };
+          
+          // Check if exists locally
+          final existing = await db.query('stock_transfers', where: 'id = ?', whereArgs: [transferId], limit: 1);
+          
+          if (existing.isEmpty) {
+            // INSERT new transfer
+            try {
+              await db.insert('stock_transfers', localMap);
+              
+              // Also insert items
+              final itemsList = ct['items'];
+              if (itemsList is List) {
+                for (final item in itemsList) {
+                  if (item is Map) {
+                    final itemMap = item.map((k, v) => MapEntry(k.toString(), v));
+                    await db.insert('transfer_items', {
+                      'transferId': transferId,
+                      'itemId': itemMap['itemId']?.toString() ?? '',
+                      'itemCode': itemMap['itemCode']?.toString() ?? '',
+                      'itemName': itemMap['itemName']?.toString() ?? '',
+                      'category': itemMap['category']?.toString() ?? '',
+                      'unit': itemMap['unit']?.toString() ?? 'pcs',
+                      'batchId': itemMap['batchId']?.toString() ?? '',
+                      'batchNumber': itemMap['batchNumber']?.toString() ?? '',
+                      'manufacturedDate': itemMap['manufacturedDate']?.toString(),
+                      'expiryDate': itemMap['expiryDate']?.toString(),
+                      'qtyTransferred': itemMap['qtyTransferred'] ?? 0,
+                      'qtyReceived': itemMap['qtyReceived'] ?? 0,
+                      'cost': itemMap['cost'] ?? 0,
+                      'remarks': itemMap['remarks']?.toString() ?? '',
+                    });
+                  }
+                }
+              }
+            } catch (e) {
+              // Skip duplicates
+            }
+          } else {
+            // UPDATE if newer (status changed)
+            await db.update('stock_transfers', localMap, where: 'id = ?', whereArgs: [transferId]);
+          }
+        }
+      }
+    } catch (e) {
+      // Cloud merge failed (offline?) - continue with local only
+    }
+
     final assign = await DeviceAssignmentService().read();
     final currentBranchId = (assign["branchId"] ?? "").toString();
     final all = await StockTransferStorage.getInboundForBranch(currentBranchId);

@@ -11,6 +11,8 @@ import '../../models/batch_model.dart';
 import '../../models/branch_model.dart';
 import '../../services/device_assignment_service.dart';
 import '../../services/device_id_service.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 
 class CreateTransferScreen extends StatefulWidget {
   final String currentUser;
@@ -215,6 +217,13 @@ class _CreateTransferScreenState extends State<CreateTransferScreen> {
         );
       }).toList();
       await StockTransferStorage.addTransfer(transfer);
+      
+      // STX FIREBASE UPLOAD - sync to cloud for multi-device
+      try {
+        SyncBridge.enqueueStockTransfer(transfer, op: SyncOp.create);
+      } catch (e) {
+        // Non-blocking: local save still succeeded
+      }
       await StockTransferStorage.saveLedger(ledgerEntries);
       if (mounted) {
         _snack('Transfer $_transferNo posted!', Colors.green.shade700);

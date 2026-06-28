@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/cashier_session_model.dart';
+import '../models/stock_transfer_model.dart';
 import '../models/incident_report_model.dart';
 import '../helpers/database_helper.dart';
 import '../helpers/sync_queue_dao.dart';
@@ -561,6 +562,96 @@ class SyncBridge {
     _fireAndForget(() => _uploadZReportToFirebase(companyCode, branchId, r.reportId, payload));
   }
 
+
+  // ═══════════════════ STOCK TRANSFER ═══════════════════
+  // Multi-device sync for stock transfers
+  // Path: companies/{code}/stockTransfers/{transferId}
+  static Future<void> enqueueStockTransfer(StockTransfer t, {required String op}) async {
+    final fbCfg = await _cfgSvc.load();
+    if (fbCfg == null) return;
+
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    if (companyCode.isEmpty) return;
+
+    // Build items array
+    final itemsList = <Map<String, dynamic>>[];
+    for (final item in t.items) {
+      itemsList.add({
+        'itemId': item.itemId,
+        'itemCode': item.itemCode,
+        'itemName': item.itemName,
+        'category': item.category,
+        'unit': item.unit,
+        'batchId': item.batchId,
+        'batchNumber': item.batchNumber,
+        'manufacturedDate': item.manufacturedDate?.toIso8601String(),
+        'expiryDate': item.expiryDate?.toIso8601String(),
+        'qtyTransferred': item.qtyTransferred,
+        'qtyReceived': item.qtyReceived,
+        'cost': item.cost,
+        'remarks': item.remarks,
+      });
+    }
+
+    // Build payload
+    final payload = {
+      'id': t.id,
+      'transferNo': t.transferNo,
+      'transferDate': t.transferDate.toIso8601String(),
+      'fromBranchId': t.fromBranchId,
+      'fromBranchName': t.fromBranchName,
+      'toBranchId': t.toBranchId,
+      'toBranchName': t.toBranchName,
+      'fromDeviceId': t.fromDeviceId,
+      'toDeviceId': t.toDeviceId,
+      'status': t.status,
+      'preparedBy': t.preparedBy,
+      'approvedBy': t.approvedBy,
+      'receivedBy': t.receivedBy,
+      'receivedDate': t.receivedDate?.toIso8601String(),
+      'remarks': t.remarks,
+      'items': itemsList,
+      'createdAt': t.createdAt.toIso8601String(),
+      'updatedAt': t.updatedAt.toIso8601String(),
+      'deviceId': ctx['deviceId'],
+      'updatedAtSync': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+
+    if (kDebugMode) debugPrint("📦 Firebase Stock Transfer: ${t.id} status=${t.status} items=${itemsList.length}");
+
+    final path = 'companies/$companyCode/stockTransfers/${t.id}';
+
+    await _queue.enqueue(
+      entityType: 'stockTransfer', entityId: t.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: t.fromBranchId,
+      deviceId: ctx['deviceId']!, priority: SyncPriority.p1Critical,
+    );
+
+    _fireAndForget(() => _uploadStockTransferToFirebase(companyCode, t.id, payload));
+  }
+
+  // Upload stock transfer to Firebase (fire-and-forget)
+  static Future<void> _uploadStockTransferToFirebase(
+      String companyCode, String transferId, Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+
+      await db.ref('companies/$companyCode/stockTransfers/$transferId').set(payload);
+      if (kDebugMode) debugPrint("✅ Stock Transfer uploaded: $transferId");
+    } catch (e) {
+      if (kDebugMode) debugPrint("⚠️ Stock Transfer upload failed: $e");
+    }
+  }
+
   static Future<void> _uploadZReportToFirebase(
       String companyCode, String branchId, String reportId,
       Map<String, dynamic> payload) async {
@@ -846,6 +937,47 @@ class SyncBridge {
     }
   }
 
+
+
+  // STOCK TRANSFER READ - multi-device sync
+  // Reads from companies/{code}/stockTransfers/*
+  // Returns ALL transfers (UI filters by toBranchId)
+  static Future<List<Map<String, dynamic>>> readStockTransfersFromFirebase() async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return [];
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return [];
+
+      final ctx = await _context();
+      final companyCode = ctx['companyCode']!;
+      if (companyCode.isEmpty) return [];
+
+      final snap = await db
+          .ref('companies/$companyCode/stockTransfers')
+          .get()
+          .timeout(const Duration(seconds: 10));
+
+      if (!snap.exists) return [];
+
+      final List<Map<String, dynamic>> transfers = [];
+      for (final child in snap.children) {
+        try {
+          final raw = child.value as Map<dynamic, dynamic>;
+          final map = raw.map((k, v) => MapEntry(k.toString(), v));
+          // BIR-safe: skip soft-deleted
+          if (map['isDeleted'] == true) continue;
+          transfers.add(map);
+        } catch (_) {}
+      }
+      return transfers;
+    } catch (_) {
+      return [];
+    }
+  }
 
   static Future<List<Map<String, dynamic>>> readCashierSessionsFromFirebase() async {
     try {
