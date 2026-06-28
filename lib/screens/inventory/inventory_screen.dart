@@ -11,6 +11,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as exc;
 import '../../helpers/database_helper.dart';
 import '../../models/user_model.dart';
+import '../../services/branch_inventory_service.dart';
+import '../../services/device_assignment_service.dart';
 
 class InventoryScreen extends StatefulWidget {
   final String branch;
@@ -380,6 +382,46 @@ class _InventoryScreenState extends State<InventoryScreen> {
         foregroundColor: Colors.white,
         actions: [
 
+          // BINV TEST BUTTON - verifies Firebase sync
+          IconButton(
+            icon: const Icon(Icons.cloud_sync, color: Colors.yellow),
+            tooltip: 'Test Branch Sync',
+            onPressed: () async {
+              final assign = await DeviceAssignmentService().read();
+              final branchId = (assign['branchId'] ?? '').toString();
+              if (branchId.isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No branch assigned!')),
+                  );
+                }
+                return;
+              }
+              if (Product.allProducts.isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('No products to test!')),
+                  );
+                }
+                return;
+              }
+              final testProduct = Product.allProducts.first;
+              final ok = await BranchInventoryService.setStock(
+                branchId, testProduct.id, 99,
+              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(ok
+                      ? 'TEST OK: ${testProduct.name} stock=99 - Check Firebase!'
+                      : 'TEST FAILED - check logs'),
+                    backgroundColor: ok ? Colors.green : Colors.red,
+                    duration: const Duration(seconds: 8),
+                  ),
+                );
+              }
+            },
+          ),
           // Low Stock Filter Toggle
           IconButton(
             icon: Icon(

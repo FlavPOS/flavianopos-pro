@@ -39,6 +39,30 @@ class DatabaseHelper {
   // ═══════════════════════════════════════════════════════════════════════════
   Future<void> _ensureAllTables(Database db) async {
     // Store Profile table
+    // BRANCH INVENTORY V2 - per-branch stock tracking
+    // SINGLE source of truth for stock (not dual update!)
+    // products.stockQty is for INITIAL value only, never updated after creation
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS branch_inventory (
+          branchId TEXT NOT NULL,
+          productId TEXT NOT NULL,
+          stockQty INTEGER DEFAULT 0,
+          reservedQty INTEGER DEFAULT 0,
+          inTransitInQty INTEGER DEFAULT 0,
+          inTransitOutQty INTEGER DEFAULT 0,
+          reorderLevel INTEGER DEFAULT 5,
+          lastUpdated TEXT NOT NULL,
+          updatedAt TEXT NOT NULL,
+          deviceId TEXT DEFAULT '',
+          isDeleted INTEGER DEFAULT 0,
+          isMigrated INTEGER DEFAULT 0,
+          PRIMARY KEY (branchId, productId)
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_binv_branch ON branch_inventory(branchId)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_binv_product ON branch_inventory(productId)"); } catch (_) {}
     // ALWAYS RUN USER COLUMN MIGRATIONS - runs on EVERY DB open
     // try/catch makes them idempotent (safe if column already exists)
     // This fixes existing devices where onUpgrade was skipped
