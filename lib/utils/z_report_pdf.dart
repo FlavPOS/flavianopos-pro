@@ -38,12 +38,22 @@ pw.Widget zRow(String label, String value, {bool bold = false}) {
   );
 }
 
-pw.Widget zHeader(String branch, String cashier, DateTime date, bool gen) {
+pw.Widget zHeader(String branch, String cashier, DateTime date, bool gen, {String reportId = ""}) {
   return pw.Column(children: [
     pw.Center(child: pw.Text('Z REPORT',
       style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold))),
     pw.Center(child: pw.Text(gen ? 'END OF DAY' : 'PREVIEW',
       style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold))),
+    // ZR NUMBER BOX - prominent display for easy reference + search
+    if (reportId.isNotEmpty) pw.SizedBox(height: 6),
+    if (reportId.isNotEmpty) pw.Center(child: pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(width: 1.5, color: PdfColors.black),
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Text(reportId, style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, letterSpacing: 1)),
+    )),
     pw.SizedBox(height: 4),
     pw.Center(child: pw.Text(branch,
       style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold))),
@@ -99,11 +109,12 @@ class ZReportPdf {
     required bool isGenerated,
     Map<double, int>? denominations,
     bool isReprint = false,
+    String reportId = "",
   }) async {
     final pdf = pw.Document();
     final List<pw.Widget> w = [];
 
-    w.add(zHeader(branch, cashier, reportDate, isGenerated));
+    w.add(zHeader(branch, cashier, reportDate, isGenerated, reportId: reportId));
     w.add(zDivider());
     // ─── Sales Summary ───
     w.add(zSection('SALES SUMMARY'));
@@ -275,6 +286,7 @@ class ZReportPdf {
     required bool isGenerated,
     Map<double, int>? denominations,
     bool isReprint = false,
+    String reportId = "",
   }) async {
     final bytes = await _buildPdfBytes(
       branch: branch, cashier: cashier, reportDate: reportDate,
@@ -312,7 +324,7 @@ class ZReportPdf {
       voidedCount: r.voidedCount, voidedAmount: r.voidedAmount, refundedCount: r.refundedCount, refundedAmount: r.refundedAmount,
       voidedList: vList, beginningCash: r.beginningCash,
       expectedCash: r.expectedCash, endingCash: r.endingCash,
-      overShort: r.overShort, transactions: tList, isGenerated: true, denominations: denominations, isReprint: true,
+      overShort: r.overShort, transactions: tList, isGenerated: true, denominations: denominations, isReprint: true, reportId: r.reportId,
     );
   }
 }

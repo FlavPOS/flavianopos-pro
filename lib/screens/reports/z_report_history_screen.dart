@@ -104,6 +104,185 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
     super.dispose();
   }
 
+
+  // Z REPORT POPUP - slide-up bottom sheet with full report details
+  void _showZReportDetail(ZReportRecord r) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (ctx, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Drag handle
+                  Container(
+                    margin: const EdgeInsets.only(top: 8, bottom: 4),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.receipt_long, color: Colors.purple[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Z Report Detail",
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                r.reportId,
+                                style: TextStyle(fontSize: 11, color: Colors.purple[700], fontWeight: FontWeight.bold),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 22),
+                          onPressed: () => Navigator.pop(ctx),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Body - show full card content using existing builder
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(12),
+                      children: [
+                        _buildFullReportCard(r),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Helper: builds the full content of a Z report (was inline in itemBuilder)
+  Widget _buildFullReportCard(ZReportRecord r) {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.purple[200]!, width: 1),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header info
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.purple[50], borderRadius: BorderRadius.circular(8)),
+                child: Text(r.reportId, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple[700])),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: r.overShort == 0 ? Colors.green[50] : (r.overShort > 0 ? Colors.blue[50] : Colors.orange[50]),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  r.overShort == 0 ? "BALANCED" : (r.overShort > 0 ? "OVER" : "SHORT"),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: r.overShort == 0 ? Colors.green[700] : (r.overShort > 0 ? Colors.blue[700] : Colors.orange[700]),
+                  ),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Icon(Icons.calendar_today, size: 13, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(_formatDate(r.reportDate), style: TextStyle(fontSize: 12, color: Colors.grey[800])),
+              const SizedBox(width: 12),
+              Icon(Icons.person_outline, size: 14, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(r.cashier, style: TextStyle(fontSize: 12, color: Colors.grey[800])),
+            ]),
+            const SizedBox(height: 8),
+            // Quick stats
+            Row(children: [
+              _quickStat('Net', "P" + r.netSales.toStringAsFixed(0), Colors.green[600]!),
+              _quickStat('TXN', r.totalTransactions.toString(), Colors.blue[600]!),
+              _quickStat('Voids', r.voidedCount.toString(), Colors.red[600]!),
+              _quickStat('Refunds', r.refundedCount.toString(), Colors.orange[600]!),
+            ]),
+            const SizedBox(height: 12),
+            // Re-Print button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.print, size: 16),
+                label: const Text('Re-Print Voucher'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple[700],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                onPressed: () async {
+                  final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId);
+                  await ZReportPdf.printFromRecord(r, denominations: denomMap);
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Generated: ${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}",
+              style: TextStyle(fontSize: 10, color: Colors.grey[600], fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget build(BuildContext context) {
     final allReports = ZReportRecord.history;
     final reports = _filteredReports; // Z REPORT WIRED
@@ -136,141 +315,111 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
           padding: const EdgeInsets.all(12),
           itemCount: reports.length,
           itemBuilder: (context, index) {
+            // MINIMAL Z CARD - tap to open popup detail
             final r = reports[index];
-            final isExpanded = _expandedId == r.reportId;
-
+            
+            // Color coding by overShort status
+            Color borderColor;
+            Color badgeBg;
+            Color badgeColor;
+            String statusLabel;
+            
+            if (r.overShort == 0) {
+              borderColor = Colors.green[400]!;
+              badgeBg = Colors.green[50]!;
+              badgeColor = Colors.green[700]!;
+              statusLabel = "BALANCED";
+            } else if (r.overShort > 0) {
+              borderColor = Colors.blue[400]!;
+              badgeBg = Colors.blue[50]!;
+              badgeColor = Colors.blue[700]!;
+              statusLabel = "OVER";
+            } else {
+              borderColor = Colors.orange[400]!;
+              badgeBg = Colors.orange[50]!;
+              badgeColor = Colors.orange[700]!;
+              statusLabel = "SHORT";
+            }
+            
             return Card(
-              margin: const EdgeInsets.only(bottom: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.purple.withAlpha(60))),
-              child: Column(children: [
-                // Header
-                InkWell(
-                  onTap: () => setState(() => _expandedId = isExpanded ? null : r.reportId),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.purple[50], borderRadius: BorderRadius.circular(8)),
-                        child: Text(r.reportId, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple[700]))),
-                      const Spacer(),
-                      Icon(isExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey),
-                    ]),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]), const SizedBox(width: 6),
-                      Text(_formatDate(r.reportDate), style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 16),
-                      Icon(Icons.person, size: 14, color: Colors.grey[500]), const SizedBox(width: 4),
-                      Text(r.cashier, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                    ]),
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      _quickStat('Net Sales', r.netSales.toStringAsFixed(0), Colors.green),
-                      const SizedBox(width: 8),
-                      _quickStat('TXN', '${r.totalTransactions}', Colors.blue),
-                      const SizedBox(width: 8),
-                      _quickStat('Voids', '${r.voidedCount}', Colors.red),
-                      const SizedBox(width: 8),
-                      _quickStat(
-                        r.overShort == 0 ? 'Balanced' : r.overShort > 0 ? 'Over' : 'Short',
-                        r.overShort.abs().toStringAsFixed(0),
-                        r.overShort == 0 ? Colors.green : r.overShort > 0 ? Colors.blue : Colors.red),
-                    ]),
-                  ])),
-                ),
-
-                // Expanded details
-                if (isExpanded) ...[
-                  const Divider(height: 1),
-                  Container(
-                    color: Colors.grey[50],
-                    padding: const EdgeInsets.all(14),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // Sales
-                      _detailSection('Sales Summary', [
-                        _detailRow('Gross Sales', r.grossSales.toStringAsFixed(2)),
-                        _detailRow('Discounts', '-${r.totalDiscount.toStringAsFixed(2)}', Colors.red),
-                        _detailRow("VATable Sales", (r.netSales / 1.12).toStringAsFixed(2), null),
-                        _detailRow("VAT (12%)", (r.netSales - r.netSales / 1.12).toStringAsFixed(2), Colors.purple),
-                        _detailRow("VAT-Exempt Sales", "0.00", null),
-                        _detailRow("Zero-Rated Sales", "0.00", null),
-                        _detailRow('Net Sales', r.netSales.toStringAsFixed(2), Colors.green[800]),
-                        _detailRow('Avg/TXN', r.averageTransaction.toStringAsFixed(2)),
-                      ]),
-                      const SizedBox(height: 12),
-
-                      // Payment
-                      _detailSection('Payment Breakdown',
-                        r.paymentBreakdown.map((p) =>
-                          _detailRow('${p.method} (${p.count})', p.total.toStringAsFixed(2))).toList()),
-                      const SizedBox(height: 12),
-
-                      // Cash count
-                      _detailSection('Cash Count', [
-                        _detailRow('Beginning', r.beginningCash.toStringAsFixed(2)),
-                        _detailRow('Expected', r.expectedCash.toStringAsFixed(2)),
-                        _detailRow('Ending', r.endingCash.toStringAsFixed(2)),
-                        _detailRow('Over/Short', r.overShort.toStringAsFixed(2),
-                          r.overShort == 0 ? Colors.green : r.overShort > 0 ? Colors.blue : Colors.red),
-                      ]),
-                      const SizedBox(height: 12),
-
-
-                      // Generated info
-                      Text('Generated: ${_formatDate(r.generatedAt)} ${_formatTime(r.generatedAt)}',
-                        style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                      const SizedBox(height: 10),
-
-                      // Export button
-                      // 🔄 Re-Declare button (only today's Z Report)
-                      if (_isSameDay(r.reportDate, DateTime.now())) ...[
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              final username = await ManagerPinDialog.verify(
-                                context,
-                                title: "🔄 Re-Declare Cash Count",
-                                actionLabel: "Re-declare cash for " + r.reportId + " (reason required)",
-                              );
-                              if (username != null && context.mounted) {
-                                await _showHistoryDenominationDialog(
-                                  r,
-                                  username,
-                                  "Manager-authorized recount for " + r.reportId,
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.refresh, size: 18),
-                            label: const Text("🔄 Re-Declare (Manager PIN)",
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.orange.shade700,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      Row(children: [
-                        Expanded(child: ElevatedButton.icon(
-                          onPressed: () async { final denomMap = await DatabaseHelper().getDenominationMapForSession(r.reportId); await ZReportPdf.printFromRecord(r, denominations: denomMap); },
-                          icon: const Icon(Icons.print, size: 16),
-                          label: const Text('Print / PDF', style: TextStyle(fontSize: 12)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                        )),
-                      ]),
-                    ]),
+              margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _showZReportDetail(r),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(
+                      left: BorderSide(color: borderColor, width: 5),
+                    ),
                   ),
-                ],
-              ]),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                  child: Row(children: [
+                    // Status icon
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.receipt_long, size: 18, color: badgeColor),
+                    ),
+                    const SizedBox(width: 12),
+                    // Report info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            r.reportId,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            Icon(Icons.calendar_today, size: 11, color: Colors.grey[600]),
+                            const SizedBox(width: 3),
+                            Text(_formatDate(r.reportDate), style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                            Text(" • ", style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                            Icon(Icons.person_outline, size: 11, color: Colors.grey[600]),
+                            const SizedBox(width: 3),
+                            Flexible(
+                              child: Text(
+                                r.cashier.isEmpty ? "Unknown" : r.cashier,
+                                style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ]),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: badgeBg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: borderColor.withOpacity(0.4), width: 0.8),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: badgeColor),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+                  ]),
+                ),
+              ),
             );
           },
         ),
