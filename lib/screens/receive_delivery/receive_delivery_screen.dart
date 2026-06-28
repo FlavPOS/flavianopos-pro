@@ -8,6 +8,8 @@ import '../../models/product_model.dart';
 import '../../models/batch_model.dart';
 import 'delivery_model.dart';
 import 'delivery_history_screen.dart';
+import "../../services/branch_inventory_service.dart";
+import "../../services/device_assignment_service.dart";
 
 class ReceiveDeliveryScreen extends StatefulWidget {
   final List<Product> products;
@@ -36,6 +38,45 @@ class _DeliveryItem {
 
 class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   final _refCtrl = TextEditingController();
+
+  // ═══ PHASE B2: Branch-Aware Stock Cache ═══
+  Map<String, int> _branchStock = {};
+  String _binvBranchId = "";
+  bool _binvLoaded = false;
+
+  Future<void> _loadBranchStock() async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final bid = (assign["branchId"] ?? "").toString();
+      _binvBranchId = bid;
+      if (bid.isEmpty) {
+        print("[RCV-B2] no branchId, fallback to global");
+        if (mounted) setState(() => _binvLoaded = true);
+        return;
+      }
+      final map = await BranchInventoryService.getStockMapForBranch(bid);
+      if (!mounted) return;
+      setState(() { _branchStock = map; _binvLoaded = true; });
+      print("[RCV-B2] loaded ${map.length} products for branch=$bid");
+    } catch (e) {
+      print("[RCV-B2] ERROR: $e");
+      if (mounted) setState(() => _binvLoaded = true);
+    }
+  }
+
+  int _stockOf(Product p) {
+    if (!_binvLoaded) return p.stockQty;
+    if (_binvBranchId.isNotEmpty) return _branchStock[p.id] ?? 0;
+    return p.stockQty;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranchStock();
+  }
+  // ═══ END PHASE B2 ═══
+
   final _supplierCtrl = TextEditingController();
   final _driverCtrl = TextEditingController();
   final _plateCtrl = TextEditingController();
@@ -108,6 +149,20 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           final idx = updated.indexWhere((p) => p.id == item.product.id);
           if (idx >= 0) {
             final old = updated[idx]; final ns = old.stockQty + qty;
+            // ═══ PHASE B2: Branch-Aware Stock Increment (Dual Write) ═══
+            try {
+              final assign = await DeviceAssignmentService().read();
+              final bid = (assign["branchId"] ?? "").toString();
+              if (bid.isNotEmpty) {
+                final ok = await BranchInventoryService.incrementStock(bid, old.id, qty);
+                print("[RCV-B2] +$qty to ${old.name} branch=$bid ok=$ok");
+              } else {
+                print("[RCV-B2] no branchId, BINV increment SKIPPED");
+              }
+            } catch (e) {
+              print("[RCV-B2] ERROR in BINV increment: $e");
+            }
+            // ═══ END PHASE B2 ═══
             for (final be in item.batches) {
               if (be.qty <= 0) continue;
               recs.add(DeliveryItemRecord(productId: old.id, itemName: old.name, sku: old.sku, quantity: be.qty, oldStock: old.stockQty, newStock: ns, cost: old.costPrice, retail: old.sellingPrice, batchNumber: be.batchCtrl.text.trim(), mfgDate: be.mfgDate != null ? _fmtDateISO(be.mfgDate!) : '', expDate: be.expDate != null ? _fmtDateISO(be.expDate!) : ''));
@@ -127,6 +182,8 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final record = DeliveryRecord(id: now.millisecondsSinceEpoch.toString(), refNumber: refNumber, supplier: _supplierCtrl.text.trim(), driverName: _driverCtrl.text.trim(), plateNumber: _plateCtrl.text.trim(), receivedBy: _receivedByCtrl.text.trim(), notes: _notesCtrl.text.trim(), items: recs, totalItems: totalItems, totalQuantity: tQty, totalCost: tCost, totalRetail: tRetail, dateTime: now);
       await DeliveryStorage.saveDelivery(record);
       for (final u in updated) { Product.updateProduct(u.id, u); }
+      // 🔄 Phase B2: refresh branch stock cache after delivery
+      _loadBranchStock();
       if (!mounted) return;
       _showPostSaveDialog(record, updated);
     } catch (e) { if (mounted) _snack('Error saving: $e'); }
@@ -239,7 +296,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 return ListTile(dense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   leading: CircleAvatar(radius: 16, backgroundColor: added ? Colors.grey[200] : Colors.blue[50], child: Icon(added ? Icons.check : Icons.add, size: 16, color: added ? Colors.grey : Colors.blue[700])),
                   title: Text(p.name, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: added ? Colors.grey : Colors.black87)),
-                  subtitle: Row(children: [_chip(p.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${p.stockQty}', p.stockQty <= p.reorderLevel ? Colors.red : Colors.green), const SizedBox(width: 4), _chip('C:${p.costPrice.toStringAsFixed(0)}', Colors.teal)]),
+                  subtitle: Row(children: [_chip(p.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${_stockOf(p)}', _stockOf(p) <= p.reorderLevel ? Colors.red : Colors.green), const SizedBox(width: 4), _chip('C:${p.costPrice.toStringAsFixed(0)}', Colors.teal)]),
                   trailing: added ? const Text('Added', style: TextStyle(fontSize: 9, color: Colors.grey)) : null, onTap: added ? null : () => _addItem(p)); })),
         Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: Row(children: [
           Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.list_alt_rounded, size: 16, color: Colors.blue[700])),
@@ -262,7 +319,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 2), const SizedBox(height: 3),
-                        Row(children: [_chip(item.product.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${item.product.stockQty}', Colors.blueGrey)]), const SizedBox(height: 3),
+                        Row(children: [_chip(item.product.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${_stockOf(item.product)}', Colors.blueGrey)]), const SizedBox(height: 3),
                         Row(children: [_chip('C: ${item.product.costPrice.toStringAsFixed(2)}', Colors.teal), const SizedBox(width: 4), _chip('R: ${item.product.sellingPrice.toStringAsFixed(2)}', Colors.blue)])])),
                       Column(children: [
                         Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(gradient: LinearGradient(colors: hasBatches ? [const Color(0xFF43A047), const Color(0xFF66BB6A)] : [const Color(0xFFEF6C00), const Color(0xFFFFA726)]), borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: (hasBatches ? Colors.green : Colors.orange).withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]),
