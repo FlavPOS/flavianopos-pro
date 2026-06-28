@@ -199,4 +199,65 @@ class BranchInventoryService {
     await setStock(branchId, productId, productStockQty);
     return productStockQty;
   }
+
+  // ===== STOCK MAPS (for UI display) =====
+
+  /// Returns Map<productId, stockQty> for a single branch.
+  /// Used by Branch users in Inventory Screen.
+  static Future<Map<String, int>> getStockMapForBranch(String branchId) async {
+    final result = <String, int>{};
+    if (branchId.isEmpty) return result;
+    final db = await DatabaseHelper().database;
+    final rows = await db.query(
+      'branch_inventory',
+      columns: ['productId', 'stockQty'],
+      where: 'branchId = ? AND isDeleted = 0',
+      whereArgs: [branchId],
+    );
+    for (final r in rows) {
+      final pid = r['productId']?.toString() ?? '';
+      final qty = (r['stockQty'] as num?)?.toInt() ?? 0;
+      if (pid.isNotEmpty) result[pid] = qty;
+    }
+    print('[BINV] getStockMapForBranch($branchId) -> ${result.length} products');
+    return result;
+  }
+
+  /// Returns Map<productId, totalStockQty> SUMMED across ALL branches.
+  /// Used by Head Office / CompanyAdmin in Inventory Screen.
+  static Future<Map<String, int>> getStockMapAllBranches() async {
+    final result = <String, int>{};
+    final db = await DatabaseHelper().database;
+    final rows = await db.rawQuery(
+      'SELECT productId, SUM(stockQty) AS totalQty FROM branch_inventory WHERE isDeleted = 0 GROUP BY productId'
+    );
+    for (final r in rows) {
+      final pid = r['productId']?.toString() ?? '';
+      final qty = (r['totalQty'] as num?)?.toInt() ?? 0;
+      if (pid.isNotEmpty) result[pid] = qty;
+    }
+    print('[BINV] getStockMapAllBranches() -> ${result.length} products (consolidated)');
+    return result;
+  }
+
+  /// Returns Map<branchId, Map<productId, stockQty>> for HO drill-down.
+  static Future<Map<String, Map<String, int>>> getStockMapByBranch() async {
+    final result = <String, Map<String, int>>{};
+    final db = await DatabaseHelper().database;
+    final rows = await db.query(
+      'branch_inventory',
+      columns: ['branchId', 'productId', 'stockQty'],
+      where: 'isDeleted = 0',
+    );
+    for (final r in rows) {
+      final bid = r['branchId']?.toString() ?? '';
+      final pid = r['productId']?.toString() ?? '';
+      final qty = (r['stockQty'] as num?)?.toInt() ?? 0;
+      if (bid.isEmpty || pid.isEmpty) continue;
+      result.putIfAbsent(bid, () => <String, int>{});
+      result[bid]![pid] = qty;
+    }
+    print('[BINV] getStockMapByBranch() -> ${result.length} branches');
+    return result;
+  }
 }

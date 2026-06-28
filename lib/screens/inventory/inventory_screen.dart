@@ -33,6 +33,48 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
+  // ===== BRANCH-AWARE STOCK (Phase A) =====
+  Map<String, int> _branchStock = {};
+  bool _stockLoading = true;
+  String _resolvedBranchId = "";
+
+  bool get _isHeadOffice {
+    final r = widget.role.toLowerCase().trim();
+    return r == "admin" || r == "companyadmin";
+  }
+
+  int _stockOf(Product p) => _branchStock[p.id] ?? 0;
+
+  Future<void> _loadBranchStock() async {
+    if (mounted) setState(() => _stockLoading = true);
+    try {
+      Map<String, int> map;
+      if (_isHeadOffice) {
+        map = await BranchInventoryService.getStockMapAllBranches();
+        _resolvedBranchId = "ALL";
+      } else {
+        final assign = await DeviceAssignmentService().read();
+        final bid = (assign["branchId"] ?? "").toString();
+        _resolvedBranchId = bid;
+        map = await BranchInventoryService.getStockMapForBranch(bid);
+      }
+      if (!mounted) return;
+      setState(() {
+        _branchStock = map;
+        _stockLoading = false;
+      });
+    } catch (e) {
+      print("[INV] _loadBranchStock error: $e");
+      if (mounted) setState(() => _stockLoading = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranchStock();
+  }
+
   bool get _canEdit {
     final r = widget.role.toLowerCase().trim();
     return r == "admin" || r == "companyadmin" || widget.permissions.contains("Manage Products");
@@ -62,7 +104,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               p.sku.toLowerCase().contains(_searchQuery.toLowerCase()) ||
               p.barcode.contains(_searchQuery);
           final matchesLowStock =
-              !_showLowStockOnly || p.stockQty <= p.reorderLevel;
+              !_showLowStockOnly || _stockOf(p) <= p.reorderLevel;
           return matchesCategory && matchesSearch && matchesLowStock;
         }).toList();
 
@@ -76,7 +118,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           result = a.sellingPrice.compareTo(b.sellingPrice);
           break;
         case 'stock':
-          result = a.stockQty.compareTo(b.stockQty);
+          result = _stockOf(a).compareTo(_stockOf(b));
           break;
         case 'sku':
           result = a.sku.compareTo(b.sku);
@@ -92,10 +134,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   int get _totalProducts => _products.length;
   int get _lowStockCount =>
-      _products.where((p) => p.stockQty <= p.reorderLevel).length;
-  int get _outOfStockCount => _products.where((p) => p.stockQty == 0).length;
+      _products.where((p) => _stockOf(p) <= p.reorderLevel).length;
+  int get _outOfStockCount => _products.where((p) => _stockOf(p) == 0).length;
   double get _totalInventoryValue =>
-      _products.fold(0, (sum, p) => sum + (p.costPrice * p.stockQty));
+      _products.fold(0, (sum, p) => sum + (p.costPrice * _stockOf(p)));
 
   String _formatCompact(double v) {
     if (v >= 1000000000) return '${(v / 1000000000).toStringAsFixed(1)}Bn';
@@ -174,15 +216,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   List<Product> _getStockList(String type) {
     switch (type) {
-      case 'low': return _products.where((p) => p.stockQty <= p.reorderLevel && p.stockQty > 0).toList();
-      case 'out': return _products.where((p) => p.stockQty == 0).toList();
-      case 'critical': return _products.where((p) => p.stockQty <= p.reorderLevel).toList();
+      case 'low': return _products.where((p) => _stockOf(p) <= p.reorderLevel && _stockOf(p) > 0).toList();
+      case 'out': return _products.where((p) => _stockOf(p) == 0).toList();
+      case 'critical': return _products.where((p) => _stockOf(p) <= p.reorderLevel).toList();
       default: return _filteredProducts;
     }
   }
 
   void _showExportMenu(String format) {
-    final lowCount = _products.where((p) => p.stockQty <= p.reorderLevel && p.stockQty > 0).length;
+    final lowCount = _products.where((p) => _stockOf(p) <= p.reorderLevel && _stockOf(p) > 0).length;
     showDialog(
       context: context,
       
@@ -202,7 +244,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             () { Navigator.pop(ctx); _doExport(format, 'low'); }),
           _exportTile('Out of Stock', '$_outOfStockCount items', Icons.error_outline, Colors.red,
             () { Navigator.pop(ctx); _doExport(format, 'out'); }),
-          _exportTile('Critical (Low + Out)', '${_products.where((p) => p.stockQty <= p.reorderLevel).length} items',
+          _exportTile('Critical (Low + Out)', '${_products.where((p) => _stockOf(p) <= p.reorderLevel).length} items',
             Icons.crisis_alert, Colors.deepOrange,
             () { Navigator.pop(ctx); _doExport(format, 'critical'); }),
           const SizedBox(height: 8),
@@ -345,8 +387,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
         rows: data.map((p) => [
           p.sku, p.name, p.category, p.unit,
           p.costPrice.toStringAsFixed(2), p.sellingPrice.toStringAsFixed(2),
-          p.stockQty.toString(), p.reorderLevel.toString(), p.barcode,
-          p.stockQty == 0 ? 'OUT OF STOCK' : p.stockQty <= p.reorderLevel ? 'LOW STOCK' : 'OK',
+          _stockOf(p).toString(), p.reorderLevel.toString(), p.barcode,
+          _stockOf(p) == 0 ? 'OUT OF STOCK' : _stockOf(p) <= p.reorderLevel ? 'LOW STOCK' : 'OK',
         ]).toList(),
         sheetName: 'Inventory_$label',
         fileName: 'Inventory_${label}_${DateTime.now().millisecondsSinceEpoch}.xlsx');
@@ -360,8 +402,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
         rows: data.map((p) => [
           p.sku, p.name, p.category, p.unit,
           p.costPrice.toStringAsFixed(2), p.sellingPrice.toStringAsFixed(2),
-          p.stockQty.toString(), p.reorderLevel.toString(),
-          p.stockQty == 0 ? 'OUT OF STOCK' : p.stockQty <= p.reorderLevel ? 'LOW STOCK' : 'OK',
+          _stockOf(p).toString(), p.reorderLevel.toString(),
+          _stockOf(p) == 0 ? 'OUT OF STOCK' : _stockOf(p) <= p.reorderLevel ? 'LOW STOCK' : 'OK',
         ]).toList(),
         fileName: 'Inventory_${label}_${DateTime.now().millisecondsSinceEpoch}.pdf');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -382,6 +424,56 @@ class _InventoryScreenState extends State<InventoryScreen> {
         foregroundColor: Colors.white,
         actions: [
 
+          // 🏢/🏪 VIEW MODE BADGE (read-only indicator)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _isHeadOffice ? Colors.purple[700] : Colors.green[700],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white70, width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  _isHeadOffice
+                      ? "🏢 ALL"
+                      : (widget.branch.isEmpty ? "🏪 BRANCH" : "🏪 " + widget.branch.toUpperCase()),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 🔄 REFRESH BRANCH STOCK
+          IconButton(
+            icon: _stockLoading
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.refresh),
+            tooltip: _isHeadOffice ? "Refresh All Branches Stock" : "Refresh Branch Stock",
+            onPressed: _stockLoading ? null : () async {
+              await _loadBranchStock();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(_isHeadOffice
+                    ? "🏢 Reloaded all branches: ${_branchStock.length} products"
+                    : "🏪 Reloaded ${widget.branch}: ${_branchStock.length} products"),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
           // BINV TEST BUTTON - verifies Firebase sync
           IconButton(
             icon: const Icon(Icons.cloud_sync, color: Colors.yellow),
@@ -765,8 +857,8 @@ _importItems();
   }
 
   Widget _buildProductListItem(Product product) {
-    final bool lowStock = product.stockQty <= product.reorderLevel;
-    final bool outOfStock = product.stockQty == 0;
+    final bool lowStock = _stockOf(product) <= product.reorderLevel;
+    final bool outOfStock = _stockOf(product) == 0;
 
     IconData categoryIcon;
     Color categoryColor;
@@ -919,7 +1011,7 @@ _importItems();
                     child: Text(
                       outOfStock
                           ? 'OUT'
-                          : '${product.stockQty} ${product.unit}',
+                          : '${_stockOf(product)} ${product.unit}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1064,9 +1156,9 @@ _importItems();
                 _buildDetailRow('Selling Price', product.sellingPrice.toStringAsFixed(2)),
                 AppSettings.showCostPrice ? _buildDetailRow('Profit', '${profit.toStringAsFixed(2)} (${margin.toStringAsFixed(1)}%)') : const SizedBox(),
                 const Divider(height: 20),
-                _buildDetailRow('Stock Qty', '${product.stockQty} ${product.unit}'),
+                _buildDetailRow('Stock Qty', '${_stockOf(product)} ${product.unit}'),
                 _buildDetailRow('Reorder Level', '${product.reorderLevel} ${product.unit}'),
-                AppSettings.showCostPrice ? _buildDetailRow('Stock Value', (product.costPrice * product.stockQty).toStringAsFixed(2)) : const SizedBox(),
+                AppSettings.showCostPrice ? _buildDetailRow('Stock Value', (product.costPrice * _stockOf(product)).toStringAsFixed(2)) : const SizedBox(),
                 const SizedBox(height: 16),
 
                 // Buttons
