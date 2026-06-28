@@ -24,6 +24,33 @@ class ZReportHistoryScreen extends StatefulWidget {
 
 class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
   String? _expandedId;
+  // Z REPORT SEARCH STATE - smart search for Z Reports
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = "";
+
+
+  // Z REPORT FILTER - smart search across multiple fields
+  List<ZReportRecord> get _filteredReports {
+    final allReports = ZReportRecord.history;
+    if (_searchQuery.isEmpty) return allReports;
+    final q = _searchQuery.toLowerCase().trim();
+    return allReports.where((r) {
+      // Search in: Report ID
+      if (r.reportId.toLowerCase().contains(q)) return true;
+      // Search in: Cashier name
+      if (r.cashier.toLowerCase().contains(q)) return true;
+      // Search in: Branch
+      if (r.branch.toLowerCase().contains(q)) return true;
+      // Search in: Date (formatted as M/D/YYYY)
+      final dateStr = "${r.reportDate.month}/${r.reportDate.day}/${r.reportDate.year}";
+      if (dateStr.contains(q)) return true;
+      // Search in: Status keywords (Over/Short/Balanced)
+      if (r.overShort > 0 && "over".contains(q)) return true;
+      if (r.overShort < 0 && "short".contains(q)) return true;
+      if (r.overShort == 0 && "balanced".contains(q)) return true;
+      return false;
+    }).toList();
+  }
 
   String _formatDate(DateTime dt) => '${dt.month}/${dt.day}/${dt.year}';
   String _formatTime(DateTime dt) {
@@ -34,8 +61,52 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
 
 
   @override
+
+  // Z REPORT SEARCH BAR widget
+  Widget _searchBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      color: Colors.white,
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        decoration: InputDecoration(
+          hintText: "Search report ID, cashier, date, status...",
+          hintStyle: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          prefixIcon: Icon(Icons.search, color: Colors.purple[700], size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: Icon(Icons.clear, color: Colors.grey[600], size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _searchQuery = "");
+                },
+              )
+            : null,
+          filled: true,
+          fillColor: Colors.grey[100],
+          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+        ),
+        style: const TextStyle(fontSize: 13),
+      ),
+    );
+  }
+
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Widget build(BuildContext context) {
-    final reports = ZReportRecord.history;
+    final allReports = ZReportRecord.history;
+    final reports = _filteredReports; // Z REPORT WIRED
 
     return Scaffold(
       appBar: AppBar(
@@ -54,7 +125,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
         ],
         backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
       ),
-      body: reports.isEmpty
+      body: Column(children: [_searchBar(), Expanded(child: allReports.isEmpty
         ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(Icons.history, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 8),
@@ -203,6 +274,7 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
             );
           },
         ),
+    )]),
     );
   }
 
@@ -418,7 +490,8 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
   /// 🆕 Export ALL Z Reports to Excel
   Future<void> _exportAllExcel() async {
     try {
-      final reports = ZReportRecord.history;
+      final allReports = ZReportRecord.history;
+    final reports = _filteredReports; // Z REPORT WIRED
       if (reports.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No Z Reports to export')));
@@ -507,7 +580,8 @@ class _ZReportHistoryScreenState extends State<ZReportHistoryScreen> {
   /// 🆕 Export ALL Z Reports to PDF
   Future<void> _exportAllPdf() async {
     try {
-      final reports = ZReportRecord.history;
+      final allReports = ZReportRecord.history;
+    final reports = _filteredReports; // Z REPORT WIRED
       if (reports.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('No Z Reports to export')));
