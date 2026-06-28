@@ -32,6 +32,9 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
   Map<String, IncidentReport?> _irMap = {};
   Map<String, List<DenominationRecord>> _denomMap = {};
   bool _loading = true;
+  // PHASE 1 MVP SEARCH - smart search across shifts
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = "";
   DateTime? _customStart;
   DateTime? _customEnd;
 
@@ -177,6 +180,31 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
     } catch (e) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+
+  // PHASE 1 MVP FILTER - smart search across multiple fields
+  List<CashierSession> get _filteredSessions {
+    if (_searchQuery.isEmpty) return _sessions;
+    final q = _searchQuery.toLowerCase().trim();
+    return _sessions.where((s) {
+      // Search in: Shift ID, Cashier Name, Branch
+      if (s.shiftId.toLowerCase().contains(q)) return true;
+      if (s.cashierName.toLowerCase().contains(q)) return true;
+      if (s.branch.toLowerCase().contains(q)) return true;
+      // Search in: Variance type (SHORT/OVER)
+      if (s.varianceType.toLowerCase().contains(q)) return true;
+      // Search in: Status
+      if (s.status.toLowerCase().contains(q)) return true;
+      // Search in: IR data (if exists)
+      final ir = _irMap[s.id];
+      if (ir != null) {
+        if (ir.irNumber.toLowerCase().contains(q)) return true;
+        if (ir.status.toLowerCase().contains(q)) return true;
+        if (ir.reason.toLowerCase().contains(q)) return true;
+      }
+      return false;
+    }).toList();
   }
 
   List<String> get _uniqueCashiers {
@@ -439,6 +467,13 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
   }
 
   @override
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -470,20 +505,57 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
       ),
       body: Column(
         children: [
+          _searchBar(),
           _filterBar(),
           _summaryBar(),
           Expanded(
             child: _loading
               ? const Center(child: CircularProgressIndicator())
-              : _sessions.isEmpty
+              : _filteredSessions.isEmpty // PHASE 1 MVP WIRED
                 ? _emptyState()
                 : ListView.builder(
                     padding: const EdgeInsets.all(12),
-                    itemCount: _sessions.length,
-                    itemBuilder: (_, i) => _sessionCard(_sessions[i]),
+                    itemCount: _filteredSessions.length,
+                    itemBuilder: (_, i) => _minimalCard(_filteredSessions[i]),
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+
+  // PHASE 1 MVP SEARCH BAR - smart search widget
+  Widget _searchBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      color: Colors.white,
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _searchQuery = v),
+        decoration: InputDecoration(
+          hintText: "Search shift, cashier, IR number, variance...",
+          hintStyle: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          prefixIcon: Icon(Icons.search, color: Colors.indigo[700], size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+            ? IconButton(
+                icon: Icon(Icons.clear, color: Colors.grey[600], size: 18),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() => _searchQuery = "");
+                },
+              )
+            : null,
+          filled: true,
+          fillColor: Colors.grey[100],
+          contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          isDense: true,
+        ),
+        style: const TextStyle(fontSize: 13),
       ),
     );
   }
@@ -586,6 +658,240 @@ class _CashierReportScreenState extends State<CashierReportScreen> {
           const SizedBox(height: 4),
           Text('Try a different period or cashier', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
         ],
+      ),
+    );
+  }
+
+
+  // PHASE 1 MVP MINIMAL CARD - compact card for fast scanning
+
+  // PHASE 1 MVP BOTTOM SHEET - slide-up panel with full shift details
+  void _showShiftDetails(CashierSession session) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (ctx, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+              ),
+              child: Column(
+                children: [
+                  // Drag handle
+                  Container(
+                    margin: const EdgeInsets.only(top: 8, bottom: 4),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                      border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.receipt_long, color: Colors.indigo[700], size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Shift Details",
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                session.shiftId,
+                                style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 22),
+                          onPressed: () => Navigator.pop(ctx),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Body - reuse existing _sessionCard layout
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(12),
+                      children: [
+                        _sessionCard(session),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _minimalCard(CashierSession session) {
+    final ir = _irMap[session.id];
+    final hasVariance = session.variance.abs() > 0.01;
+    final hasIR = ir != null;
+    final isActive = session.status != "closed";
+    
+    // Color coding logic
+    Color borderColor;
+    String statusLabel;
+    IconData statusIcon;
+    Color statusColor;
+    
+    if (isActive) {
+      borderColor = Colors.blue[400]!;
+      statusLabel = "ACTIVE";
+      statusIcon = Icons.radio_button_checked;
+      statusColor = Colors.blue[700]!;
+    } else if (hasIR) {
+      borderColor = Colors.red[400]!;
+      statusLabel = ir.status.toUpperCase();
+      statusIcon = Icons.warning_amber_rounded;
+      statusColor = Colors.red[700]!;
+    } else if (hasVariance) {
+      final isOver = session.variance > 0;
+      borderColor = isOver ? Colors.blue[400]! : Colors.orange[400]!;
+      statusLabel = isOver ? "OVER" : "SHORT";
+      statusIcon = isOver ? Icons.arrow_upward : Icons.arrow_downward;
+      statusColor = isOver ? Colors.blue[700]! : Colors.orange[700]!;
+    } else {
+      borderColor = Colors.green[400]!;
+      statusLabel = "BALANCED";
+      statusIcon = Icons.check_circle;
+      statusColor = Colors.green[700]!;
+    }
+    
+    // Duration text
+    final duration = _formatDuration(session.openedAt, session.closedAt);
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: borderColor, width: 0),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _showShiftDetails(session),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border(
+              left: BorderSide(color: borderColor, width: 5),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              // Status icon
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(statusIcon, size: 18, color: statusColor),
+              ),
+              const SizedBox(width: 12),
+              // Shift info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      session.shiftId,
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline, size: 12, color: Colors.grey[600]),
+                        const SizedBox(width: 3),
+                        Flexible(
+                          child: Text(
+                            session.cashierName.isEmpty ? "Unknown" : session.cashierName,
+                            style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(" • ", style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+                        Icon(Icons.access_time, size: 11, color: Colors.grey[600]),
+                        const SizedBox(width: 2),
+                        Text(duration, style: TextStyle(fontSize: 11, color: Colors.grey[700])),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Status badge
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: statusColor.withOpacity(0.3), width: 0.8),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor),
+                    ),
+                  ),
+                  if (hasVariance) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      "${session.variance > 0 ? "+" : ""}\u20B1${session.variance.abs().toStringAsFixed(0)}",
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right, size: 18, color: Colors.grey[400]),
+            ],
+          ),
+        ),
       ),
     );
   }
