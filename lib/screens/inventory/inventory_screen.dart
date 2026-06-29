@@ -474,6 +474,44 @@ class _InventoryScreenState extends State<InventoryScreen> {
               );
             },
           ),
+          // 🐛 B2.1 DEBUG: BINV Sync Status
+          IconButton(
+            icon: const Icon(Icons.bug_report, color: Colors.yellowAccent),
+            tooltip: "Show last BINV sync status",
+            onPressed: () {
+              final st = BranchInventoryService.lastSyncStatus;
+              final dt = BranchInventoryService.lastSyncDetail;
+              final tm = BranchInventoryService.lastSyncTime?.toIso8601String() ?? "never";
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text("🐛 Last BINV Firebase Sync"),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text("Status: $st", style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: st == "SUCCESS" ? Colors.green : Colors.red,
+                          fontSize: 16,
+                        )),
+                        const SizedBox(height: 12),
+                        const Text("Detail:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        SelectableText(dt, style: const TextStyle(fontFamily: "monospace", fontSize: 12)),
+                        const SizedBox(height: 12),
+                        Text("Time: $tm"),
+                      ],
+                    ),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close")),
+                  ],
+                ),
+              );
+            },
+          ),
+
           // BINV TEST BUTTON - verifies Firebase sync
           IconButton(
             icon: const Icon(Icons.cloud_sync, color: Colors.yellow),
