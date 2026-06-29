@@ -592,8 +592,8 @@ _importItems();
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  if (_isHeadOffice) const PopupMenuDivider(),
+                  if (_isHeadOffice) const PopupMenuItem(
                     value: 'import',
                     child: ListTile(
                       leading: Icon(Icons.file_upload, color: Colors.purple),
@@ -609,8 +609,8 @@ _importItems();
                       contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  if (_isHeadOffice) const PopupMenuDivider(),
+                  if (_isHeadOffice) const PopupMenuItem(
                     value: 'delete_all',
                     child: ListTile(
                       leading: Icon(Icons.delete_forever, color: Colors.red),
