@@ -833,18 +833,29 @@ _importItems();
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       final b64 = base64Encode(bytes);
-      final updated = Product(
-        id: product.id, sku: product.sku, name: product.name,
-        category: product.category, unit: product.unit,
-        costPrice: product.costPrice, sellingPrice: product.sellingPrice,
-        stockQty: product.stockQty, reorderLevel: product.reorderLevel,
-        barcode: product.barcode, imagePath: b64,
+      // Direct SQLite write (bypass SyncBridge to keep photo local)
+      final db = await DatabaseHelper().database;
+      await db.update(
+        "products",
+        {"imagePath": b64},
+        where: "id = ?",
+        whereArgs: [product.id],
       );
-      Product.updateProduct(product.id, updated);
+      // Update in-memory list manually (without triggering sync)
+      final idx = Product.allProducts.indexWhere((p) => p.id == product.id);
+      if (idx >= 0) {
+        Product.allProducts[idx] = Product(
+          id: product.id, sku: product.sku, name: product.name,
+          category: product.category, unit: product.unit,
+          costPrice: product.costPrice, sellingPrice: product.sellingPrice,
+          stockQty: product.stockQty, reorderLevel: product.reorderLevel,
+          barcode: product.barcode, imagePath: b64,
+        );
+      }
       if (mounted) {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Photo updated (local only)"),
+          const SnackBar(content: Text("✅ Photo saved (local only)"),
           backgroundColor: Colors.green),
         );
       }
@@ -857,15 +868,25 @@ _importItems();
     }
   }
 
-  void _removeProductPhoto(Product product) {
-    final updated = Product(
-      id: product.id, sku: product.sku, name: product.name,
-      category: product.category, unit: product.unit,
-      costPrice: product.costPrice, sellingPrice: product.sellingPrice,
-      stockQty: product.stockQty, reorderLevel: product.reorderLevel,
-      barcode: product.barcode, imagePath: null,
+  Future<void> _removeProductPhoto(Product product) async {
+    // Direct SQLite write (bypass SyncBridge to keep photo local)
+    final db = await DatabaseHelper().database;
+    await db.update(
+      "products",
+      {"imagePath": null},
+      where: "id = ?",
+      whereArgs: [product.id],
     );
-    Product.updateProduct(product.id, updated);
+    final idx = Product.allProducts.indexWhere((p) => p.id == product.id);
+    if (idx >= 0) {
+      Product.allProducts[idx] = Product(
+        id: product.id, sku: product.sku, name: product.name,
+        category: product.category, unit: product.unit,
+        costPrice: product.costPrice, sellingPrice: product.sellingPrice,
+        stockQty: product.stockQty, reorderLevel: product.reorderLevel,
+        barcode: product.barcode, imagePath: null,
+      );
+    }
     if (mounted) {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(

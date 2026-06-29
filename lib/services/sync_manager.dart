@@ -293,6 +293,14 @@ class SyncManager {
       final id = (m['branchId'] ?? event.snapshot.key ?? '').toString();
       if (id.isEmpty) return;
       final db = await DatabaseHelper().database;
+      // PRESERVE LOCAL PHOTO (branch-local imagePath, not synced from Firebase)
+      final localPhotoRow = await db.query(
+        "products", columns: ["imagePath"],
+        where: "id = ?", whereArgs: [id], limit: 1,
+      );
+      final localImagePath = localPhotoRow.isNotEmpty
+          ? localPhotoRow.first["imagePath"]
+          : null;
       await db.insert(
         'branches',
         {
@@ -304,7 +312,7 @@ class SyncManager {
           'email': (m['email'] ?? '').toString(),
           'manager': (m['manager'] ?? '').toString(),
           'createdDate': (m['createdAt'] ?? DateTime.now().toIso8601String()).toString(),
-          'imagePath': null,
+          "imagePath": localImagePath,
           'syncStatus': SyncStatus.synced,
           'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
           'firebaseId': id,
