@@ -36,7 +36,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
   // ===== BRANCH-AWARE STOCK (Phase A) =====
   Map<String, int> _branchStock = {};
   bool _stockLoading = true;
-  String _resolvedBranchId = "";
 
   bool get _isHeadOffice {
     final r = widget.role.toLowerCase().trim();
@@ -51,11 +50,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
       Map<String, int> map;
       if (_isHeadOffice) {
         map = await BranchInventoryService.getStockMapAllBranches();
-        _resolvedBranchId = "ALL";
       } else {
         final assign = await DeviceAssignmentService().read();
         final bid = (assign["branchId"] ?? "").toString();
-        _resolvedBranchId = bid;
         map = await BranchInventoryService.getStockMapForBranch(bid);
       }
       if (!mounted) return;
@@ -64,7 +61,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
         _stockLoading = false;
       });
     } catch (e) {
-      print("[INV] _loadBranchStock error: $e");
+      debugPrint("[INV] _loadBranchStock error: $e");
       if (mounted) setState(() => _stockLoading = false);
     }
   }
@@ -462,9 +459,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 : const Icon(Icons.refresh),
             tooltip: _isHeadOffice ? "Refresh All Branches Stock" : "Refresh Branch Stock",
             onPressed: _stockLoading ? null : () async {
+              final messenger = ScaffoldMessenger.of(context);
               await _loadBranchStock();
               if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
+              messenger.showSnackBar(
                 SnackBar(
                   content: Text(_isHeadOffice
                     ? "🏢 Reloaded all branches: ${_branchStock.length} products"
@@ -512,46 +510,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
             },
           ),
 
-          // BINV TEST BUTTON - verifies Firebase sync
-          IconButton(
-            icon: const Icon(Icons.cloud_sync, color: Colors.yellow),
-            tooltip: 'Test Branch Sync',
-            onPressed: () async {
-              final assign = await DeviceAssignmentService().read();
-              final branchId = (assign['branchId'] ?? '').toString();
-              if (branchId.isEmpty) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No branch assigned!')),
-                  );
-                }
-                return;
-              }
-              if (Product.allProducts.isEmpty) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('No products to test!')),
-                  );
-                }
-                return;
-              }
-              final testProduct = Product.allProducts.first;
-              final ok = await BranchInventoryService.setStock(
-                branchId, testProduct.id, 99,
-              );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(ok
-                      ? 'TEST OK: ${testProduct.name} stock=99 - Check Firebase!'
-                      : 'TEST FAILED - check logs'),
-                    backgroundColor: ok ? Colors.green : Colors.red,
-                    duration: const Duration(seconds: 8),
-                  ),
-                );
-              }
-            },
-          ),
           // Low Stock Filter Toggle
           IconButton(
             icon: Icon(
