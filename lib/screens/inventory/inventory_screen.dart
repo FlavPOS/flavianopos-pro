@@ -743,7 +743,7 @@ _importItems();
       // FAB - Add Product
       floatingActionButton: widget.isSelecting
           ? null
-          : !_canEdit ? null : FloatingActionButton.extended(
+          : !_isHeadOffice ? null : FloatingActionButton.extended(
               onPressed: () => _navigateToAddProduct(),
               backgroundColor: Colors.orange[700],
               foregroundColor: Colors.white,
@@ -1063,7 +1063,7 @@ _importItems();
                   const SizedBox(height: 8),
 
                   // Action Buttons
-                  if (!widget.isSelecting)
+                  if (!widget.isSelecting && _isHeadOffice)
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1198,7 +1198,7 @@ _importItems();
                 const SizedBox(height: 16),
 
                 // Buttons
-                Row(
+                if (_isHeadOffice) Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
