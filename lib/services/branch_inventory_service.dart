@@ -137,14 +137,14 @@ class BranchInventoryService {
     try {
       final cfg = await FirebaseConfigService().load();
       if (cfg == null) {
-        print('[BINV-SYNC] FAIL: config NULL');
+        print('[BINV-SYNC] FAIL: config NULL'); lastSyncStatus = 'FAIL'; lastSyncDetail = 'FirebaseConfigService returned NULL'; lastSyncTime = DateTime.now();
         return;
       }
 
       final assign = await DeviceAssignmentService().read();
       final companyCode = (assign['companyCode'] ?? '').toString();
       if (companyCode.isEmpty) {
-        print('[BINV-SYNC] FAIL: companyCode empty');
+        print('[BINV-SYNC] FAIL: companyCode empty'); lastSyncStatus = 'FAIL'; lastSyncDetail = 'DeviceAssignmentService companyCode empty'; lastSyncTime = DateTime.now();
         return;
       }
       print('[BINV-SYNC] companyCode=$companyCode');
@@ -156,13 +156,13 @@ class BranchInventoryService {
 
       final db = FirebaseRealtimeService.instance.db;
       if (db == null) {
-        print('[BINV-SYNC] FAIL: db NULL');
+        print('[BINV-SYNC] FAIL: db NULL'); lastSyncStatus = 'FAIL'; lastSyncDetail = 'FirebaseRealtimeService.db NULL after init'; lastSyncTime = DateTime.now();
         return;
       }
 
       final inv = await getInventory(branchId, productId);
       if (inv == null) {
-        print('[BINV-SYNC] FAIL: inv NULL');
+        print('[BINV-SYNC] FAIL: inv NULL'); lastSyncStatus = 'FAIL'; lastSyncDetail = 'SQLite read returned NULL after upsert'; lastSyncTime = DateTime.now();
         return;
       }
 
