@@ -215,6 +215,119 @@ class _FirebaseConfigScreenState extends State<FirebaseConfigScreen> {
     }
   }
 
+  // ═══ PASTE FIREBASE CONFIG FEATURE ═══
+  void _showPasteConfigDialog() {
+    final pasteCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.content_paste, color: Colors.deepPurple),
+            SizedBox(width: 8),
+            Expanded(child: Text("Paste Firebase Config", style: TextStyle(fontSize: 16))),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "From Firebase Console:\n"
+                "1. Project Settings → Your apps → Web app\n"
+                "2. Copy the entire firebaseConfig block\n"
+                "3. Paste it below — fields auto-fill!",
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: pasteCtrl,
+                maxLines: 10,
+                minLines: 6,
+                style: const TextStyle(fontFamily: "monospace", fontSize: 11),
+                decoration: InputDecoration(
+                  hintText: "Paste firebaseConfig here...",
+                  hintStyle: const TextStyle(fontSize: 11, color: Colors.grey),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.all(8),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              _parseAndFillConfig(pasteCtrl.text);
+              Navigator.pop(ctx);
+            },
+            icon: const Icon(Icons.auto_fix_high),
+            label: const Text("Auto-Fill"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _parseAndFillConfig(String input) {
+    String extract(String key) {
+      final pattern = RegExp("\"?" + key + "\"?\\s*:\\s*[\"']([^\"']+)[\"']");
+      final m = pattern.firstMatch(input);
+      return m?.group(1) ?? "";
+    }
+
+    final apiKey = extract("apiKey");
+    final authDomain = extract("authDomain");
+    final projectId = extract("projectId");
+    final storageBucket = extract("storageBucket");
+    final senderId = extract("messagingSenderId");
+    final appId = extract("appId");
+    final measurementId = extract("measurementId");
+    final databaseUrl = extract("databaseURL");
+
+    setState(() {
+      if (apiKey.isNotEmpty) _apiKey.text = apiKey;
+      if (authDomain.isNotEmpty) _authDomain.text = authDomain;
+      if (projectId.isNotEmpty) _projectId.text = projectId;
+      if (storageBucket.isNotEmpty) _storageBucket.text = storageBucket;
+      if (senderId.isNotEmpty) _senderId.text = senderId;
+      if (appId.isNotEmpty) _appId.text = appId;
+      if (measurementId.isNotEmpty) _measurementId.text = measurementId;
+      if (databaseUrl.isNotEmpty) _databaseUrl.text = databaseUrl;
+    });
+
+    final filled = [apiKey, authDomain, projectId, storageBucket,
+                    senderId, appId, databaseUrl]
+        .where((s) => s.isNotEmpty).length;
+
+    if (filled == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("❌ No fields found. Check that you pasted the firebaseConfig block."),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("✅ Auto-filled $filled fields! Add Company Code → Test Connection."),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+  // ═══ END PASTE FEATURE ═══
+
   void _onContinue() {
     if (!_testPassed) {
       _snack("Please run a successful Test Connection first.");
@@ -390,6 +503,25 @@ class _FirebaseConfigScreenState extends State<FirebaseConfigScreen> {
                                 ],
                                 const SizedBox(height: 20),
 
+                                // 📋 PASTE FIREBASE CONFIG BUTTON
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _showPasteConfigDialog,
+                                    icon: const Icon(Icons.content_paste, size: 20),
+                                    label: const Text(
+                                      "📋 Paste Firebase Config (Auto-Fill)",
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
                                 _section('firebaseConfig'),
                                 _field(
                                   ctrl: _apiKey,
