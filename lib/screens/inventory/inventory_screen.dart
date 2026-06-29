@@ -8,6 +8,7 @@ import '../../models/product_model.dart';
 import 'add_edit_product_screen.dart';
 import '../../utils/export_helper.dart';
 import 'package:file_picker/file_picker.dart';
+import "package:image_picker/image_picker.dart";
 import 'package:excel/excel.dart' as exc;
 import '../../helpers/database_helper.dart';
 import '../../models/user_model.dart';
@@ -51,6 +52,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   int _stockOf(Product p) => _branchStock[p.id] ?? 0;
+
+  // ═══ PHOTO EDIT PERMISSION ═══
+  // HO + Manager can edit photos (saved locally per device, NOT synced to Firebase)
+  bool get _canEditPhoto {
+    if (_isHeadOffice) return true;
+    final r = widget.role.toLowerCase().trim();
+    return r == "manager";
+  }
+
 
   Future<void> _loadBranchStock() async {
     if (mounted) setState(() => _stockLoading = true);
@@ -754,6 +764,117 @@ _importItems();
   }
 
   // === Summary Cards ===
+  // ═══ PHOTO UPDATE BOTTOM SHEET (Branch-local photos) ═══
+  void _showPhotoUpdateSheet(Product product) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              const Icon(Icons.photo_camera, color: Colors.orange, size: 24),
+              const SizedBox(width: 8),
+              Expanded(child: Text("Update Photo: ${product.name}",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              )),
+            ]),
+            const SizedBox(height: 4),
+            const Text("Photo stays on this device only (not synced)",
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.camera_alt, color: Colors.blue),
+              title: const Text("Take Photo"),
+              onTap: () { Navigator.pop(ctx); _updateProductPhoto(product, true); },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.green),
+              title: const Text("Choose from Gallery"),
+              onTap: () { Navigator.pop(ctx); _updateProductPhoto(product, false); },
+            ),
+            if (product.imagePath != null && product.imagePath!.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text("Remove Photo", style: TextStyle(color: Colors.red)),
+                onTap: () { Navigator.pop(ctx); _removeProductPhoto(product); },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateProductPhoto(Product product, bool fromCamera) async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 400, maxHeight: 400, imageQuality: 50,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      final b64 = base64Encode(bytes);
+      final updated = Product(
+        id: product.id, sku: product.sku, name: product.name,
+        category: product.category, unit: product.unit,
+        costPrice: product.costPrice, sellingPrice: product.sellingPrice,
+        stockQty: product.stockQty, reorderLevel: product.reorderLevel,
+        barcode: product.barcode, imagePath: b64,
+      );
+      Product.updateProduct(product.id, updated);
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Photo updated (local only)"),
+          backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _removeProductPhoto(Product product) {
+    final updated = Product(
+      id: product.id, sku: product.sku, name: product.name,
+      category: product.category, unit: product.unit,
+      costPrice: product.costPrice, sellingPrice: product.sellingPrice,
+      stockQty: product.stockQty, reorderLevel: product.reorderLevel,
+      barcode: product.barcode, imagePath: null,
+    );
+    Product.updateProduct(product.id, updated);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Photo removed")),
+      );
+    }
+  }
+  // ═══ END PHOTO UPDATE ═══
+
   Widget _buildSummaryCards() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -939,6 +1060,9 @@ _importItems();
         onTap: () => widget.isSelecting
             ? Navigator.pop(context, product)
             : _showProductDetails(product),
+        onLongPress: _canEditPhoto && !widget.isSelecting
+            ? () => _showPhotoUpdateSheet(product)
+            : null,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(12),
