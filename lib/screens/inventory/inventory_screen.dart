@@ -33,6 +33,14 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
+  // ═══ TIER 2: Responsive Sizing Helpers ═══
+  double _scale() {
+    final w = MediaQuery.of(context).size.width;
+    return (w / 400).clamp(0.85, 1.8);
+  }
+  double _rs(double size) => size * _scale();
+  // ═══ END TIER 2 helpers ═══
+
   // ===== BRANCH-AWARE STOCK (Phase A) =====
   Map<String, int> _branchStock = {};
   bool _stockLoading = true;
@@ -790,30 +798,62 @@ _importItems();
     Color color,
   ) {
     return Expanded(
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 24),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: color,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-              ),
+      child: Container(
+        margin: EdgeInsets.symmetric(horizontal: _rs(2)),
+        padding: EdgeInsets.all(_rs(10)),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.18),
+              color.withValues(alpha: 0.06),
             ],
           ),
+          borderRadius: BorderRadius.circular(_rs(14)),
+          border: Border.all(
+            color: color.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: EdgeInsets.all(_rs(6)),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: _rs(18)),
+            ),
+            SizedBox(height: _rs(6)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: _rs(18),
+                  color: color,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ),
+            SizedBox(height: _rs(2)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: _rs(9.5),
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
