@@ -169,7 +169,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
               if (be.qty <= 0) continue;
               recs.add(DeliveryItemRecord(productId: old.id, itemName: old.name, sku: old.sku, quantity: be.qty, oldStock: old.stockQty, newStock: ns, cost: old.costPrice, retail: old.sellingPrice, batchNumber: be.batchCtrl.text.trim(), mfgDate: be.mfgDate != null ? _fmtDateISO(be.mfgDate!) : '', expDate: be.expDate != null ? _fmtDateISO(be.expDate!) : ''));
             }
-            updated[idx] = Product(id: old.id, sku: old.sku, name: old.name, category: old.category, unit: old.unit, costPrice: old.costPrice, sellingPrice: old.sellingPrice, stockQty: ns, reorderLevel: old.reorderLevel, barcode: old.barcode);
+            updated[idx] = Product(id: old.id, sku: old.sku, name: old.name, category: old.category, unit: old.unit, costPrice: old.costPrice, sellingPrice: old.sellingPrice, stockQty: ns, reorderLevel: old.reorderLevel, barcode: old.barcode, imagePath: old.imagePath, imageUrl: old.imageUrl);
           }
           for (final be in item.batches) {
             if (be.qty <= 0) continue;
