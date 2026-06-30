@@ -324,7 +324,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   Widget build(BuildContext context) {
     final activeItems = _items.where((i) => (int.tryParse(i.qtyController.text) ?? 0) > 0).length;
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4F8),
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.orange[700],
