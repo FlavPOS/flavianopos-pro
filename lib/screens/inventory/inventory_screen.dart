@@ -929,7 +929,7 @@ _importItems();
           const SizedBox(width: 8),
           _buildSummaryCard(
             'Inv. Value',
-            _formatCompact(_totalInventoryValue),
+            "₱${_formatCompact(_totalInventoryValue)}",
             Icons.account_balance_wallet,
             Colors.green,
           ),
@@ -1145,7 +1145,7 @@ _importItems();
                     Row(
                       children: [
                         Text(
-                          product.sellingPrice.toStringAsFixed(2),
+                          "₱${product.sellingPrice.toStringAsFixed(2)}",
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 15,
@@ -1154,7 +1154,7 @@ _importItems();
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          AppSettings.showCostPrice ? 'Cost: ${product.costPrice.toStringAsFixed(2)}' : '',
+                          AppSettings.showCostPrice ? 'Cost: ₱${product.costPrice.toStringAsFixed(2)}' : '',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey[500],
@@ -1338,13 +1338,13 @@ _importItems();
                 _buildDetailRow('Unit', product.unit),
                 _buildDetailRow('Barcode', product.barcode.isNotEmpty ? product.barcode : 'N/A'),
                 const Divider(height: 20),
-                AppSettings.showCostPrice ? _buildDetailRow('Cost Price', product.costPrice.toStringAsFixed(2)) : const SizedBox(),
-                _buildDetailRow('Selling Price', product.sellingPrice.toStringAsFixed(2)),
+                AppSettings.showCostPrice ? _buildDetailRow('Cost Price', '₱${product.costPrice.toStringAsFixed(2)}') : const SizedBox(),
+                _buildDetailRow('Selling Price', '₱${product.sellingPrice.toStringAsFixed(2)}'),
                 AppSettings.showCostPrice ? _buildDetailRow('Profit', '${profit.toStringAsFixed(2)} (${margin.toStringAsFixed(1)}%)') : const SizedBox(),
                 const Divider(height: 20),
                 _buildDetailRow('Stock Qty', '${_stockOf(product)} ${product.unit}'),
                 _buildDetailRow('Reorder Level', '${product.reorderLevel} ${product.unit}'),
-                AppSettings.showCostPrice ? _buildDetailRow('Stock Value', (product.costPrice * _stockOf(product)).toStringAsFixed(2)) : const SizedBox(),
+                AppSettings.showCostPrice ? _buildDetailRow('Stock Value', '₱${(product.costPrice * _stockOf(product)).toStringAsFixed(2)}') : const SizedBox(),
                 const SizedBox(height: 16),
 
                 // Buttons
