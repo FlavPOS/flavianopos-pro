@@ -39,6 +39,25 @@ class _DeliveryItem {
 }
 
 class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
+  // ═══ RESPONSIVE HELPERS (matches Inventory module) ═══
+  double _scale() {
+    final w = MediaQuery.of(context).size.width;
+    return (w / 400).clamp(0.85, 1.8);
+  }
+  double _rs(double size) => size * _scale();
+
+  // ═══ NUMBER FORMATTING (matches Inventory) ═══
+  String _fmtInt(int n) {
+    return n.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+  }
+
+  // ═══ BRANCH IDENTITY (matches Inventory header) ═══
+  String _branchNameDisplay = "";
+  String _companyCodeDisplay = "";
+
   final _refCtrl = TextEditingController();
 
   // ═══ PHASE B2: Branch-Aware Stock Cache ═══
