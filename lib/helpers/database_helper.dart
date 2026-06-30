@@ -1493,4 +1493,34 @@ class DatabaseHelper {
     } catch (_) {}
     return result;
   }
+
+  // ════════════════════════════════════════════════════════════
+  // 📸 BRANCH PHOTO STORAGE (SKU-based, Firebase-sync-proof)
+  // Added: 2026-06-30
+  // ════════════════════════════════════════════════════════════
+
+  Future<void> ensurePhotoTable() async {
+    final db = await database;
+    await db.execute("CREATE TABLE IF NOT EXISTS product_photos (sku TEXT PRIMARY KEY, imageBase64 TEXT NOT NULL, updatedAt TEXT NOT NULL)");
+  }
+
+  Future<void> savePhotoBySku(String sku, String base64) async {
+    await ensurePhotoTable();
+    final db = await database;
+    await db.insert("product_photos", {"sku": sku, "imageBase64": base64, "updatedAt": DateTime.now().toIso8601String()}, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<String?> getPhotoBySku(String sku) async {
+    await ensurePhotoTable();
+    final db = await database;
+    final r = await db.query("product_photos", where: "sku = ?", whereArgs: [sku], limit: 1);
+    if (r.isEmpty) return null;
+    return r.first["imageBase64"] as String?;
+  }
+
+  Future<void> deletePhotoBySku(String sku) async {
+    await ensurePhotoTable();
+    final db = await database;
+    await db.delete("product_photos", where: "sku = ?", whereArgs: [sku]);
+  }
 }
