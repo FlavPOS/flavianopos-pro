@@ -469,12 +469,12 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                     if (qty > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)),
                       child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [Text('Cost: ${lc.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green[700])), const SizedBox(width: 16), Text('Retail: ${lr.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue[700]))]))),
                   ])))); })),
-        if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF0D47A1), Color(0xFF1565C0)])),
+        if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: Colors.orange[700]),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_summaryChip(Icons.inventory_2, '$activeItems Items'), _summaryChip(Icons.add_box, '+$_totalQty pcs'), _summaryChip(Icons.payments, 'C: ${_totalCost.toStringAsFixed(0)}'), _summaryChip(Icons.sell, 'R: ${_totalRetail.toStringAsFixed(0)}')])),
         Container(padding: const EdgeInsets.fromLTRB(16, 10, 16, 16), decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -3))]),
           child: SizedBox(width: double.infinity, height: 52, child: ElevatedButton.icon(onPressed: _saveDelivery, icon: const Icon(Icons.local_shipping_rounded, size: 22),
             label: Text('RECEIVE ${_items.length} ITEMS  (+$_totalQty pcs)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.5)),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white, elevation: 3, shadowColor: Colors.blue.withOpacity(0.4), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))))),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700], foregroundColor: Colors.white, elevation: 3, shadowColor: Colors.orange.withValues(alpha: 0.4), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))))),
       ]),
     );
   }
