@@ -1327,6 +1327,40 @@ _importItems();
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 📷 HERO PHOTO (if exists)
+                if (product.imagePath != null && product.imagePath!.isNotEmpty)
+                  Builder(
+                    builder: (ctx2) {
+                      try {
+                        String b64 = product.imagePath!;
+                        if (b64.contains(",")) b64 = b64.split(",").last;
+                        if (b64.length < 100) return const SizedBox.shrink();
+                        final bytes = base64Decode(b64);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.memory(
+                              Uint8List.fromList(bytes),
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                height: 180,
+                                color: Colors.grey[100],
+                                child: const Center(
+                                  child: Icon(Icons.broken_image, size: 48, color: Colors.grey),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      } catch (_) {
+                        return const SizedBox.shrink();
+                      }
+                    },
+                  ),
+
                 // Close button
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
