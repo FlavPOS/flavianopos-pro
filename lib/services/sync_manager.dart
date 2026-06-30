@@ -414,6 +414,14 @@ class SyncManager {
       final id = (m['productId'] ?? event.snapshot.key ?? '').toString();
       if (id.isEmpty) return;
       final db = await DatabaseHelper().database;
+      // 🛡️ PRESERVE LOCAL PHOTO (branch-local imagePath, never synced from Firebase)
+      final preservePhoto = await db.query(
+        "products", columns: ["imagePath"],
+        where: "id = ?", whereArgs: [id], limit: 1,
+      );
+      final preservedImagePath = preservePhoto.isNotEmpty
+          ? preservePhoto.first["imagePath"]
+          : null;
       await db.insert(
         'products',
         {
@@ -427,7 +435,7 @@ class SyncManager {
           'stockQty': (m['stockQty'] is num) ? (m['stockQty'] as num).toInt() : 0,
           'reorderLevel': (m['reorderLevel'] is num) ? (m['reorderLevel'] as num).toInt() : 5,
           'barcode': (m['barcode'] ?? '').toString(),
-          'imagePath': null,
+          'imagePath': preservedImagePath,
           'imageUrl': (m['imageUrl'] ?? '').toString(),
           'syncStatus': SyncStatus.synced,
           'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
@@ -688,6 +696,14 @@ class SyncManager {
         final m = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
         final id = (m['productId'] ?? entry.key ?? '').toString();
         if (id.isEmpty) continue;
+        // 🛡️ PRESERVE LOCAL PHOTO (branch-local imagePath)
+        final existingPhoto = await sqliteDb.query(
+          "products", columns: ["imagePath"],
+          where: "id = ?", whereArgs: [id], limit: 1,
+        );
+        final localPhoto = existingPhoto.isNotEmpty
+            ? existingPhoto.first["imagePath"]
+            : null;
         await sqliteDb.insert(
           'products',
           {
@@ -701,7 +717,7 @@ class SyncManager {
             'stockQty': (m['stockQty'] is num) ? (m['stockQty'] as num).toInt() : 0,
             'reorderLevel': (m['reorderLevel'] is num) ? (m['reorderLevel'] as num).toInt() : 5,
             'barcode': (m['barcode'] ?? '').toString(),
-            'imagePath': null,
+            'imagePath': localPhoto,
             'imageUrl': (m['imageUrl'] ?? '').toString(),
             'syncStatus': SyncStatus.synced,
             'lastSyncedAt': DateTime.now().toUtc().toIso8601String(),
