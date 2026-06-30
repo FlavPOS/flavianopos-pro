@@ -187,6 +187,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final myBranchName = (assign["branchName"] ?? "").toString();
       final record = DeliveryRecord(id: now.millisecondsSinceEpoch.toString(), refNumber: refNumber, supplier: _supplierCtrl.text.trim(), driverName: _driverCtrl.text.trim(), plateNumber: _plateCtrl.text.trim(), receivedBy: _receivedByCtrl.text.trim(), notes: _notesCtrl.text.trim(), items: recs, totalItems: totalItems, totalQuantity: tQty, totalCost: tCost, totalRetail: tRetail, dateTime: now, branchId: myBranchId, branchName: myBranchName);
       await DeliveryStorage.saveDelivery(record);
+      _uploadDeliveryToFirebase(record);
       for (final u in updated) { Product.updateProduct(u.id, u); }
       // 🔄 Phase B2: refresh branch stock cache after delivery
       _loadBranchStock();
