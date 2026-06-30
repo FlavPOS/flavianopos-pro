@@ -257,8 +257,24 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
     ]);
   }
 
-  void _saveProduct() {
+  Future<void> _saveProduct() async {
+    // 🔓 BRANCH USERS: Allow photo-only save (read-only mode)
     if (widget.readOnly) {
+      if (_imageBytes != null && widget.product != null) {
+        final sku = widget.product!.sku;
+        final b64 = base64Encode(_imageBytes!);
+        await DatabaseHelper().savePhotoBySku(sku, b64);
+        debugPrint("📸 Branch photo saved for SKU=$sku (${b64.length} chars)");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("📸 Photo saved locally for this branch"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ));
+          Navigator.pop(context, widget.product);
+        }
+        return;
+      }
       debugPrint("🔒 EDIT BLOCKED: widget.readOnly=true");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -269,6 +285,7 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
       );
       return;
     }
+    // 🏢 HEAD OFFICE: Full edit + photo to both tables
     if (_formKey.currentState!.validate()) {
       String? imgPath = _existingImagePath;
       if (_imageBytes != null) {
@@ -287,7 +304,11 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
         barcode: _barcodeController.text.trim(),
         imagePath: imgPath,
       );
-      Navigator.pop(context, product);
+      if (_imageBytes != null) {
+        await DatabaseHelper().savePhotoBySku(product.sku, base64Encode(_imageBytes!));
+        debugPrint("📸 HO photo saved for SKU=${product.sku}");
+      }
+      if (mounted) Navigator.pop(context, product);
     }
   }
 
