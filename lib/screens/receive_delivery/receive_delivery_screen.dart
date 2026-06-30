@@ -137,16 +137,130 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
   void _removeItem(int i) { setState(() { for (var b in _items[i].batches) { b.dispose(); } _items[i].qtyController.dispose(); _items.removeAt(i); }); }
 
-  // ═══ PHASE 2A: Add Item Modal (stub - Phase 2B will implement) ═══
+  // ═══ PHASE 2B: Product Picker Modal (real implementation) ═══
   void _showAddItemModal() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("Product picker coming in Phase 2B"),
-        backgroundColor: Colors.orange[700],
-        duration: const Duration(seconds: 2),
+    final searchCtrl = TextEditingController();
+    String localQuery = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          final filtered = widget.products.where((p) {
+            if (!_items.any((x) => x.product.id == p.id)) {
+              if (localQuery.isEmpty) return true;
+              final q = localQuery.toLowerCase();
+              return p.name.toLowerCase().contains(q) ||
+                     p.sku.toLowerCase().contains(q) ||
+                     p.barcode.toLowerCase().contains(q);
+            }
+            return false;
+          }).toList();
+
+          return Container(
+            height: MediaQuery.of(ctx).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Drag handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Select Product',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                // Search bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: TextField(
+                    controller: searchCtrl,
+                    autofocus: false,
+                    decoration: InputDecoration(
+                      hintText: 'Search by name, SKU, barcode...',
+                      hintStyle: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                      prefixIcon: Icon(Icons.search, color: Colors.orange[700], size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onChanged: (v) => setModalState(() => localQuery = v),
+                  ),
+                ),
+                // Product list - SKU + Name only
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            localQuery.isEmpty ? 'All products added' : 'No matches found',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey[200]),
+                          itemBuilder: (_, i) {
+                            final p = filtered[i];
+                            return ListTile(
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _addItem(p);
+                              },
+                              leading: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange[50],
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  p.sku,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange[800],
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                p.name,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
+
 
   Future<void> _showBatchPopup(int itemIndex) async {
     final item = _items[itemIndex];
