@@ -44,8 +44,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   // ===== BRANCH-AWARE STOCK (Phase A) =====
   Map<String, int> _branchStock = {};
-  String _branchNameDisplay = "";
-  String _companyCodeDisplay = "";
   bool _stockLoading = true;
 
   bool get _isHeadOffice {
@@ -73,14 +71,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
       } else {
         final assign = await DeviceAssignmentService().read();
         final bid = (assign["branchId"] ?? "").toString();
-      final bName = (assign["branchName"] ?? "").toString();
-      final cCode = (assign["companyCode"] ?? "").toString();
-      if (mounted) {
-        setState(() {
-          _branchNameDisplay = bName;
-          _companyCodeDisplay = cCode;
-        });
-      }
         map = await BranchInventoryService.getStockMapForBranch(bid);
       }
       if (!mounted) return;
@@ -169,14 +159,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
     if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
     return v.toStringAsFixed(2);
-  }
-
-  // Format integer with thousands separator: 499999 -> 499,999
-  String _fmtInt(int n) {
-    return n.toString().replaceAllMapped(
-      RegExp(r"(\d{1,3})(?=(\d{3})+(?!\d))"),
-      (m) => "${m[1]},",
-    );
   }
   void _addProduct(Product product) {
     setState(() {
@@ -449,54 +431,38 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _isHeadOffice ? Icons.business : Icons.storefront,
-                  size: 18,
-                  color: Colors.white,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    widget.isSelecting
-                        ? "SELECT PRODUCT"
-                        : (_isHeadOffice
-                            ? "ALL BRANCHES"
-                            : (_branchNameDisplay.isEmpty
-                                ? "BRANCH"
-                                : _branchNameDisplay.toUpperCase())),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      letterSpacing: 0.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            if (!widget.isSelecting)
-              Text(
-                _companyCodeDisplay.isEmpty
-                    ? "📦 Inventory"
-                    : "$_companyCodeDisplay · ${_fmtInt(_filteredProducts.length)} products",
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ),
-          ],
+        title: Text(
+          widget.isSelecting ? 'Select a Product' : '📦 Inventory',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.orange[700],
         foregroundColor: Colors.white,
         actions: [
+
+          // 🏢/🏪 VIEW MODE BADGE (read-only indicator)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _isHeadOffice ? Colors.purple[700] : Colors.green[700],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white70, width: 1),
+              ),
+              child: Center(
+                child: Text(
+                  _isHeadOffice
+                      ? "🏢 ALL"
+                      : (widget.branch.isEmpty ? "🏪 BRANCH" : "🏪 ${widget.branch.toUpperCase()}"),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
 
           // 🔄 REFRESH BRANCH STOCK
           IconButton(
@@ -942,7 +908,7 @@ _importItems();
         children: [
           _buildSummaryCard(
             'Total Products',
-            _fmtInt(_totalProducts),
+            '$_totalProducts',
             Icons.inventory_2,
             Colors.blue,
           ),
@@ -1231,7 +1197,7 @@ _importItems();
                     child: Text(
                       outOfStock
                           ? 'OUT'
-                          : '${_fmtInt(_stockOf(product))} ${product.unit}',
+                          : '${_stockOf(product)} ${product.unit}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1376,8 +1342,8 @@ _importItems();
                 _buildDetailRow('Selling Price', '₱${product.sellingPrice.toStringAsFixed(2)}'),
                 AppSettings.showCostPrice ? _buildDetailRow('Profit', '${profit.toStringAsFixed(2)} (${margin.toStringAsFixed(1)}%)') : const SizedBox(),
                 const Divider(height: 20),
-                _buildDetailRow('Stock Qty', '${_fmtInt(_stockOf(product))} ${product.unit}'),
-                _buildDetailRow('Reorder Level', '${_fmtInt(product.reorderLevel)} ${product.unit}'),
+                _buildDetailRow('Stock Qty', '${_stockOf(product)} ${product.unit}'),
+                _buildDetailRow('Reorder Level', '${product.reorderLevel} ${product.unit}'),
                 AppSettings.showCostPrice ? _buildDetailRow('Stock Value', '₱${(product.costPrice * _stockOf(product)).toStringAsFixed(2)}') : const SizedBox(),
                 const SizedBox(height: 16),
 
