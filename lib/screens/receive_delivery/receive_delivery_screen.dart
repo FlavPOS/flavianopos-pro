@@ -95,6 +95,16 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   void initState() {
     super.initState();
     _loadBranchStock();
+    // ═══ Load branch identity (matches Inventory pattern) ═══
+    () async {
+      final assign = await DeviceAssignmentService().read();
+      if (mounted) {
+        setState(() {
+          _branchNameDisplay = (assign["branchName"] ?? "").toString();
+          _companyCodeDisplay = (assign["companyCode"] ?? "").toString();
+        });
+      }
+    }();
   }
   // ═══ END PHASE B2 ═══
 
