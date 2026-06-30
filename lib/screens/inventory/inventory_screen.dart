@@ -1,9 +1,9 @@
 import 'dart:convert';
 import '../../models/settings_model.dart';
-import 'dart:typed_data';
 import 'dart:io';
 // lib/screens/inventory/inventory_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/product_model.dart';
 import 'add_edit_product_screen.dart';
 import '../../utils/export_helper.dart';
@@ -490,7 +490,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
               );
             },
           ),
-          // 🐛 B2.1 DEBUG: BINV Sync Status
+          // 🐛 B2.1 DEBUG: BINV Sync Status (dev-only, hidden in production)
+          if (kDebugMode)
           IconButton(
             icon: const Icon(Icons.bug_report, color: Colors.yellowAccent),
             tooltip: "Show last BINV sync status",
