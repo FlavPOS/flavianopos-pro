@@ -325,10 +325,61 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     final activeItems = _items.where((i) => (int.tryParse(i.qtyController.text) ?? 0) > 0).length;
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      appBar: AppBar(elevation: 0, title: const Text('\u{1F4E6} Receive Delivery', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white,
-        actions: [IconButton(icon: const Icon(Icons.history_rounded, size: 22), tooltip: 'History', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()))),
-          TextButton.icon(onPressed: _saveDelivery, icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20), label: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)))]),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.orange[700],
+        foregroundColor: Colors.white,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.storefront, size: 18, color: Colors.white),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _branchNameDisplay.isEmpty ? "BRANCH" : _branchNameDisplay.toUpperCase(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      letterSpacing: 0.5,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              "�� New Delivery · ${_fmtInt(activeItems)} items",
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history_rounded, size: 22),
+            tooltip: 'History',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _saveDelivery,
+            icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20),
+            label: const Text(
+              'Save',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
       body: Column(children: [
         Container(decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF1976D2)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
           child: Column(children: [
