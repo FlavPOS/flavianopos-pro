@@ -381,7 +381,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
         ],
       ),
       body: Column(children: [
-        Container(decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF1976D2)], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
+        Container(decoration: BoxDecoration(color: Colors.orange[700]),
           child: Column(children: [
             InkWell(onTap: () => setState(() => _headerExpanded = !_headerExpanded),
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Row(children: [
