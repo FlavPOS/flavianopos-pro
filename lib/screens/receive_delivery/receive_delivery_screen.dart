@@ -10,6 +10,8 @@ import 'delivery_model.dart';
 import 'delivery_history_screen.dart';
 import "../../services/branch_inventory_service.dart";
 import "../../services/device_assignment_service.dart";
+import "../../services/firebase_config_service.dart";
+import "../../services/firebase_realtime_service.dart";
 
 class ReceiveDeliveryScreen extends StatefulWidget {
   final List<Product> products;
@@ -191,6 +193,37 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       if (!mounted) return;
       _showPostSaveDialog(record, updated);
     } catch (e) { if (mounted) _snack('Error saving: $e'); }
+  }
+
+  // ☁️ PHASE 4: Upload delivery to Firebase under branchReceivedDelivery/{branchId}
+  Future<void> _uploadDeliveryToFirebase(DeliveryRecord record) async {
+    try {
+      final cfg = await FirebaseConfigService().load();
+      if (cfg == null) {
+        debugPrint("[DELIVERY-SYNC] FAIL: no config");
+        return;
+      }
+      final assign = await DeviceAssignmentService().read();
+      final companyCode = (assign["companyCode"] ?? "").toString();
+      final branchId = (assign["branchId"] ?? "").toString();
+      if (companyCode.isEmpty || branchId.isEmpty) {
+        debugPrint("[DELIVERY-SYNC] FAIL: companyCode or branchId empty");
+        return;
+      }
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) {
+        debugPrint("[DELIVERY-SYNC] FAIL: db NULL");
+        return;
+      }
+      final path = "companies/$companyCode/branchReceivedDelivery/$branchId/${record.id}";
+      await db.ref(path).set(record.toJson());
+      debugPrint("[DELIVERY-SYNC] SUCCESS: $path");
+    } catch (e) {
+      debugPrint("[DELIVERY-SYNC] EXCEPTION: $e");
+    }
   }
 
   void _snack(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating));
