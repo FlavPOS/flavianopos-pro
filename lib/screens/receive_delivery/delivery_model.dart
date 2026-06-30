@@ -56,6 +56,8 @@ class DeliveryRecord {
   final double totalCost;
   final double totalRetail;
   final DateTime dateTime;
+  final String branchId;
+  final String branchName;
 
   DeliveryRecord({
     required this.id, required this.refNumber, required this.supplier,
@@ -64,6 +66,8 @@ class DeliveryRecord {
     required this.totalItems, required this.totalQuantity,
     required this.totalCost, required this.totalRetail,
     required this.dateTime,
+    this.branchId = '',
+    this.branchName = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -74,6 +78,8 @@ class DeliveryRecord {
     'totalItems': totalItems, 'totalQuantity': totalQuantity,
     'totalCost': totalCost, 'totalRetail': totalRetail,
     'dateTime': dateTime.toIso8601String(),
+    'branchId': branchId,
+    'branchName': branchName,
   };
 
   factory DeliveryRecord.fromJson(Map<String, dynamic> json) => DeliveryRecord(
@@ -86,6 +92,8 @@ class DeliveryRecord {
     totalCost: (json['totalCost'] as num?)?.toDouble() ?? 0.0,
     totalRetail: (json['totalRetail'] as num?)?.toDouble() ?? 0.0,
     dateTime: DateTime.tryParse(json['dateTime'] ?? '') ?? DateTime.now(),
+    branchId: json['branchId'] ?? '',
+    branchName: json['branchName'] ?? '',
   );
 
   Map<String, dynamic> toMap() => {
@@ -95,6 +103,8 @@ class DeliveryRecord {
     'totalItems': totalItems, 'totalQuantity': totalQuantity,
     'totalCost': totalCost, 'totalRetail': totalRetail,
     'dateTime': dateTime.toIso8601String(),
+    'branchId': branchId,
+    'branchName': branchName,
   };
 
   factory DeliveryRecord.fromMap(Map<String, dynamic> m, List<DeliveryItemRecord> items) => DeliveryRecord(
@@ -107,6 +117,8 @@ class DeliveryRecord {
     totalCost: (m['totalCost'] as num?)?.toDouble() ?? 0.0,
     totalRetail: (m['totalRetail'] as num?)?.toDouble() ?? 0.0,
     dateTime: DateTime.tryParse(m['dateTime'] ?? '') ?? DateTime.now(),
+    branchId: m['branchId'] ?? '',
+    branchName: m['branchName'] ?? '',
   );
 }
 
