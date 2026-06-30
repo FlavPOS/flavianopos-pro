@@ -388,7 +388,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             onPressed: _saveDelivery,
             icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20),
             label: const Text(
-              'Save',
+              'APPROVE',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
@@ -471,10 +471,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                   ])))); })),
         if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: Colors.orange[700]),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_summaryChip(Icons.inventory_2, '$activeItems Items'), _summaryChip(Icons.add_box, '+$_totalQty pcs'), _summaryChip(Icons.payments, 'C: ₱${_fmtInt(_totalCost.toInt())}'), _summaryChip(Icons.sell, 'R: ₱${_fmtInt(_totalRetail.toInt())}')])),
-        Container(padding: const EdgeInsets.fromLTRB(16, 10, 16, 16), decoration: BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -3))]),
-          child: SizedBox(width: double.infinity, height: 52, child: ElevatedButton.icon(onPressed: _saveDelivery, icon: const Icon(Icons.local_shipping_rounded, size: 22),
-            label: Text('RECEIVE ${_items.length} ITEMS  (+$_totalQty pcs)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 0.5)),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700], foregroundColor: Colors.white, elevation: 3, shadowColor: Colors.orange.withValues(alpha: 0.4), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))))),
       ]),
     );
   }
