@@ -137,6 +137,17 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
   void _removeItem(int i) { setState(() { for (var b in _items[i].batches) { b.dispose(); } _items[i].qtyController.dispose(); _items.removeAt(i); }); }
 
+  // ═══ PHASE 2A: Add Item Modal (stub - Phase 2B will implement) ═══
+  void _showAddItemModal() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text("Product picker coming in Phase 2B"),
+        backgroundColor: Colors.orange[700],
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _showBatchPopup(int itemIndex) async {
     final item = _items[itemIndex];
     final List<_BatchEntry> workingBatches = [];
@@ -412,6 +423,28 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 const SizedBox(height: 8),
                 Row(children: [Expanded(child: _proField(_receivedByCtrl, 'Received By', Icons.assignment_ind_outlined)), const SizedBox(width: 8), Expanded(child: _proField(_notesCtrl, 'Notes / Remarks', Icons.note_outlined))])]))),
           ])),
+        // ═══ PHASE 2A: [+ ADD ITEM] button ═══
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+          child: SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: ElevatedButton.icon(
+              onPressed: _showAddItemModal,
+              icon: const Icon(Icons.add_circle_outline, size: 22),
+              label: const Text(
+                'ADD ITEM',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ),
         Container(padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
           child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2))]),
             child: TextField(controller: _searchCtrl, style: const TextStyle(fontSize: 13),
