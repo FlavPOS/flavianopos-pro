@@ -537,28 +537,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 const SizedBox(height: 8),
                 Row(children: [Expanded(child: _proField(_receivedByCtrl, 'Received By', Icons.assignment_ind_outlined)), const SizedBox(width: 8), Expanded(child: _proField(_notesCtrl, 'Notes / Remarks', Icons.note_outlined))])]))),
           ])),
-        // ═══ PHASE 2A: [+ ADD ITEM] button ═══
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-          child: SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton.icon(
-              onPressed: _showAddItemModal,
-              icon: const Icon(Icons.add_circle_outline, size: 22),
-              label: const Text(
-                'ADD ITEM',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange[700],
-                foregroundColor: Colors.white,
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-        ),
         Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: Row(children: [
           Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.list_alt_rounded, size: 16, color: Colors.blue[700])),
           const SizedBox(width: 8), Text('Delivery Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey[800])), const SizedBox(width: 6),
@@ -601,6 +579,12 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
         if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: Colors.orange[700]),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_summaryChip(Icons.inventory_2, '$activeItems Items'), _summaryChip(Icons.add_box, '+$_totalQty pcs'), _summaryChip(Icons.payments, 'C: ₱${_fmtInt(_totalCost.toInt())}'), _summaryChip(Icons.sell, 'R: ₱${_fmtInt(_totalRetail.toInt())}')])),
       ]),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddItemModal,
+        backgroundColor: Colors.orange[700],
+        elevation: 4,
+        child: const Icon(Icons.add, size: 32, color: Colors.white),
+      ),
     );
   }
 
