@@ -351,13 +351,27 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 ),
               ],
             ),
-            Text(
-              "�� New Delivery · ${_fmtInt(activeItems)} items",
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.white.withValues(alpha: 0.85),
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.local_shipping,
+                  size: 12,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    "New Delivery · ${_fmtInt(activeItems)} items",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
