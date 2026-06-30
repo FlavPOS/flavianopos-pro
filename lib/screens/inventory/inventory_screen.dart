@@ -639,68 +639,6 @@ _importItems();
           if (!widget.isSelecting)
           _buildSummaryCards(),
 
-          // ⚠️ LOW STOCK WARNING BANNER (only shows when needed)
-          if (!widget.isSelecting && _lowStockCount > 0 && !_showLowStockOnly)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: _rs(12), vertical: _rs(4)),
-              child: InkWell(
-                onTap: () => setState(() => _showLowStockOnly = true),
-                borderRadius: BorderRadius.circular(_rs(12)),
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: _rs(14), vertical: _rs(10)),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        Colors.orange.withValues(alpha: 0.15),
-                        Colors.red.withValues(alpha: 0.10),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(_rs(12)),
-                    border: Border.all(color: Colors.orange.withValues(alpha: 0.4), width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(_rs(6)),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.warning_amber_rounded, color: Colors.orange[800], size: _rs(20)),
-                      ),
-                      SizedBox(width: _rs(10)),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              "$_lowStockCount item${_lowStockCount > 1 ? "s" : ""} need restocking",
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: _rs(13),
-                                color: Colors.orange[900],
-                              ),
-                            ),
-                            Text(
-                              "Tap to view low stock only",
-                              style: TextStyle(
-                                fontSize: _rs(11),
-                                color: Colors.orange[700],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.arrow_forward_ios, color: Colors.orange[800], size: _rs(14)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
           // Search Bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
