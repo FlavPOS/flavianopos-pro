@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../../models/product_model.dart';
+import '../../helpers/database_helper.dart';
 
 class AddEditProductScreen extends StatefulWidget {
   final Product? product;
@@ -61,6 +62,7 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
         _units.insert(0, _selectedUnit);
       }
       _existingImagePath = p.imagePath;
+      _loadBranchPhoto();
     }
   }
 
@@ -414,6 +416,25 @@ class _AddEditProductScreenState extends State<AddEditProductScreen> {
   InputDecoration _buildInputDecoration(String label, IconData icon) {
     return InputDecoration(labelText: label, prefixIcon: Icon(icon),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)));
+  }
+
+  // 🆕 Load branch photo by SKU (Firebase-sync-proof)
+  Future<void> _loadBranchPhoto() async {
+    if (widget.product == null) return;
+    final sku = widget.product!.sku;
+    if (sku.isEmpty) return;
+    try {
+      final b64 = await DatabaseHelper().getPhotoBySku(sku);
+      if (b64 != null && b64.isNotEmpty && mounted) {
+        setState(() {
+          _imageBytes = base64Decode(b64);
+          _existingImagePath = null;
+        });
+        debugPrint("📸 Loaded branch photo for SKU=$sku");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Failed to load branch photo: $e");
+    }
   }
 }
 
