@@ -82,6 +82,9 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE users ADD COLUMN deviceId TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE users ADD COLUMN createdBy_sync TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE users ADD COLUMN updatedBy_sync TEXT DEFAULT ''"); } catch (_) {}
+    // DELIVERY RECORDS BRANCH MIGRATION - per-branch delivery tagging
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchName TEXT DEFAULT ''"); } catch (_) {}
     try {
     // STOCK TRANSFER DEVICE MIGRATION - device-based filtering support
     try { await db.execute("ALTER TABLE stock_transfers ADD COLUMN fromDeviceId TEXT DEFAULT ''"); } catch (_) {}
