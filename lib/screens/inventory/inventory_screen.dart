@@ -733,25 +733,6 @@ _importItems();
               },
             ),
           ),
-          const SizedBox(height: 4),
-
-          // Results Count
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Text(
-                  '${_filteredProducts.length} products found',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-                const Spacer(),
-                Text(
-                  'Sort: $_sortBy ${_sortAscending ? "↑" : "↓"}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
 
           // Product List
           Expanded(
