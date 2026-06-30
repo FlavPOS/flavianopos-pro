@@ -465,12 +465,27 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     );
   }
 
-  Widget _proField(TextEditingController c, String label, IconData ic) => TextField(controller: c, style: const TextStyle(fontSize: 12, color: Colors.white),
-    decoration: InputDecoration(labelText: label, labelStyle: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.7)), prefixIcon: Icon(ic, size: 16, color: Colors.white.withOpacity(0.7)), isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.white.withOpacity(0.3))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.white, width: 1.5)),
-      filled: true, fillColor: Colors.white.withOpacity(0.12)));
+  Widget _proField(TextEditingController c, String label, IconData ic) => TextField(
+    controller: c,
+    style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+    decoration: InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      prefixIcon: Icon(ic, size: 18, color: Colors.orange[700]),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: Colors.grey[300]!),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: Colors.orange[700]!, width: 1.5),
+      ),
+      filled: true,
+      fillColor: Colors.white,
+    ),
+  );
 
   Widget _chip(String text, Color color) => Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
     child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: color.withOpacity(0.8))));
