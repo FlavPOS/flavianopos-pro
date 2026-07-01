@@ -124,10 +124,28 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
                     ? _buildEmptyState()
                     : RefreshIndicator(
                         onRefresh: _loadSubmitted,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(12),
-                          itemCount: _filtered.length,
-                          itemBuilder: (_, i) => _buildCard(_filtered[i]),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            int columns;
+                            if (constraints.maxWidth < 600) {
+                              columns = 1;
+                            } else if (constraints.maxWidth < 1200) {
+                              columns = 2;
+                            } else {
+                              columns = 3;
+                            }
+                            return GridView.builder(
+                              padding: const EdgeInsets.all(12),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                childAspectRatio: 2.4,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 10,
+                              ),
+                              itemCount: _filtered.length,
+                              itemBuilder: (_, i) => _buildCard(_filtered[i]),
+                            );
+                          },
                         ),
                       ),
           ),
