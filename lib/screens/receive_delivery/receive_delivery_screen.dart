@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../../models/product_model.dart';
 import '../../models/batch_model.dart';
 import 'delivery_model.dart';
+import '../../helpers/database_helper.dart';
 import 'delivery_history_screen.dart';
 import "../../services/branch_inventory_service.dart";
 import "../../services/device_assignment_service.dart";
@@ -339,11 +340,64 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final assign = await DeviceAssignmentService().read();
       final myBranchId = (assign["branchId"] ?? "").toString();
       final myBranchName = (assign["branchName"] ?? "").toString();
-      final record = DeliveryRecord(id: now.millisecondsSinceEpoch.toString(), refNumber: refNumber, supplier: _supplierCtrl.text.trim(), driverName: _driverCtrl.text.trim(), plateNumber: _plateCtrl.text.trim(), receivedBy: _receivedByCtrl.text.trim(), notes: _notesCtrl.text.trim(), items: recs, totalItems: totalItems, totalQuantity: tQty, totalCost: tCost, totalRetail: tRetail, dateTime: now, branchId: myBranchId, branchName: myBranchName);
+      // Build initial record (status set based on user choice below)
+      final recordId = now.millisecondsSinceEpoch.toString();
+
+      // 💾 Show dialog: Save as Draft OR Submit for Approval
+      final choice = await _showSaveOrSubmitDialog(refNumber, totalItems, tQty, tRetail);
+      if (choice == null) return; // User cancelled
+
+      final userName = (assign["userName"] ?? assign["userDisplayName"] ?? "").toString();
+      final isDraft = choice == 'DRAFT';
+
+      final record = DeliveryRecord(
+        id: recordId,
+        refNumber: refNumber,
+        supplier: _supplierCtrl.text.trim(),
+        driverName: _driverCtrl.text.trim(),
+        plateNumber: _plateCtrl.text.trim(),
+        receivedBy: _receivedByCtrl.text.trim(),
+        notes: _notesCtrl.text.trim(),
+        items: recs,
+        totalItems: totalItems,
+        totalQuantity: tQty,
+        totalCost: tCost,
+        totalRetail: tRetail,
+        dateTime: now,
+        branchId: myBranchId,
+        branchName: myBranchName,
+        status: isDraft ? DeliveryStatus.draft : DeliveryStatus.submitted,
+        submittedDate: isDraft ? '' : now.toIso8601String(),
+        submittedBy: isDraft ? '' : userName,
+        lastEditedDate: now.toIso8601String(),
+        syncStatus: 'Pending',
+      );
+
       await DeliveryStorage.saveDelivery(record);
-      _uploadDeliveryToFirebase(record);
+
+      if (isDraft) {
+        // Draft: skip Firebase upload + product stock update
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: [
+              const Icon(Icons.description_outlined, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Draft saved: ${record.refNumber}')),
+            ]),
+            backgroundColor: const Color(0xFF7C3AED),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        Navigator.pop(context, updated); // back to dashboard
+        return;
+      }
+
+      // Submitted: Upload to Firebase (branchSubmittedDelivery) + update stocks
+      _uploadToSubmittedFirebase(record);
+      _logApprovalHistory(record.id, 'Submitted', userName, '');
       for (final u in updated) { Product.updateProduct(u.id, u); }
-      // 🔄 Phase B2: refresh branch stock cache after delivery
       _loadBranchStock();
       if (!mounted) return;
       _showPostSaveDialog(record, updated);
@@ -351,6 +405,166 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   }
 
   // ☁️ PHASE 4: Upload delivery to Firebase under branchReceivedDelivery/{branchId}
+
+  // ═══ WORKFLOW: Save as Draft OR Submit dialog ═══
+  Future<String?> _showSaveOrSubmitDialog(String refNumber, int totalItems, int totalQty, double totalRetail) async {
+    return await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.all(16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.local_shipping_outlined, color: Colors.orange[700], size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Save Delivery',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Summary
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('DR#: $refNumber', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  Text('Items: $totalItems  ·  Qty: $totalQty pcs', style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text('Total @ Retail: ₱${_fmtInt(totalRetail.toInt())}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Save as Draft button (purple)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, 'DRAFT'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF7C3AED),
+                  side: const BorderSide(color: Color(0xFF7C3AED), width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Column(
+                  children: const [
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.description_outlined, size: 20),
+                      SizedBox(width: 8),
+                      Text('Save as Draft', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    ]),
+                    SizedBox(height: 2),
+                    Text('Continue editing later', style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Submit for Approval button (blue solid)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, 'SUBMIT'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 2,
+                ),
+                child: Column(
+                  children: const [
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.send_rounded, size: 20),
+                      SizedBox(width: 8),
+                      Text('Submit for Approval', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    ]),
+                    SizedBox(height: 2),
+                    Text('Requires manager approval', style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Cancel
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ═══ WORKFLOW: Upload to branchSubmittedDelivery (Multi-branch tier only) ═══
+  Future<void> _uploadToSubmittedFirebase(DeliveryRecord record) async {
+    try {
+      final cfg = await FirebaseConfigService().load();
+      if (cfg == null) {
+        debugPrint('[SUBMIT-SYNC] SOLO tier - skip Firebase');
+        return;
+      }
+      final assign = await DeviceAssignmentService().read();
+      final companyCode = (assign['companyCode'] ?? '').toString();
+      final branchId = (assign['branchId'] ?? '').toString();
+      if (companyCode.isEmpty || branchId.isEmpty) {
+        debugPrint('[SUBMIT-SYNC] Skip: missing companyCode or branchId');
+        return;
+      }
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      final path = 'companies/$companyCode/branchSubmittedDelivery/$branchId/${record.id}';
+      await db.ref(path).set(record.toJson());
+      debugPrint('[SUBMIT-SYNC] Uploaded to: $path');
+    } catch (e) {
+      debugPrint('[SUBMIT-SYNC] Error: $e');
+    }
+  }
+
+  // ═══ WORKFLOW: Log to approval_history (audit trail) ═══
+  Future<void> _logApprovalHistory(String deliveryId, String action, String user, String remarks) async {
+    try {
+      final entry = {
+        'id': 'H-${DateTime.now().millisecondsSinceEpoch}',
+        'deliveryId': deliveryId,
+        'action': action,
+        'user': user,
+        'date': DateTime.now().toIso8601String(),
+        'remarks': remarks,
+      };
+      await DatabaseHelper().insertApprovalHistory(entry);
+      debugPrint('[APPROVAL-HISTORY] Logged: $action for $deliveryId');
+    } catch (e) {
+      debugPrint('[APPROVAL-HISTORY] Error: $e');
+    }
+  }
+
   Future<void> _uploadDeliveryToFirebase(DeliveryRecord record) async {
     try {
       final cfg = await FirebaseConfigService().load();
