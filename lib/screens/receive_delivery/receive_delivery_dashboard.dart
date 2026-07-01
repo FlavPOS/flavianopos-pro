@@ -4,6 +4,7 @@ import '../../models/product_model.dart';
 import 'receive_delivery_screen.dart';
 import 'delivery_model.dart';
 import 'delivery_history_screen.dart';
+import 'draft_list_screen.dart';
 
 class ReceiveDeliveryDashboard extends StatefulWidget {
   final List<Product> products;
@@ -108,7 +109,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
                     color: const Color(0xFF7C3AED), // Purple
                     bgColor: const Color(0xFFEDE9FE),
                     count: _draftCount,
-                    onTap: () => _showComingSoon('Draft Module'),
+                    onTap: () => _openDraftList(),
                   ),
                   const SizedBox(height: 10),
 
@@ -250,6 +251,14 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
       ),
     );
     // Refresh counts when user returns
+    _loadCounts();
+  }
+
+  void _openDraftList() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DraftListScreen(products: widget.products)),
+    );
     _loadCounts();
   }
 
