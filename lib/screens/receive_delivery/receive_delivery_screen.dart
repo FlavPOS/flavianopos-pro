@@ -1294,9 +1294,9 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                   child: Text(
                     "New Delivery • ${activeItems} ${activeItems == 1 ? 'Item' : 'Items'}",
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
