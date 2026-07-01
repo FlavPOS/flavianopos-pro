@@ -1316,8 +1316,21 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 ),
               );
             })),
-        if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: Colors.orange[700]),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_summaryChip(Icons.inventory_2, '$activeItems Items'), _summaryChip(Icons.add_box, '+$_totalQty pcs'), _summaryChip(Icons.payments, 'C: ₱${_fmtInt(_totalCost.toInt())}'), _summaryChip(Icons.sell, 'R: ₱${_fmtInt(_totalRetail.toInt())}')])),
+        if (_items.isNotEmpty) Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Colors.orange[700]),
+          child: Row(
+            children: [
+              _summaryColumn(Icons.inventory_2, 'Items', '$activeItems'),
+              _summaryDivider(),
+              _summaryColumn(Icons.add_box, 'Qty', '${_fmtInt(_totalQty)} pcs'),
+              _summaryDivider(),
+              _summaryColumn(Icons.payments, 'Cost', '\u20B1${_fmtInt(_totalCost.toInt())}'),
+              _summaryDivider(),
+              _summaryColumn(Icons.sell, 'Retail', '\u20B1${_fmtInt(_totalRetail.toInt())}'),
+            ],
+          ),
+        ),
       ]),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddItemModal,
@@ -1353,7 +1366,51 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   Widget _chip(String text, Color color) => Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
     child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: color.withOpacity(0.8))));
 
-  Widget _summaryChip(IconData ic, String text) => Row(children: [Icon(ic, size: 13, color: Colors.white70), const SizedBox(width: 4), Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11))]);
+  Widget _summaryColumn(IconData ic, String label, String value) {
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(ic, size: 13, color: Colors.white.withValues(alpha: 0.85)),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryDivider() {
+    return Container(
+      width: 1,
+      height: 26,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: Colors.white.withValues(alpha: 0.25),
+    );
+  }
+
 }
 
 class _BatchPopupDialog extends StatefulWidget {
