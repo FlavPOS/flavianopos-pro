@@ -1310,7 +1310,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    "New Delivery · ${_fmtInt(activeItems)} items",
+                    "New Delivery • ${activeItems} ${activeItems == 1 ? 'Item' : 'Items'}",
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
@@ -1333,16 +1333,70 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             ),
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(40),
+          child: Container(
+            width: double.infinity,
+            color: Colors.orange[700],
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text(
+                  'DR#: ',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Flexible(
+                  child: Text(
+                    _refCtrl.text.isEmpty ? '\u2014' : _refCtrl.text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text(
+                    'DRAFT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
       body: Column(children: [
-        Container(decoration: BoxDecoration(color: Colors.orange[700]),
+        Container(decoration: BoxDecoration(color: Colors.white),
           child: Column(children: [
             InkWell(onTap: () => setState(() => _headerExpanded = !_headerExpanded),
               child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6), child: Row(children: [
-                Icon(Icons.receipt_long, color: Colors.white.withOpacity(0.8), size: 16), const SizedBox(width: 8),
-                Text(_refCtrl.text.isEmpty ? 'Delivery Info' : 'DR# ${_refCtrl.text}', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13, fontWeight: FontWeight.w500)),
+                Icon(Icons.description_outlined, color: Colors.orange[700], size: 22), const SizedBox(width: 8),
+                Text('Delivery Information', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                if (_supplierCtrl.text.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)), child: Text(_supplierCtrl.text, style: const TextStyle(color: Colors.white, fontSize: 10))),
+                if (_supplierCtrl.text.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)), child: Text(_supplierCtrl.text, style: TextStyle(color: Colors.orange[700], fontSize: 10))),
                 const SizedBox(width: 8), Icon(_headerExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.white70, size: 20)]))),
             AnimatedCrossFade(duration: const Duration(milliseconds: 250), crossFadeState: _headerExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond, secondChild: const SizedBox.shrink(),
               firstChild: Container(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Column(children: [
@@ -1456,18 +1510,31 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
               _summaryDivider(),
               _summaryColumn(Icons.add_box, 'Qty', '${_fmtInt(_totalQty)} pcs'),
               _summaryDivider(),
-              _summaryColumn(Icons.payments, 'Cost', '\u20B1${_fmtInt(_totalCost.toInt())}'),
-              _summaryDivider(),
               _summaryColumn(Icons.sell, 'Retail', '\u20B1${_fmtInt(_totalRetail.toInt())}'),
             ],
           ),
         ),
       ]),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddItemModal,
-        backgroundColor: Colors.orange[700],
-        elevation: 4,
-        child: const Icon(Icons.add, size: 32, color: Colors.white),
+      floatingActionButton: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.orange.withValues(alpha: 0.3),
+              blurRadius: 16,
+              spreadRadius: 2,
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: _showAddItemModal,
+          backgroundColor: Colors.orange[700],
+          elevation: 6,
+          shape: const CircleBorder(),
+          child: const Icon(Icons.add, size: 28, color: Colors.white),
+        ),
       ),
     );
   }
