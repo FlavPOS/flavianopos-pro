@@ -5,6 +5,7 @@ import 'receive_delivery_screen.dart';
 import 'delivery_model.dart';
 import 'delivery_history_screen.dart';
 import 'draft_list_screen.dart';
+import 'submitted_list_screen.dart';
 
 class ReceiveDeliveryDashboard extends StatefulWidget {
   final List<Product> products;
@@ -121,7 +122,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
                     color: const Color(0xFF2563EB), // Blue
                     bgColor: const Color(0xFFDBEAFE),
                     count: _submittedCount,
-                    onTap: () => _showComingSoon('Submitted Module'),
+                    onTap: () => _openSubmittedList(),
                   ),
                   const SizedBox(height: 10),
 
@@ -251,6 +252,14 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
       ),
     );
     // Refresh counts when user returns
+    _loadCounts();
+  }
+
+  void _openSubmittedList() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => SubmittedListScreen(products: widget.products)),
+    );
     _loadCounts();
   }
 
