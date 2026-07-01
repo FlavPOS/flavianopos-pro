@@ -667,7 +667,7 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
                   padding: const EdgeInsets.all(10),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      final isWide = constraints.maxWidth > 500;
+                      final isWide = MediaQuery.of(context).size.width > 600;
                       // Field widgets (reusable)
                       final batchField = TextField(
                         controller: b.batchCtrl,
@@ -760,27 +760,22 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
                             ],
                           ),
                           const SizedBox(height: 8),
-                          // Batch Number + Qty (responsive)
+                          // All 4 fields (responsive: 1 row on big screen, stacked on small)
                           if (isWide)
                             Row(children: [
                               Expanded(flex: 3, child: batchField),
                               const SizedBox(width: 8),
                               Expanded(flex: 2, child: qtyField),
+                              const SizedBox(width: 8),
+                              Expanded(flex: 3, child: mfgField),
+                              const SizedBox(width: 8),
+                              Expanded(flex: 3, child: expField),
                             ])
                           else ...[
                             batchField,
                             const SizedBox(height: 8),
                             qtyField,
-                          ],
-                          const SizedBox(height: 8),
-                          // MFG + EXP dates (responsive)
-                          if (isWide)
-                            Row(children: [
-                              Expanded(child: mfgField),
-                              const SizedBox(width: 8),
-                              Expanded(child: expField),
-                            ])
-                          else ...[
+                            const SizedBox(height: 8),
                             mfgField,
                             const SizedBox(height: 8),
                             expField,
