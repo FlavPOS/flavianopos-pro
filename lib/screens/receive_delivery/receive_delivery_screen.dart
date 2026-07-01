@@ -659,17 +659,138 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
               Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)), child: Text('Total: $_totalQty', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)))])),
           Flexible(child: ListView.builder(shrinkWrap: true, padding: const EdgeInsets.all(12), itemCount: _batches.length,
             itemBuilder: (_, i) { final b = _batches[i];
-              return Card(margin: const EdgeInsets.only(bottom: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 2,
-                child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [
-                  Row(children: [CircleAvatar(radius: 12, backgroundColor: Colors.orange[100], child: Text('${i + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange[800]))),
-                    const SizedBox(width: 8), Text('Batch ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), const Spacer(),
-                    if (_batches.length > 1) IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), constraints: const BoxConstraints(), padding: EdgeInsets.zero, onPressed: () => _removeBatch(i))]),
-                  const SizedBox(height: 8),
-                  Row(children: [Expanded(flex: 3, child: TextField(controller: b.batchCtrl, style: const TextStyle(fontSize: 13), decoration: InputDecoration(labelText: 'Batch Number *', isDense: true, prefixIcon: const Icon(Icons.tag, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10)))),
-                    const SizedBox(width: 8), Expanded(flex: 2, child: TextField(controller: b.qtyCtrl, keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center, decoration: InputDecoration(labelText: 'Qty *', isDense: true, prefixIcon: const Icon(Icons.numbers, size: 18), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10))))]),
-                  const SizedBox(height: 8),
-                  Row(children: [Expanded(child: InkWell(onTap: () => _pickDate(context, b, true), child: InputDecorator(decoration: InputDecoration(labelText: 'MFG Date *', isDense: true, prefixIcon: Icon(Icons.calendar_today, size: 16, color: Colors.green[700]), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10)), child: Text(_fmtD(b.mfgDate), style: TextStyle(fontSize: 12, color: b.mfgDate != null ? Colors.black87 : Colors.grey))))),
-                    const SizedBox(width: 8), Expanded(child: InkWell(onTap: () => _pickDate(context, b, false), child: InputDecorator(decoration: InputDecoration(labelText: 'EXP Date *', isDense: true, prefixIcon: Icon(Icons.event_busy, size: 16, color: Colors.red[700]), border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10)), child: Text(_fmtD(b.expDate), style: TextStyle(fontSize: 12, color: b.expDate != null ? (b.expDate!.isBefore(DateTime.now()) ? Colors.red : Colors.black87) : Colors.grey)))))])])));
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 500;
+                      // Field widgets (reusable)
+                      final batchField = TextField(
+                        controller: b.batchCtrl,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Batch Number *',
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.tag, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                        ),
+                      );
+                      final qtyField = TextField(
+                        controller: b.qtyCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          labelText: 'Qty *',
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.numbers, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                        ),
+                      );
+                      final mfgField = InkWell(
+                        onTap: () => _pickDate(context, b, true),
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'MFG Date *',
+                            isDense: true,
+                            prefixIcon: Icon(Icons.calendar_today, size: 16, color: Colors.green[700]),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          ),
+                          child: Text(
+                            _fmtD(b.mfgDate),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: b.mfgDate != null ? Colors.black87 : Colors.grey,
+                            ),
+                          ),
+                        ),
+                      );
+                      final expField = InkWell(
+                        onTap: () => _pickDate(context, b, false),
+                        child: InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: 'EXP Date *',
+                            isDense: true,
+                            prefixIcon: Icon(Icons.event_busy, size: 16, color: Colors.red[700]),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          ),
+                          child: Text(
+                            _fmtD(b.expDate),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: b.expDate != null
+                                  ? (b.expDate!.isBefore(DateTime.now()) ? Colors.red : Colors.black87)
+                                  : Colors.grey,
+                            ),
+                          ),
+                        ),
+                      );
+
+                      return Column(
+                        children: [
+                          // Header row (always horizontal)
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundColor: Colors.orange[100],
+                                child: Text(
+                                  '${i + 1}',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange[800]),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('Batch ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const Spacer(),
+                              if (_batches.length > 1)
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                  constraints: const BoxConstraints(),
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _removeBatch(i),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          // Batch Number + Qty (responsive)
+                          if (isWide)
+                            Row(children: [
+                              Expanded(flex: 3, child: batchField),
+                              const SizedBox(width: 8),
+                              Expanded(flex: 2, child: qtyField),
+                            ])
+                          else ...[
+                            batchField,
+                            const SizedBox(height: 8),
+                            qtyField,
+                          ],
+                          const SizedBox(height: 8),
+                          // MFG + EXP dates (responsive)
+                          if (isWide)
+                            Row(children: [
+                              Expanded(child: mfgField),
+                              const SizedBox(width: 8),
+                              Expanded(child: expField),
+                            ])
+                          else ...[
+                            mfgField,
+                            const SizedBox(height: 8),
+                            expField,
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
             })),
           Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16))),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
