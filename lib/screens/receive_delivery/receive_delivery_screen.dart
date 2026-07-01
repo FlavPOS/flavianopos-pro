@@ -1396,7 +1396,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 Icon(Icons.description_outlined, color: Colors.orange[700], size: 22), const SizedBox(width: 8),
                 Text('Delivery Information', style: TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold)),
                 const Spacer(),
-                if (_supplierCtrl.text.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)), child: Text(_supplierCtrl.text, style: TextStyle(color: Colors.orange[700], fontSize: 10))),
+                const SizedBox.shrink(),
                 const SizedBox(width: 8), Icon(_headerExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.white70, size: 20)]))),
             AnimatedCrossFade(duration: const Duration(milliseconds: 250), crossFadeState: _headerExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond, secondChild: const SizedBox.shrink(),
               firstChild: Container(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Column(children: [
@@ -1515,26 +1515,12 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           ),
         ),
       ]),
-      floatingActionButton: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.orange.withValues(alpha: 0.3),
-              blurRadius: 16,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: FloatingActionButton(
-          onPressed: _showAddItemModal,
-          backgroundColor: Colors.orange[700],
-          elevation: 6,
-          shape: const CircleBorder(),
-          child: const Icon(Icons.add, size: 28, color: Colors.white),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddItemModal,
+        backgroundColor: Colors.orange[700],
+        elevation: 4,
+        shape: const CircleBorder(),
+        child: const Icon(Icons.add, size: 24, color: Colors.white),
       ),
     );
   }
