@@ -414,15 +414,15 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     // Page 1: TRUCKER COPY
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20 * PdfPageFormat.mm),
+      margin: const pw.EdgeInsets.all(8 * PdfPageFormat.mm),
       build: (ctx) => _buildPdfPageContent(r, date, time, "TRUCKER COPY"),
     ));
 
     // Page 2: STORE COPY (For BIR Audit)
     pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20 * PdfPageFormat.mm),
-      build: (ctx) => _buildPdfPageContent(r, date, time, "STORE COPY (For BIR Audit)"),
+      margin: const pw.EdgeInsets.all(8 * PdfPageFormat.mm),
+      build: (ctx) => _buildPdfPageContent(r, date, time, "STORE COPY"),
     ));
 
     return pdf;
@@ -588,22 +588,29 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
         ),
         pw.SizedBox(height: 10),
 
-        // ═══ REPORT TITLE (1 row, prominent) ═══
-        pw.Center(
-          child: pw.Text(
-            '$branchName - DELIVERY RECEIVING REPORT',
-            style: pw.TextStyle(
-              fontSize: 16,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blue800,
-            ),
-          ),
-        ),
-        pw.SizedBox(height: 2),
-        pw.Center(
-          child: pw.Text(
-            'TIN: TO-BE-ASSIGNED  |  MIN: TO-BE-ASSIGNED  |  PTU: TO-BE-ASSIGNED',
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+        // ═══ COMPACT BLUE BANNER (title + BIR in one box) ═══
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: const pw.BoxDecoration(color: PdfColors.blue700),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Text(
+                '$branchName - DELIVERY RECEIVING REPORT',
+                style: pw.TextStyle(
+                  fontSize: 13,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.white,
+                  letterSpacing: 1,
+                ),
+              ),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                'TIN: TO-BE-ASSIGNED   |   MIN: TO-BE-ASSIGNED   |   PTU: TO-BE-ASSIGNED',
+                style: pw.TextStyle(fontSize: 7, color: PdfColors.white),
+              ),
+            ],
           ),
         ),
         pw.SizedBox(height: 6),
