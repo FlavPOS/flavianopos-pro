@@ -412,14 +412,14 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     final time = '${_pad(r.dateTime.hour)}:${_pad(r.dateTime.minute)}:${_pad(r.dateTime.second)}';
 
     // Page 1: TRUCKER COPY
-    pdf.addPage(pw.Page(
+    pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(20 * PdfPageFormat.mm),
       build: (ctx) => _buildPdfPageContent(r, date, time, "TRUCKER COPY"),
     ));
 
     // Page 2: STORE COPY (For BIR Audit)
-    pdf.addPage(pw.Page(
+    pdf.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(20 * PdfPageFormat.mm),
       build: (ctx) => _buildPdfPageContent(r, date, time, "STORE COPY (For BIR Audit)"),
@@ -428,16 +428,31 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     return pdf;
   }
 
-  pw.Widget _buildPdfPageContent(DeliveryRecord r, String date, String time, String copyLabel) {
-    // Group items by itemName + sku for cleaner display
+  List<pw.Widget> _buildPdfPageContent(DeliveryRecord r, String date, String time, String copyLabel) {
+    // Group items by itemName + sku
     final Map<String, List<DeliveryItemRecord>> grouped = {};
     for (final item in r.items) {
       final key = '${item.itemName}||${item.sku}';
       grouped.putIfAbsent(key, () => []).add(item);
     }
 
-    // Build table rows with grouping
-    final List<List<String>> tableRows = [];
+    // Build item table rows
+    final List<pw.TableRow> itemTableRows = [];
+
+    // Header row
+    itemTableRows.add(
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.blue700),
+        children: [
+          _pdfTableCell('#', bold: true, color: PdfColors.white, align: pw.Alignment.center),
+          _pdfTableCell('Description', bold: true, color: PdfColors.white),
+          _pdfTableCell('Qty', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+          _pdfTableCell('Unit Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+          _pdfTableCell('Total @ Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+        ],
+      ),
+    );
+
     int itemNumber = 0;
     grouped.forEach((key, batches) {
       itemNumber++;
@@ -445,214 +460,297 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final itemName = parts[0];
       final sku = parts[1];
 
-      // Item header row
-      tableRows.add([
-        '$itemNumber',
-        '$itemName  ($sku)',
-        '',
-        '',
-        '',
-      ]);
+      // Item header row (product name)
+      itemTableRows.add(
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+          children: [
+            _pdfTableCell('$itemNumber', bold: true, align: pw.Alignment.center),
+            _pdfTableCell('$itemName  ($sku)', bold: true),
+            _pdfTableCell('', align: pw.Alignment.centerRight),
+            _pdfTableCell('', align: pw.Alignment.centerRight),
+            _pdfTableCell('', align: pw.Alignment.centerRight),
+          ],
+        ),
+      );
 
-      // Batch sub-rows
+      // Batch rows
       int itemQtyTotal = 0;
       double itemRetailTotal = 0;
       for (final b in batches) {
-        tableRows.add([
-          '',
-          '   Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}\n   MFG: ${b.mfgDate.isEmpty ? "-" : b.mfgDate}\n   EXP: ${b.expDate.isEmpty ? "-" : b.expDate}',
-          '${b.quantity}',
-          b.retail.toStringAsFixed(2),
-          (b.retail * b.quantity).toStringAsFixed(2),
-        ]);
+        itemTableRows.add(
+          pw.TableRow(
+            children: [
+              _pdfTableCell(''),
+              _pdfTableCell(
+                '   Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}    MFG: ${b.mfgDate.isEmpty ? "-" : b.mfgDate}    EXP: ${b.expDate.isEmpty ? "-" : b.expDate}',
+              ),
+              _pdfTableCell(_fmtMoney(b.quantity.toDouble()), align: pw.Alignment.centerRight),
+              _pdfTableCell(b.retail.toStringAsFixed(2), align: pw.Alignment.centerRight),
+              _pdfTableCell(_fmtMoney(b.retail * b.quantity), align: pw.Alignment.centerRight),
+            ],
+          ),
+        );
         itemQtyTotal += b.quantity;
         itemRetailTotal += b.retail * b.quantity;
       }
 
-      // Item subtotal row
-      tableRows.add([
-        '',
-        '   ITEM SUBTOTAL',
-        '$itemQtyTotal',
-        '',
-        itemRetailTotal.toStringAsFixed(2),
-      ]);
+      // Item Subtotal (blue accent)
+      itemTableRows.add(
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.blue50),
+          children: [
+            _pdfTableCell(''),
+            _pdfTableCell('   ITEM SUBTOTAL', bold: true, color: PdfColors.blue800),
+            _pdfTableCell(_fmtMoney(itemQtyTotal.toDouble()), bold: true, color: PdfColors.blue800, align: pw.Alignment.centerRight),
+            _pdfTableCell('-', bold: true, color: PdfColors.blue800, align: pw.Alignment.centerRight),
+            _pdfTableCell(_fmtMoney(itemRetailTotal), bold: true, color: PdfColors.blue800, align: pw.Alignment.centerRight),
+          ],
+        ),
+      );
     });
 
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        // ═══ COPY LABEL BANNER (Black border, plain) ═══
+    // Fallback if no items
+    if (grouped.isEmpty) {
+      itemTableRows.add(
+        pw.TableRow(
+          children: [
+            _pdfTableCell('-', align: pw.Alignment.center),
+            _pdfTableCell('No items'),
+            _pdfTableCell('-', align: pw.Alignment.centerRight),
+            _pdfTableCell('-', align: pw.Alignment.centerRight),
+            _pdfTableCell('-', align: pw.Alignment.centerRight),
+          ],
+        ),
+      );
+    }
+
+    // Branch name (uppercase, fallback to DELIVERY)
+    final branchName = _branchNameDisplay.isEmpty ? 'DELIVERY' : _branchNameDisplay.toUpperCase();
+
+    return [
+        // ═══ COPY LABEL BANNER (Blue bordered box) ═══
         pw.Container(
-          width: double.infinity,
           padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: PdfColors.black, width: 2),
+            border: pw.Border.all(color: PdfColors.blue700, width: 1.5),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
           ),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text(
-                copyLabel,
-                style: pw.TextStyle(
-                  fontSize: 14,
-                  fontWeight: pw.FontWeight.bold,
-                  letterSpacing: 3,
-                ),
-              ),
-              pw.Text(
-                'Serial: DR-${r.refNumber}',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        pw.SizedBox(height: 12),
-
-        // ═══ BUSINESS HEADER (Plain text, centered) ═══
-        pw.Center(
-          child: pw.Column(
-            children: [
-              pw.Text(
-                'FlavianoPOS Pro',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 2),
-              pw.Text(
-                'DELIVERY RECEIVING REPORT',
-                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, letterSpacing: 2),
-              ),
-              pw.SizedBox(height: 3),
-              pw.Text(
-                'TIN: TO-BE-ASSIGNED  |  MIN: TO-BE-ASSIGNED  |  PTU: TO-BE-ASSIGNED',
-                style: const pw.TextStyle(fontSize: 8),
-              ),
-            ],
-          ),
-        ),
-        pw.SizedBox(height: 8),
-        pw.Divider(thickness: 1, color: PdfColors.black),
-        pw.SizedBox(height: 6),
-
-        // ═══ DOCUMENT INFO (3-column, no border) ═══
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _pdfInfoRow('Date', date),
-                _pdfInfoRow('Time', time),
-                _pdfInfoRow('DR #', r.refNumber),
-              ],
-            ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _pdfInfoRow('Supplier', r.supplier.isEmpty ? '-' : r.supplier),
-                _pdfInfoRow('Driver', r.driverName.isEmpty ? '-' : r.driverName),
-                _pdfInfoRow('Plate #', r.plateNumber.isEmpty ? '-' : r.plateNumber),
-              ],
-            ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _pdfInfoRow('Received By', r.receivedBy.isEmpty ? '-' : r.receivedBy),
-                _pdfInfoRow('Total Items', '${grouped.length}'),
-                _pdfInfoRow('Total Qty', '+${r.totalQuantity} pcs'),
-              ],
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 6),
-        pw.Divider(thickness: 1, color: PdfColors.black),
-        pw.SizedBox(height: 6),
-
-        // ═══ ITEMS TABLE (Black & White, Accounting Style) ═══
-        pw.TableHelper.fromTextArray(
-          headerStyle: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.black,
-          ),
-          headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
-          cellStyle: const pw.TextStyle(fontSize: 9, color: PdfColors.black),
-          border: pw.TableBorder.all(color: PdfColors.black, width: 0.5),
-          cellAlignments: {
-            0: pw.Alignment.center,
-            2: pw.Alignment.centerRight,
-            3: pw.Alignment.centerRight,
-            4: pw.Alignment.centerRight,
-          },
-          headerPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          headers: [
-            '#',
-            'Description',
-            'Qty',
-            'Unit Retail',
-            'Total @ Retail',
-          ],
-          data: tableRows,
-        ),
-        pw.SizedBox(height: 12),
-
-        // ═══ SUMMARY SECTION (Right-aligned totals) ═══
-        pw.Container(
-          alignment: pw.Alignment.centerRight,
-          child: pw.Container(
-            width: 300,
-            padding: const pw.EdgeInsets.all(8),
-            decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.black, width: 1),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: [
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Total Items:', style: pw.TextStyle(fontSize: 10)),
-                    pw.Text('${grouped.length}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.SizedBox(height: 3),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('Total Qty:', style: pw.TextStyle(fontSize: 10)),
-                    pw.Text('${r.totalQuantity} pcs', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  ],
-                ),
-                pw.SizedBox(height: 6),
-                pw.Divider(thickness: 0.5, color: PdfColors.black),
-                pw.SizedBox(height: 3),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('GRAND TOTAL @ RETAIL:', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                    pw.Text(
-                      'PHP ${r.totalRetail.toStringAsFixed(2)}',
-                      style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+              pw.Row(
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(4),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.blue700,
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
                     ),
-                  ],
+                    child: pw.Text(
+                      'DR',
+                      style: pw.TextStyle(
+                        color: PdfColors.white,
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Text(
+                    copyLabel,
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.blue900,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.blue700, width: 1),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
                 ),
-              ],
+                child: pw.Text(
+                  'Serial: DR-${r.refNumber}',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.blue900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        pw.SizedBox(height: 10),
+
+        // ═══ REPORT TITLE (1 row, prominent) ═══
+        pw.Center(
+          child: pw.Text(
+            '$branchName - DELIVERY RECEIVING REPORT',
+            style: pw.TextStyle(
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blue800,
             ),
           ),
         ),
+        pw.SizedBox(height: 2),
+        pw.Center(
+          child: pw.Text(
+            'TIN: TO-BE-ASSIGNED  |  MIN: TO-BE-ASSIGNED  |  PTU: TO-BE-ASSIGNED',
+            style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+          ),
+        ),
+        pw.SizedBox(height: 6),
+        pw.Divider(thickness: 1, color: PdfColors.blue700),
+        pw.SizedBox(height: 6),
 
-        // ═══ NOTES (if applicable) ═══
+        // ═══ DOCUMENT INFO (3-column with icon prefixes) ═══
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _pdfInfoRow('Date', date),
+                  _pdfInfoRow('Time', time),
+                  _pdfInfoRow('DR #', r.refNumber),
+                ],
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _pdfInfoRow('Supplier', r.supplier.isEmpty ? '-' : r.supplier),
+                  _pdfInfoRow('Driver', r.driverName.isEmpty ? '-' : r.driverName),
+                  _pdfInfoRow('Plate #', r.plateNumber.isEmpty ? '-' : r.plateNumber),
+                ],
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _pdfInfoRow('Received By', r.receivedBy.isEmpty ? '-' : r.receivedBy),
+                  _pdfInfoRow('Total Items', '${grouped.length}'),
+                  _pdfInfoRow('Total Qty', _fmtMoney(r.totalQuantity.toDouble()) + ' pcs'),
+                ],
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 6),
+        pw.Divider(thickness: 1, color: PdfColors.blue700),
+        pw.SizedBox(height: 6),
+
+        // ═══ ITEMS TABLE (Custom-built with pw.Table) ═══
+        pw.Table(
+          border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+          columnWidths: {
+            0: const pw.FixedColumnWidth(30),
+            1: const pw.FlexColumnWidth(4),
+            2: const pw.FixedColumnWidth(70),
+            3: const pw.FixedColumnWidth(65),
+            4: const pw.FixedColumnWidth(85),
+          },
+          children: itemTableRows,
+        ),
+        pw.SizedBox(height: 10),
+
+        // ═══ SUMMARY (Two-box layout: Totals + Grand Total) ═══
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.end,
+          children: [
+            // Left box: Totals
+            pw.Container(
+              width: 180,
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.blue700, width: 1),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Column(
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Total Items:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('${grouped.length}', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    ],
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text('Total Qty:', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('${_fmtMoney(r.totalQuantity.toDouble())} pcs', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 10),
+            // Right box: Grand Total (dark accent)
+            pw.Container(
+              width: 250,
+              padding: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.blue900, width: 1),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  pw.Center(
+                    child: pw.Text(
+                      'GRAND TOTAL @ RETAIL',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.blue900,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                    decoration: const pw.BoxDecoration(
+                      color: PdfColors.blue900,
+                    ),
+                    child: pw.Center(
+                      child: pw.Text(
+                        'PHP ${_fmtMoney(r.totalRetail)}',
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        // ═══ NOTES (if any) ═══
         if (r.notes.isNotEmpty) ...[
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 8),
           pw.Container(
             width: double.infinity,
             padding: const pw.EdgeInsets.all(6),
             decoration: pw.BoxDecoration(
-              border: pw.Border.all(color: PdfColors.black, width: 0.5),
+              border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
             ),
             child: pw.Text(
               'Notes: ${r.notes}',
@@ -661,40 +759,110 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           ),
         ],
 
-        pw.Spacer(),
+        pw.SizedBox(height: 20),
 
-        // ═══ SIGNATURES ═══
+        // ═══ SIGNATURES (Formal 3-column with labels) ═══
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            _pdfSignature('Received By'),
-            _pdfSignature('Checked By'),
-            _pdfSignature('Approved By'),
+            _pdfSignatureBlock('Received By'),
+            _pdfSignatureBlock('Checked By'),
+            _pdfSignatureBlock('Approved By'),
           ],
         ),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 10),
 
-        // ═══ BIR-COMPLIANT FOOTER (Simple black text) ═══
-        pw.Divider(thickness: 0.5, color: PdfColors.black),
-        pw.Center(
-          child: pw.Text(
-            'System-generated document from FlavianoPOS Pro',
-            style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold),
+        // ═══ FOOTER (Blue accent bar) ═══
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(vertical: 6),
+          decoration: pw.BoxDecoration(
+            border: pw.Border(
+              top: pw.BorderSide(color: PdfColors.blue700, width: 1),
+            ),
+          ),
+          child: pw.Center(
+            child: pw.Text(
+              'System-generated  |  Accreditation: PENDING  |  Machine ID: TO-BE-ASSIGNED',
+              style: pw.TextStyle(fontSize: 7, color: PdfColors.grey700, fontWeight: pw.FontWeight.bold),
+            ),
           ),
         ),
-        pw.Center(
-          child: pw.Text(
-            'BIR Accreditation No.: PENDING  |  Machine ID: TO-BE-ASSIGNED',
-            style: const pw.TextStyle(fontSize: 7),
-          ),
+    ];
+  }
+
+  // Helper: Table cell builder
+  static pw.Widget _pdfTableCell(String text, {bool bold = false, PdfColor color = PdfColors.black, pw.Alignment align = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 9,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          color: color,
         ),
-        pw.Center(
-          child: pw.Text(
-            'This document is for internal audit and delivery verification purposes.',
-            style: const pw.TextStyle(fontSize: 7),
+      ),
+    );
+  }
+
+  // Helper: Format money with commas
+  static String _fmtMoney(double n) {
+    final str = n.toStringAsFixed(2);
+    final parts = str.split('.');
+    final intPart = parts[0];
+    final decPart = parts[1];
+    final formatted = intPart.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '$formatted.$decPart';
+  }
+
+  // Helper: Signature block with formal styling
+  static pw.Widget _pdfSignatureBlock(String label) {
+    return pw.Container(
+      width: 200,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Row(
+            children: [
+              pw.Container(
+                width: 12,
+                height: 12,
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.blue100,
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                ),
+              ),
+              pw.SizedBox(width: 6),
+              pw.Text(
+                label,
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blue900,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          pw.SizedBox(height: 25),
+          pw.Container(
+            decoration: pw.BoxDecoration(
+              border: pw.Border(
+                top: pw.BorderSide(color: PdfColors.blue700, width: 1.5),
+              ),
+            ),
+            padding: const pw.EdgeInsets.only(top: 3),
+            child: pw.Text(
+              'Name / Signature / Date',
+              style: pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+              textAlign: pw.TextAlign.center,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
