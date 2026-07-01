@@ -7,7 +7,7 @@ import '../models/cashier_session_model.dart';
 import 'cashier_lock/cash_declaration_screen.dart';
 import 'cashier_lock/incident_report_screen.dart';
 import 'cashier_lock/cashier_report_screen.dart';
-import 'receive_delivery/receive_delivery_screen.dart' as rd;
+import 'receive_delivery/receive_delivery_dashboard.dart' as rd;
 import 'item_ledger/item_ledger_screen.dart';
 import 'package:flutter/material.dart';
 import '../services/daily_lock_service.dart';
@@ -231,7 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context,
           MaterialPageRoute(
             builder: (_) =>
-                rd.ReceiveDeliveryScreen(products: Product.allProducts),
+                rd.ReceiveDeliveryDashboard(products: Product.allProducts),
           ),
         ).then((_) => setState(() {}));
         break;
