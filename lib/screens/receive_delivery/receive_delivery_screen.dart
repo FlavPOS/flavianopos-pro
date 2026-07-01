@@ -1156,7 +1156,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             onPressed: _saveDelivery,
             icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20),
             label: const Text(
-              'APPROVE',
+              'SAVE',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
