@@ -1283,16 +1283,16 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                         ),
                         const SizedBox(width: 10),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
                             color: hasBatches ? Colors.green : Colors.orange[100],
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            hasBatches ? '$qty' : 'TAP',
+                            hasBatches ? '${_fmtInt(qty)} pcs' : 'TAP',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                              fontSize: 11,
                               color: hasBatches ? Colors.white : Colors.orange[800],
                             ),
                           ),
