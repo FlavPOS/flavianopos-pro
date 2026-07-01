@@ -186,7 +186,7 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
   Widget _buildTableHeader() {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFDBEAFE),
         borderRadius: BorderRadius.circular(8),
@@ -194,16 +194,15 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
       ),
       child: Row(
         children: [
-          Expanded(flex: 2, child: _headerText('DATE')),
-          Expanded(flex: 2, child: _headerText('DR #')),
-          Expanded(flex: 2, child: _headerText('SUPPLIER')),
-          Expanded(flex: 2, child: _headerText('TOTAL', align: TextAlign.right)),
-          Expanded(flex: 2, child: _headerText('ITEMS / QTY', align: TextAlign.center)),
+          Expanded(flex: 3, child: _headerText('DATE')),
+          Expanded(flex: 3, child: _headerText('DR #')),
           Expanded(flex: 2, child: _headerText('STATUS', align: TextAlign.center)),
+          const SizedBox(width: 20),
         ],
       ),
     );
   }
+
 
   Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
     return Text(
@@ -221,7 +220,7 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
   Widget _buildTableRow(DeliveryRecord d) {
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -235,80 +234,58 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
           child: Row(
             children: [
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
+                    Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 6),
                     Text(
                       '${_fmtDate(d.dateTime)} ${_fmtTime(d.dateTime)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFDBEAFE),
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     'DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
               Expanded(
                 flex: 2,
-                child: Text(
-                  d.supplier.isEmpty ? '-' : d.supplier,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  '\u20B1${_fmtInt(d.totalRetail.toInt())}',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  '${d.totalItems} \u00B7 ${_fmtInt(d.totalQuantity)} pcs',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                ),
-              ),
-              Expanded(
-                flex: 2,
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                       color: const Color(0xFF2563EB),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
                       'PENDING',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
                     ),
                   ),
                 ),
               ),
+              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
             ],
           ),
         ),
       ),
     );
   }
+
 
   Widget _buildCard(DeliveryRecord d) {
     return Container(
@@ -325,82 +302,56 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
           borderRadius: BorderRadius.circular(14),
           onTap: () => _showDetails(d),
           child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.all(14),
+            child: Row(
               children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: const Color(0xFFDBEAFE), borderRadius: BorderRadius.circular(6)),
-                    child: Text('DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB))),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: const Color(0xFF2563EB), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('PENDING', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                  ),
-                ]),
-                const SizedBox(height: 8),
-                Text(d.supplier.isEmpty ? '(No supplier)' : d.supplier,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Row(children: [
-                  Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text('${_fmtDate(d.dateTime)} · ${_fmtTime(d.dateTime)}', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
-                  const Spacer(),
-                  Icon(Icons.inventory_2_outlined, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text('${d.totalItems} items · ${_fmtInt(d.totalQuantity)} pcs', style: TextStyle(fontSize: 11, color: Colors.grey[700])),
-                ]),
-                const SizedBox(height: 4),
-                Row(children: [
-                  Icon(Icons.sell_outlined, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text('Total: ₱${_fmtInt(d.totalRetail.toInt())}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
-                  if (d.submittedBy.isNotEmpty) ...[
-                    const Spacer(),
-                    Icon(Icons.person_outline, size: 11, color: Colors.grey[500]),
-                    const SizedBox(width: 3),
-                    Text('by ${d.submittedBy}', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                  ],
-                ]),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showRejectDialog(d),
-                      icon: const Icon(Icons.close_rounded, size: 16),
-                      label: const Text('Reject', style: TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red[600],
-                        side: BorderSide(color: Colors.red[300]!, width: 1),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDBEAFE),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'PENDING',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _confirmApprove(d),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Approve', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF16A34A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today_outlined, size: 14, color: Colors.grey[600]),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${_fmtDate(d.dateTime)} \u00B7 ${_fmtTime(d.dateTime)}',
+                            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                          ),
+                        ],
                       ),
-                    ),
+                    ],
                   ),
-                ]),
+                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right, color: Colors.grey[400], size: 22),
               ],
             ),
           ),
@@ -676,6 +627,46 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
                 Text('${i.quantity}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ]),
             )),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showRejectDialog(d);
+                    },
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red[600],
+                      side: BorderSide(color: Colors.red[300]!, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _confirmApprove(d);
+                    },
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Approve', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
