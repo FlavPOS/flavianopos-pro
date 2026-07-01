@@ -549,33 +549,89 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
               const SizedBox(height: 4), Text('Search and add products above', style: TextStyle(color: Colors.grey[400], fontSize: 12))]))
           : ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), itemCount: _items.length, itemBuilder: (_, i) {
               final item = _items[i]; final qty = int.tryParse(item.qtyController.text) ?? 0; final lc = qty * item.product.costPrice; final lr = qty * item.product.sellingPrice; final hasBatches = item.batches.isNotEmpty && item.totalBatchQty > 0;
-              return Container(margin: const EdgeInsets.only(bottom: 8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: hasBatches ? const Color(0xFF4CAF50) : const Color(0xFFFF9800), width: hasBatches ? 0.5 : 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))]),
-                child: InkWell(borderRadius: BorderRadius.circular(12), onTap: () => _showBatchPopup(i),
-                  child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Container(width: 28, height: 28, decoration: BoxDecoration(gradient: LinearGradient(colors: hasBatches ? [const Color(0xFF43A047), const Color(0xFF66BB6A)] : [const Color(0xFFEF6C00), const Color(0xFFFFA726)]), borderRadius: BorderRadius.circular(8)),
-                        child: Center(child: Text('${i + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)))),
-                      const SizedBox(width: 10),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 2), const SizedBox(height: 3),
-                        Row(children: [_chip(item.product.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${_fmtInt(_stockOf(item.product))}', Colors.blueGrey)]), const SizedBox(height: 3),
-                        Row(children: [_chip('C: ₱${item.product.costPrice.toStringAsFixed(2)}', Colors.orange), const SizedBox(width: 4), _chip('R: ₱${item.product.sellingPrice.toStringAsFixed(2)}', Colors.blue)])])),
-                      Column(children: [
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(gradient: LinearGradient(colors: hasBatches ? [const Color(0xFF43A047), const Color(0xFF66BB6A)] : [const Color(0xFFEF6C00), const Color(0xFFFFA726)]), borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: (hasBatches ? Colors.green : Colors.orange).withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]),
-                          child: Text(qty > 0 ? '$qty' : 'TAP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white))),
-                        const SizedBox(height: 4), Text(hasBatches ? '${item.batches.length} batch${item.batches.length > 1 ? 'es' : ''}' : 'No batch', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w500, color: hasBatches ? Colors.green[700] : Colors.orange[700])),
-                        const SizedBox(height: 4), InkWell(onTap: () => _removeItem(i), borderRadius: BorderRadius.circular(12),
-                          child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close, color: Colors.red[400], size: 16)))])]),
-                    if (item.batches.isNotEmpty) ...[const Divider(height: 14, thickness: 0.5),
-                      for (final b in item.batches) if (b.qty > 0) Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Row(children: [
-                        Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(4)), child: Icon(Icons.inventory_2_outlined, size: 11, color: Colors.orange[600])),
-                        const SizedBox(width: 6), Expanded(child: Text('${b.batchCtrl.text}  \u2022  MFG: ${b.mfgDate != null ? _fmtDate(b.mfgDate!) : "?"}  \u2022  EXP: ${b.expDate != null ? _fmtDate(b.expDate!) : "?"}', style: TextStyle(fontSize: 10, color: Colors.orange[700]))),
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(6)), child: Text('${b.qty}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800])))]))],
-                    if (!hasBatches) Padding(padding: const EdgeInsets.only(top: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.touch_app_rounded, size: 14, color: Colors.orange[700]), const SizedBox(width: 6), Text('Tap to add batch details', style: TextStyle(fontSize: 11, color: Colors.orange[700], fontWeight: FontWeight.w500))]))),
-                    if (qty > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [Text('Cost: ₱${lc.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green[700])), const SizedBox(width: 16), Text('Retail: ₱${lr.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue[700]))]))),
-                  ])))); })),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: hasBatches ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+                    width: hasBatches ? 0.5 : 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _showBatchPopup(i),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            item.product.sku,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange[800],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            item.product.name,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: hasBatches ? Colors.green : Colors.orange[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            hasBatches ? '$qty' : 'TAP',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: hasBatches ? Colors.white : Colors.orange[800],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () => _removeItem(i),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.red[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.close, color: Colors.red[400], size: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            })),
         if (_items.isNotEmpty) Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), decoration: BoxDecoration(color: Colors.orange[700]),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_summaryChip(Icons.inventory_2, '$activeItems Items'), _summaryChip(Icons.add_box, '+$_totalQty pcs'), _summaryChip(Icons.payments, 'C: ₱${_fmtInt(_totalCost.toInt())}'), _summaryChip(Icons.sell, 'R: ₱${_fmtInt(_totalRetail.toInt())}')])),
       ]),
