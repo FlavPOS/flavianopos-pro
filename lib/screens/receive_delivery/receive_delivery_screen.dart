@@ -8,7 +8,6 @@ import '../../models/product_model.dart';
 import '../../models/batch_model.dart';
 import 'delivery_model.dart';
 import '../../helpers/database_helper.dart';
-import 'delivery_history_screen.dart';
 import "../../services/branch_inventory_service.dart";
 import "../../services/device_assignment_service.dart";
 import "../../services/firebase_config_service.dart";
@@ -1153,14 +1152,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history_rounded, size: 22),
-            tooltip: 'History',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()),
-            ),
-          ),
           TextButton.icon(
             onPressed: _saveDelivery,
             icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20),

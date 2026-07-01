@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import 'receive_delivery_screen.dart';
 import 'delivery_model.dart';
-import 'delivery_history_screen.dart';
 import 'draft_list_screen.dart';
 import 'submitted_list_screen.dart';
 import 'approved_list_screen.dart';
@@ -71,14 +70,6 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history_rounded, size: 22),
-            tooltip: 'History',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DeliveryHistoryScreen()),
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 22),
             tooltip: 'Refresh',
