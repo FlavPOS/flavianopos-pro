@@ -6,6 +6,8 @@ import 'delivery_model.dart';
 import 'delivery_history_screen.dart';
 import 'draft_list_screen.dart';
 import 'submitted_list_screen.dart';
+import 'approved_list_screen.dart';
+import 'rejected_list_screen.dart';
 
 class ReceiveDeliveryDashboard extends StatefulWidget {
   final List<Product> products;
@@ -134,7 +136,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
                     color: const Color(0xFF16A34A), // Green
                     bgColor: const Color(0xFFDCFCE7),
                     count: _approvedCount,
-                    onTap: () => _showComingSoon('Approved Module'),
+                    onTap: () => _openApprovedList(),
                   ),
                   const SizedBox(height: 10),
 
@@ -146,7 +148,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
                     color: const Color(0xFFDC2626), // Red
                     bgColor: const Color(0xFFFECACA),
                     count: _rejectedCount,
-                    onTap: () => _showComingSoon('Rejected Module'),
+                    onTap: () => _openRejectedList(),
                   ),
                 ],
               ),
@@ -252,6 +254,22 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
       ),
     );
     // Refresh counts when user returns
+    _loadCounts();
+  }
+
+  void _openApprovedList() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ApprovedListScreen(products: widget.products)),
+    );
+    _loadCounts();
+  }
+
+  void _openRejectedList() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RejectedListScreen(products: widget.products)),
+    );
     _loadCounts();
   }
 
