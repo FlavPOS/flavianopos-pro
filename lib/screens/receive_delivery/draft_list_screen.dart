@@ -156,14 +156,23 @@ class _DraftListScreenState extends State<DraftListScreen> {
                         onRefresh: _loadDrafts,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            int columns;
-                            if (constraints.maxWidth < 600) {
-                              columns = 1;
-                            } else if (constraints.maxWidth < 1200) {
-                              columns = 2;
-                            } else {
-                              columns = 3;
+                            // TABLE VIEW for desktop (> 1024px)
+                            if (constraints.maxWidth > 1024) {
+                              return Column(
+                                children: [
+                                  _buildTableHeader(),
+                                  Expanded(
+                                    child: ListView.builder(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      itemCount: _filtered.length,
+                                      itemBuilder: (_, i) => _buildDraftRow(_filtered[i]),
+                                    ),
+                                  ),
+                                ],
+                              );
                             }
+                            // GRID VIEW for phone/tablet
+                            int columns = constraints.maxWidth < 600 ? 1 : 2;
                             return GridView.builder(
                               padding: const EdgeInsets.all(12),
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -205,6 +214,159 @@ class _DraftListScreenState extends State<DraftListScreen> {
             style: TextStyle(color: Colors.grey[500], fontSize: 12),
           ),
         ],
+      ),
+    );
+  }
+
+
+  // ═══ TABLE VIEW (Desktop > 1024px) ═══
+  Widget _buildTableHeader() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDE9FE),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: _headerText('DATE')),
+          Expanded(flex: 2, child: _headerText('DR #')),
+          Expanded(flex: 2, child: _headerText('SUPPLIER')),
+          Expanded(flex: 2, child: _headerText('TOTAL', align: TextAlign.right)),
+          Expanded(flex: 2, child: _headerText('ITEMS / QTY', align: TextAlign.center)),
+          Expanded(flex: 2, child: _headerText('ACTIONS', align: TextAlign.center)),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
+    return Text(
+      text,
+      textAlign: align,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFF7C3AED),
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _buildDraftRow(DeliveryRecord d) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.15)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _openDraft(d),
+          child: Row(
+            children: [
+              // DATE
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_fmtDate(d.dateTime)} ${_fmtTime(d.dateTime)}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              // DR #
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDE9FE),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              // SUPPLIER
+              Expanded(
+                flex: 2,
+                child: Text(
+                  d.supplier.isEmpty ? '-' : d.supplier,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // TOTAL
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '\u20B1${_fmtInt(d.totalRetail.toInt())}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+              ),
+              // ITEMS / QTY
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${d.totalItems} \u00B7 ${_fmtInt(d.totalQuantity)} pcs',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+              ),
+              // ACTIONS
+              Expanded(
+                flex: 2,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _confirmDelete(d),
+                      icon: const Icon(Icons.delete_outline, size: 14),
+                      label: const Text('Del', style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red[600],
+                        side: BorderSide(color: Colors.red[300]!),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: const Size(0, 30),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    ElevatedButton.icon(
+                      onPressed: () => _openDraft(d),
+                      icon: const Icon(Icons.edit_outlined, size: 14),
+                      label: const Text('Continue', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C3AED),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: const Size(0, 30),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

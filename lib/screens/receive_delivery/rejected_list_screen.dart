@@ -123,14 +123,21 @@ class _RejectedListScreenState extends State<RejectedListScreen> {
                         onRefresh: _loadRejected,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            int columns;
-                            if (constraints.maxWidth < 600) {
-                              columns = 1;
-                            } else if (constraints.maxWidth < 1200) {
-                              columns = 2;
-                            } else {
-                              columns = 3;
+                            if (constraints.maxWidth > 1024) {
+                              return Column(
+                                children: [
+                                  _buildTableHeader(),
+                                  Expanded(
+                                    child: ListView.builder(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                      itemCount: _filtered.length,
+                                      itemBuilder: (_, i) => _buildTableRow(_filtered[i]),
+                                    ),
+                                  ),
+                                ],
+                              );
                             }
+                            int columns = constraints.maxWidth < 600 ? 1 : 2;
                             return GridView.builder(
                               padding: const EdgeInsets.all(12),
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -165,6 +172,134 @@ class _RejectedListScreenState extends State<RejectedListScreen> {
           Text(_searchCtrl.text.isEmpty ? 'No rejected deliveries' : 'No matches found',
               style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500, fontSize: 14)),
         ],
+      ),
+    );
+  }
+
+
+  Widget _buildTableHeader() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFECACA),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(flex: 2, child: _headerText('DATE')),
+          Expanded(flex: 2, child: _headerText('DR #')),
+          Expanded(flex: 2, child: _headerText('SUPPLIER')),
+          Expanded(flex: 2, child: _headerText('TOTAL', align: TextAlign.right)),
+          Expanded(flex: 2, child: _headerText('ITEMS / QTY', align: TextAlign.center)),
+          Expanded(flex: 2, child: _headerText('STATUS', align: TextAlign.center)),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
+    return Text(
+      text,
+      textAlign: align,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFFDC2626),
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+
+  Widget _buildTableRow(DeliveryRecord d) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.15)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _showDetails(d),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_fmtDate(d.dateTime)} ${_fmtTime(d.dateTime)}',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFECACA),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  d.supplier.isEmpty ? '-' : d.supplier,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '\u20B1${_fmtInt(d.totalRetail.toInt())}',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${d.totalItems} \u00B7 ${_fmtInt(d.totalQuantity)} pcs',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'REJECTED',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
