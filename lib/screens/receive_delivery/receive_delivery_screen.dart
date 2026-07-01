@@ -1284,24 +1284,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.storefront, size: 18, color: Colors.white),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    _branchNameDisplay.isEmpty ? "BRANCH" : _branchNameDisplay.toUpperCase(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                      letterSpacing: 0.5,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
                 Icon(
                   Icons.local_shipping,
                   size: 12,
