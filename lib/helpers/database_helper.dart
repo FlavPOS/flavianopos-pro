@@ -82,6 +82,19 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE users ADD COLUMN deviceId TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE users ADD COLUMN createdBy_sync TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE users ADD COLUMN updatedBy_sync TEXT DEFAULT ''"); } catch (_) {}
+    // ═══ WORKFLOW: Delivery Records status columns ═══
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN status TEXT DEFAULT 'Draft'"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN submittedDate TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN submittedBy TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN approvedDate TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN approvedBy TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN rejectedDate TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN rejectedBy TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN rejectionReason TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN lastEditedDate TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE delivery_records ADD COLUMN syncStatus TEXT DEFAULT 'Pending'"); } catch (_) {}
+    try { await db.execute("CREATE TABLE IF NOT EXISTS approval_history (id TEXT PRIMARY KEY, deliveryId TEXT NOT NULL, action TEXT NOT NULL, user TEXT DEFAULT '', date TEXT NOT NULL, remarks TEXT DEFAULT '')"); } catch (_) {}
+    try { await db.execute("UPDATE delivery_records SET status = 'Approved' WHERE status IS NULL OR status = ''"); } catch (_) {}
     // DELIVERY RECORDS BRANCH MIGRATION - per-branch delivery tagging
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchId TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchName TEXT DEFAULT ''"); } catch (_) {}
@@ -987,6 +1000,10 @@ class DatabaseHelper {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<int> insertDeliveryRecord(Map<String, dynamic> d) async { final db = await database; return await db.insert('delivery_records', d, conflictAlgorithm: ConflictAlgorithm.replace); }
+  Future<int> updateDeliveryRecord(String id, Map<String, dynamic> updates) async { final db = await database; return await db.update('delivery_records', updates, where: 'id = ?', whereArgs: [id]); }
+  Future<int> deleteDeliveryRecord(String id) async { final db = await database; await db.delete('delivery_items', where: 'deliveryId = ?', whereArgs: [id]); return await db.delete('delivery_records', where: 'id = ?', whereArgs: [id]); }
+  Future<int> insertApprovalHistory(Map<String, dynamic> h) async { final db = await database; return await db.insert('approval_history', h); }
+  Future<List<Map<String, dynamic>>> getApprovalHistoryFor(String deliveryId) async { final db = await database; return await db.query('approval_history', where: 'deliveryId = ?', whereArgs: [deliveryId], orderBy: 'date DESC'); }
 
   Future<void> insertDeliveryWithItems(Map<String, dynamic> delivery, List<Map<String, dynamic>> items) async {
     final db = await database;

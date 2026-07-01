@@ -1,6 +1,14 @@
 // lib/screens/receive_delivery/delivery_model.dart
 import '../../helpers/database_helper.dart';
 
+// ═══ Status Constants ═══
+class DeliveryStatus {
+  static const String draft = 'Draft';
+  static const String submitted = 'Submitted';
+  static const String approved = 'Approved';
+  static const String rejected = 'Rejected';
+}
+
 class DeliveryItemRecord {
   final String productId;
   final String itemName;
@@ -59,6 +67,18 @@ class DeliveryRecord {
   final String branchId;
   final String branchName;
 
+  // ═══ WORKFLOW FIELDS (Phase A) ═══
+  final String status;
+  final String submittedDate;
+  final String submittedBy;
+  final String approvedDate;
+  final String approvedBy;
+  final String rejectedDate;
+  final String rejectedBy;
+  final String rejectionReason;
+  final String lastEditedDate;
+  final String syncStatus;
+
   DeliveryRecord({
     required this.id, required this.refNumber, required this.supplier,
     required this.driverName, required this.plateNumber,
@@ -68,7 +88,48 @@ class DeliveryRecord {
     required this.dateTime,
     this.branchId = '',
     this.branchName = '',
+    this.status = 'Draft',
+    this.submittedDate = '',
+    this.submittedBy = '',
+    this.approvedDate = '',
+    this.approvedBy = '',
+    this.rejectedDate = '',
+    this.rejectedBy = '',
+    this.rejectionReason = '',
+    this.lastEditedDate = '',
+    this.syncStatus = 'Pending',
   });
+
+  // copyWith for status changes
+  DeliveryRecord copyWith({
+    String? status,
+    String? submittedDate,
+    String? submittedBy,
+    String? approvedDate,
+    String? approvedBy,
+    String? rejectedDate,
+    String? rejectedBy,
+    String? rejectionReason,
+    String? lastEditedDate,
+    String? syncStatus,
+  }) => DeliveryRecord(
+    id: id, refNumber: refNumber, supplier: supplier,
+    driverName: driverName, plateNumber: plateNumber,
+    receivedBy: receivedBy, notes: notes, items: items,
+    totalItems: totalItems, totalQuantity: totalQuantity,
+    totalCost: totalCost, totalRetail: totalRetail,
+    dateTime: dateTime, branchId: branchId, branchName: branchName,
+    status: status ?? this.status,
+    submittedDate: submittedDate ?? this.submittedDate,
+    submittedBy: submittedBy ?? this.submittedBy,
+    approvedDate: approvedDate ?? this.approvedDate,
+    approvedBy: approvedBy ?? this.approvedBy,
+    rejectedDate: rejectedDate ?? this.rejectedDate,
+    rejectedBy: rejectedBy ?? this.rejectedBy,
+    rejectionReason: rejectionReason ?? this.rejectionReason,
+    lastEditedDate: lastEditedDate ?? this.lastEditedDate,
+    syncStatus: syncStatus ?? this.syncStatus,
+  );
 
   Map<String, dynamic> toJson() => {
     'id': id, 'refNumber': refNumber, 'supplier': supplier,
@@ -80,6 +141,16 @@ class DeliveryRecord {
     'dateTime': dateTime.toIso8601String(),
     'branchId': branchId,
     'branchName': branchName,
+    'status': status,
+    'submittedDate': submittedDate,
+    'submittedBy': submittedBy,
+    'approvedDate': approvedDate,
+    'approvedBy': approvedBy,
+    'rejectedDate': rejectedDate,
+    'rejectedBy': rejectedBy,
+    'rejectionReason': rejectionReason,
+    'lastEditedDate': lastEditedDate,
+    'syncStatus': syncStatus,
   };
 
   factory DeliveryRecord.fromJson(Map<String, dynamic> json) => DeliveryRecord(
@@ -94,6 +165,16 @@ class DeliveryRecord {
     dateTime: DateTime.tryParse(json['dateTime'] ?? '') ?? DateTime.now(),
     branchId: json['branchId'] ?? '',
     branchName: json['branchName'] ?? '',
+    status: json['status'] ?? 'Draft',
+    submittedDate: json['submittedDate'] ?? '',
+    submittedBy: json['submittedBy'] ?? '',
+    approvedDate: json['approvedDate'] ?? '',
+    approvedBy: json['approvedBy'] ?? '',
+    rejectedDate: json['rejectedDate'] ?? '',
+    rejectedBy: json['rejectedBy'] ?? '',
+    rejectionReason: json['rejectionReason'] ?? '',
+    lastEditedDate: json['lastEditedDate'] ?? '',
+    syncStatus: json['syncStatus'] ?? 'Pending',
   );
 
   Map<String, dynamic> toMap() => {
@@ -105,6 +186,16 @@ class DeliveryRecord {
     'dateTime': dateTime.toIso8601String(),
     'branchId': branchId,
     'branchName': branchName,
+    'status': status,
+    'submittedDate': submittedDate,
+    'submittedBy': submittedBy,
+    'approvedDate': approvedDate,
+    'approvedBy': approvedBy,
+    'rejectedDate': rejectedDate,
+    'rejectedBy': rejectedBy,
+    'rejectionReason': rejectionReason,
+    'lastEditedDate': lastEditedDate,
+    'syncStatus': syncStatus,
   };
 
   factory DeliveryRecord.fromMap(Map<String, dynamic> m, List<DeliveryItemRecord> items) => DeliveryRecord(
@@ -119,6 +210,53 @@ class DeliveryRecord {
     dateTime: DateTime.tryParse(m['dateTime'] ?? '') ?? DateTime.now(),
     branchId: m['branchId'] ?? '',
     branchName: m['branchName'] ?? '',
+    status: m['status'] ?? 'Draft',
+    submittedDate: m['submittedDate'] ?? '',
+    submittedBy: m['submittedBy'] ?? '',
+    approvedDate: m['approvedDate'] ?? '',
+    approvedBy: m['approvedBy'] ?? '',
+    rejectedDate: m['rejectedDate'] ?? '',
+    rejectedBy: m['rejectedBy'] ?? '',
+    rejectionReason: m['rejectionReason'] ?? '',
+    lastEditedDate: m['lastEditedDate'] ?? '',
+    syncStatus: m['syncStatus'] ?? 'Pending',
+  );
+}
+
+// ═══ Approval History Model ═══
+class ApprovalHistoryRecord {
+  final String id;
+  final String deliveryId;
+  final String action;
+  final String user;
+  final String date;
+  final String remarks;
+
+  ApprovalHistoryRecord({
+    required this.id,
+    required this.deliveryId,
+    required this.action,
+    required this.user,
+    required this.date,
+    this.remarks = '',
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'deliveryId': deliveryId,
+    'action': action,
+    'user': user,
+    'date': date,
+    'remarks': remarks,
+  };
+
+  factory ApprovalHistoryRecord.fromMap(Map<String, dynamic> m) => ApprovalHistoryRecord(
+    id: m['id'] ?? '',
+    deliveryId: m['deliveryId'] ?? '',
+    action: m['action'] ?? '',
+    user: m['user'] ?? '',
+    date: m['date'] ?? '',
+    remarks: m['remarks'] ?? '',
   );
 }
 
@@ -138,6 +276,28 @@ class DeliveryStorage {
       result.add(DeliveryRecord.fromMap(row, items));
     }
     return result;
+  }
+
+  // ═══ NEW: Filter by status ═══
+  static Future<List<DeliveryRecord>> getByStatus(String status) async {
+    final db = DatabaseHelper();
+    final rows = await db.getAllDeliveryRecords();
+    List<DeliveryRecord> result = [];
+    for (final row in rows) {
+      if ((row['status'] ?? 'Draft') != status) continue;
+      final itemRows = await db.getDeliveryItems(row['id']);
+      final items = itemRows.map((r) => DeliveryItemRecord.fromMap(r)).toList();
+      result.add(DeliveryRecord.fromMap(row, items));
+    }
+    // Sort by dateTime DESC
+    result.sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    return result;
+  }
+
+  // ═══ NEW: Count by status ═══
+  static Future<int> countByStatus(String status) async {
+    final list = await getByStatus(status);
+    return list.length;
   }
 
   static Future<List<DeliveryRecord>> getFiltered({
@@ -170,6 +330,18 @@ class DeliveryStorage {
       result.add(DeliveryRecord.fromMap(row, items));
     }
     return result;
+  }
+
+  // ═══ NEW: Update status (used by workflow) ═══
+  static Future<void> updateStatus(String deliveryId, Map<String, dynamic> updates) async {
+    final db = DatabaseHelper();
+    await db.updateDeliveryRecord(deliveryId, updates);
+  }
+
+  // ═══ NEW: Delete delivery ═══
+  static Future<void> deleteDelivery(String deliveryId) async {
+    final db = DatabaseHelper();
+    await db.deleteDeliveryRecord(deliveryId);
   }
 
   static Future<void> clearAll() async {
