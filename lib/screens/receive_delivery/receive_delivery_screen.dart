@@ -1394,7 +1394,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 const SizedBox.shrink(),
                 const SizedBox(width: 8), Icon(_headerExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: Colors.white70, size: 20)]))),
             AnimatedCrossFade(duration: const Duration(milliseconds: 250), crossFadeState: _headerExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond, secondChild: const SizedBox.shrink(),
-              firstChild: Container(padding: const EdgeInsets.fromLTRB(12, 0, 12, 12), child: Column(children: [
+              firstChild: Container(padding: const EdgeInsets.fromLTRB(12, 12, 12, 12), child: Column(children: [
                 Row(children: [Expanded(child: _proField(_refCtrl, 'DR # / Reference *', Icons.receipt)), const SizedBox(width: 8), Expanded(child: _proField(_supplierCtrl, 'Supplier', Icons.business))]),
                 const SizedBox(height: 8),
                 Row(children: [Expanded(child: _proField(_driverCtrl, 'Driver', Icons.person_outline)), const SizedBox(width: 8), Expanded(child: _proField(_plateCtrl, 'Plate #', Icons.directions_car_outlined))]),
@@ -1515,7 +1515,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
   Widget _proField(TextEditingController c, String label, IconData ic) => TextField(
     controller: c,
-    style: TextStyle(fontSize: 13, color: Colors.grey[900]),
+    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
     decoration: InputDecoration(
       labelText: label,
       labelStyle: TextStyle(fontSize: 12, color: Colors.grey[600]),
