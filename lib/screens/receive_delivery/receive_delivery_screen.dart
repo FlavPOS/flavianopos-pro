@@ -1378,11 +1378,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                   ),
                 ),
                 const Spacer(),
-                Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.white.withValues(alpha: 0.7),
-                  size: 20,
-                ),
               ],
             ),
           ),
@@ -1410,7 +1405,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.list_alt_rounded, size: 16, color: Colors.blue[700])),
           const SizedBox(width: 8), Text('Delivery Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey[800])), const SizedBox(width: 6),
           Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.blue[700], borderRadius: BorderRadius.circular(10)), child: Text('${_items.length}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold))),
-          const Spacer(), if (_items.isNotEmpty) Text('Total: $_totalQty pcs', style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500))])),
+          const Spacer(), Material(color: Colors.orange[700], borderRadius: BorderRadius.circular(20), child: InkWell(onTap: _showAddItemModal, borderRadius: BorderRadius.circular(20), child: const Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.add, color: Colors.white, size: 16), SizedBox(width: 4), Text('ADD ITEM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5))]))))])),
         Expanded(child: _items.isEmpty
           ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.blue[50], shape: BoxShape.circle), child: Icon(Icons.local_shipping_outlined, size: 48, color: Colors.blue[200])),
@@ -1503,7 +1498,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             })),
         if (_items.isNotEmpty) Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(color: Colors.orange[700]),
+          decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey[200]!, width: 1))),
           child: Row(
             children: [
               _summaryColumn(Icons.inventory_2, 'Items', '$activeItems'),
@@ -1515,13 +1510,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           ),
         ),
       ]),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddItemModal,
-        backgroundColor: Colors.orange[700],
-        elevation: 4,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add, size: 24, color: Colors.white),
-      ),
     );
   }
 
@@ -1558,12 +1546,12 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(ic, size: 13, color: Colors.white.withValues(alpha: 0.85)),
+              Icon(ic, size: 13, color: Colors.orange[700]),
               const SizedBox(width: 4),
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: Colors.grey[600],
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1574,7 +1562,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           Text(
             value,
             style: const TextStyle(
-              color: Colors.white,
+              color: Colors.black87,
               fontWeight: FontWeight.bold,
               fontSize: 18,
             ),
@@ -1591,7 +1579,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       width: 1,
       height: 26,
       margin: const EdgeInsets.symmetric(horizontal: 4),
-      color: Colors.white.withValues(alpha: 0.25),
+      color: Colors.grey[300],
     );
   }
 
