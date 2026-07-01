@@ -1291,7 +1291,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                     _branchNameDisplay.isEmpty ? "BRANCH" : _branchNameDisplay.toUpperCase(),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 22,
                       letterSpacing: 0.5,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1329,7 +1329,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             icon: const Icon(Icons.save_rounded, color: Colors.white, size: 20),
             label: const Text(
               'SAVE',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
         ],
@@ -1578,7 +1578,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                 label,
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.85),
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -1590,7 +1590,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 13,
+              fontSize: 18,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
