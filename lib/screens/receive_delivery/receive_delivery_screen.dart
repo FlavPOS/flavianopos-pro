@@ -559,7 +559,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(item.product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 2), const SizedBox(height: 3),
                         Row(children: [_chip(item.product.sku, Colors.indigo), const SizedBox(width: 4), _chip('Stock: ${_fmtInt(_stockOf(item.product))}', Colors.blueGrey)]), const SizedBox(height: 3),
-                        Row(children: [_chip('C: ₱${item.product.costPrice.toStringAsFixed(2)}', Colors.teal), const SizedBox(width: 4), _chip('R: ₱${item.product.sellingPrice.toStringAsFixed(2)}', Colors.blue)])])),
+                        Row(children: [_chip('C: ₱${item.product.costPrice.toStringAsFixed(2)}', Colors.orange), const SizedBox(width: 4), _chip('R: ₱${item.product.sellingPrice.toStringAsFixed(2)}', Colors.blue)])])),
                       Column(children: [
                         Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(gradient: LinearGradient(colors: hasBatches ? [const Color(0xFF43A047), const Color(0xFF66BB6A)] : [const Color(0xFFEF6C00), const Color(0xFFFFA726)]), borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: (hasBatches ? Colors.green : Colors.orange).withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))]),
                           child: Text(qty > 0 ? '$qty' : 'TAP', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white))),
@@ -568,9 +568,9 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                           child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)), child: Icon(Icons.close, color: Colors.red[400], size: 16)))])]),
                     if (item.batches.isNotEmpty) ...[const Divider(height: 14, thickness: 0.5),
                       for (final b in item.batches) if (b.qty > 0) Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Row(children: [
-                        Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: Colors.teal[50], borderRadius: BorderRadius.circular(4)), child: Icon(Icons.inventory_2_outlined, size: 11, color: Colors.teal[600])),
-                        const SizedBox(width: 6), Expanded(child: Text('${b.batchCtrl.text}  \u2022  MFG: ${b.mfgDate != null ? _fmtDate(b.mfgDate!) : "?"}  \u2022  EXP: ${b.expDate != null ? _fmtDate(b.expDate!) : "?"}', style: TextStyle(fontSize: 10, color: Colors.teal[700]))),
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.teal[50], borderRadius: BorderRadius.circular(6)), child: Text('${b.qty}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.teal[800])))]))],
+                        Container(padding: const EdgeInsets.all(3), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(4)), child: Icon(Icons.inventory_2_outlined, size: 11, color: Colors.orange[600])),
+                        const SizedBox(width: 6), Expanded(child: Text('${b.batchCtrl.text}  \u2022  MFG: ${b.mfgDate != null ? _fmtDate(b.mfgDate!) : "?"}  \u2022  EXP: ${b.expDate != null ? _fmtDate(b.expDate!) : "?"}', style: TextStyle(fontSize: 10, color: Colors.orange[700]))),
+                        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(6)), child: Text('${b.qty}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800])))]))],
                     if (!hasBatches) Padding(padding: const EdgeInsets.only(top: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
                       child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.touch_app_rounded, size: 14, color: Colors.orange[700]), const SizedBox(width: 6), Text('Tap to add batch details', style: TextStyle(fontSize: 11, color: Colors.orange[700], fontWeight: FontWeight.w500))]))),
                     if (qty > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(8)),
@@ -653,7 +653,7 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
     return Dialog(insetPadding: const EdgeInsets.all(16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85, maxWidth: 500),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF00695C), Color(0xFF00897B)]), borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+          Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFE65100), Color(0xFFEF6C00)]), borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
             child: Row(children: [const Icon(Icons.inventory_2, color: Colors.white), const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Batch Encoding', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)), Text('${widget.productName} (${widget.productSku})', style: const TextStyle(color: Colors.white70, fontSize: 12))])),
               Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)), child: Text('Total: $_totalQty', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)))])),
@@ -661,7 +661,7 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
             itemBuilder: (_, i) { final b = _batches[i];
               return Card(margin: const EdgeInsets.only(bottom: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), elevation: 2,
                 child: Padding(padding: const EdgeInsets.all(10), child: Column(children: [
-                  Row(children: [CircleAvatar(radius: 12, backgroundColor: Colors.teal[100], child: Text('${i + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.teal[800]))),
+                  Row(children: [CircleAvatar(radius: 12, backgroundColor: Colors.orange[100], child: Text('${i + 1}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange[800]))),
                     const SizedBox(width: 8), Text('Batch ${i + 1}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)), const Spacer(),
                     if (_batches.length > 1) IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), constraints: const BoxConstraints(), padding: EdgeInsets.zero, onPressed: () => _removeBatch(i))]),
                   const SizedBox(height: 8),
@@ -673,11 +673,11 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
             })),
           Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey[50], borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16))),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox(width: double.infinity, child: OutlinedButton.icon(icon: const Icon(Icons.add), label: const Text('Add Batch'), style: OutlinedButton.styleFrom(foregroundColor: Colors.teal[700], side: BorderSide(color: Colors.teal[300]!), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: _addBatch)),
+              SizedBox(width: double.infinity, child: OutlinedButton.icon(icon: const Icon(Icons.add), label: const Text('Add Batch'), style: OutlinedButton.styleFrom(foregroundColor: Colors.orange[700], side: BorderSide(color: Colors.orange[300]!), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: _addBatch)),
               const SizedBox(height: 8),
               Row(children: [Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context, null), style: OutlinedButton.styleFrom(foregroundColor: Colors.grey[700], shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), child: const Text('Cancel'))),
                 const SizedBox(width: 10), Expanded(flex: 2, child: ElevatedButton.icon(icon: const Icon(Icons.check), label: Text('Save Batches ($_totalQty pcs)'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: _save))])])),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[700], foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), onPressed: _save))])])),
         ])));
   }
 }
