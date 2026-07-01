@@ -651,7 +651,7 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(insetPadding: const EdgeInsets.all(16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85, maxWidth: 500),
+      child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85, maxWidth: MediaQuery.of(context).size.width < 600 ? MediaQuery.of(context).size.width * 0.95 : MediaQuery.of(context).size.width < 1024 ? 700 : MediaQuery.of(context).size.width < 1440 ? 900 : 1100),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFE65100), Color(0xFFEF6C00)]), borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
             child: Row(children: [const Icon(Icons.inventory_2, color: Colors.white), const SizedBox(width: 10),
