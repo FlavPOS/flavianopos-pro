@@ -1,10 +1,12 @@
 // lib/screens/receive_delivery/rejected_list_screen.dart
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:excel/excel.dart' as xl;
+import 'package:printing/printing.dart';
 import '../../models/product_model.dart';
-import '../../helpers/database_helper.dart';
-import '../../services/firebase_config_service.dart';
-import '../../services/firebase_realtime_service.dart';
-import '../../services/device_assignment_service.dart';
+import '../../widgets/receive_delivery/rejected_list_table.dart';
+import 'rejected_detail_screen.dart';
 import 'delivery_model.dart';
 
 class RejectedListScreen extends StatefulWidget {
@@ -17,9 +19,6 @@ class RejectedListScreen extends StatefulWidget {
 
 class _RejectedListScreenState extends State<RejectedListScreen> {
   List<DeliveryRecord> _rejected = [];
-  List<DeliveryRecord> _filtered = [];
-  final _searchCtrl = TextEditingController();
-  String _sortBy = 'newest';
   bool _loading = true;
 
   @override
@@ -28,650 +27,205 @@ class _RejectedListScreenState extends State<RejectedListScreen> {
     _loadRejected();
   }
 
-  @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
-
   Future<void> _loadRejected() async {
     setState(() => _loading = true);
     final list = await DeliveryStorage.getByStatus(DeliveryStatus.rejected);
     if (mounted) {
       setState(() {
         _rejected = list;
-        _applyFiltersSort();
         _loading = false;
       });
     }
   }
 
-  void _applyFiltersSort() {
-    List<DeliveryRecord> filtered = List.from(_rejected);
-    final q = _searchCtrl.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      filtered = filtered.where((d) {
-        return d.refNumber.toLowerCase().contains(q) ||
-               d.supplier.toLowerCase().contains(q) ||
-               d.rejectedBy.toLowerCase().contains(q);
-      }).toList();
+  List<RejectedItem> get _items => _rejected.map((d) {
+    DateTime? rjDate;
+    try { if (d.rejectedDate.isNotEmpty) rjDate = DateTime.parse(d.rejectedDate); } catch (_) {}
+    return RejectedItem(
+      drNumber: d.refNumber.isEmpty ? '(no DR)' : d.refNumber,
+      supplier: d.supplier,
+      date: d.dateTime,
+      itemsCount: d.totalItems,
+      totalQty: d.totalQuantity,
+      totalValue: d.totalRetail,
+      reason: d.rejectionReason,
+      rejectedBy: d.rejectedBy,
+      rejectedDate: rjDate,
+    );
+  }).toList();
+
+  DeliveryRecord? _findRecord(RejectedItem item) {
+    for (final d in _rejected) {
+      if (d.refNumber == item.drNumber && d.dateTime == item.date && d.totalRetail == item.totalValue) {
+        return d;
+      }
     }
-    switch (_sortBy) {
-      case 'oldest': filtered.sort((a, b) => a.dateTime.compareTo(b.dateTime)); break;
-      case 'supplier': filtered.sort((a, b) => a.supplier.compareTo(b.supplier)); break;
-      case 'dr': filtered.sort((a, b) => a.refNumber.compareTo(b.refNumber)); break;
-      case 'newest':
-      default: filtered.sort((a, b) => b.dateTime.compareTo(a.dateTime)); break;
-    }
-    setState(() => _filtered = filtered);
+    return null;
   }
 
-  String _fmtDate(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
-  String _fmtTime(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
-  String _fmtInt(int n) => n.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+  Future<void> _openDetail(RejectedItem item) async {
+    final record = _findRecord(item);
+    if (record == null) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => RejectedDetailScreen(record: record)));
+    _loadRejected();
+  }
+
+  // ═══════════════ EXPORT ALL TO EXCEL (with reasons) ═══════════════
+  Future<void> _exportAll() async {
+    if (_rejected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No rejected deliveries to export'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
+    try {
+      final excel = xl.Excel.createExcel();
+      excel.delete('Sheet1');
+
+      final hStyle = xl.CellStyle(bold: true,
+        fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+        backgroundColorHex: xl.ExcelColor.fromHexString('#EF4444'),
+        horizontalAlign: xl.HorizontalAlign.Center);
+      final titleStyle = xl.CellStyle(bold: true, fontSize: 14,
+        fontColorHex: xl.ExcelColor.fromHexString('#7F1D1D'));
+      final subStyle = xl.CellStyle(bold: true, fontSize: 11,
+        fontColorHex: xl.ExcelColor.fromHexString('#555555'));
+      final totalStyle = xl.CellStyle(bold: true,
+        backgroundColorHex: xl.ExcelColor.fromHexString('#FEE2E2'),
+        fontColorHex: xl.ExcelColor.fromHexString('#7F1D1D'));
+
+      // ── SUMMARY sheet ──
+      final s1 = excel['SUMMARY'];
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).value =
+          xl.TextCellValue('FlavianoPOS PRO - Rejected Deliveries Export');
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0)).cellStyle = titleStyle;
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).value =
+          xl.TextCellValue('Total: ${_rejected.length} rejected deliveries    |    Generated: ${DateFormat("yyyy-MM-dd HH:mm").format(DateTime.now())}');
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 1)).cellStyle = subStyle;
+
+      final headers1 = ['#', 'DR #', 'Supplier', 'Driver', 'Plate #', 'Delivery Date',
+        'Received By', 'Submitted By', 'Rejected By', 'Rejected Date',
+        'REJECTION REASON',
+        'Total Items', 'Total Qty', 'Total Cost', 'Total Retail', 'Notes'];
+      for (var c = 0; c < headers1.length; c++) {
+        final cell = s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 3));
+        cell.value = xl.TextCellValue(headers1[c]);
+        cell.cellStyle = hStyle;
+      }
+
+      double grandCost = 0, grandRetail = 0;
+      int grandItems = 0, grandQty = 0;
+
+      for (var i = 0; i < _rejected.length; i++) {
+        final d = _rejected[i];
+        final row = i + 4;
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row)).value = xl.IntCellValue(i + 1);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row)).value = xl.TextCellValue(d.refNumber);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row)).value = xl.TextCellValue(d.supplier);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row)).value = xl.TextCellValue(d.driverName);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row)).value = xl.TextCellValue(d.plateNumber);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row)).value = xl.TextCellValue(DateFormat('yyyy-MM-dd HH:mm').format(d.dateTime));
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row)).value = xl.TextCellValue(d.receivedBy);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: row)).value = xl.TextCellValue(d.submittedBy);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row)).value = xl.TextCellValue(d.rejectedBy);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row)).value = xl.TextCellValue(d.rejectedDate);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: row)).value = xl.TextCellValue(d.rejectionReason);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: row)).value = xl.IntCellValue(d.totalItems);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 12, rowIndex: row)).value = xl.IntCellValue(d.totalQuantity);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 13, rowIndex: row)).value = xl.DoubleCellValue(d.totalCost);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 14, rowIndex: row)).value = xl.DoubleCellValue(d.totalRetail);
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 15, rowIndex: row)).value = xl.TextCellValue(d.notes);
+        grandItems += d.totalItems;
+        grandQty += d.totalQuantity;
+        grandCost += d.totalCost;
+        grandRetail += d.totalRetail;
+      }
+
+      final totalRow = _rejected.length + 4;
+      for (var c = 0; c < headers1.length; c++) {
+        s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: totalRow)).cellStyle = totalStyle;
+      }
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: totalRow)).value = xl.TextCellValue('GRAND TOTAL');
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: totalRow)).value = xl.IntCellValue(grandItems);
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 12, rowIndex: totalRow)).value = xl.IntCellValue(grandQty);
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 13, rowIndex: totalRow)).value = xl.DoubleCellValue(grandCost);
+      s1.cell(xl.CellIndex.indexByColumnRow(columnIndex: 14, rowIndex: totalRow)).value = xl.DoubleCellValue(grandRetail);
+
+      final widths1 = [5.0, 12.0, 22.0, 15.0, 12.0, 18.0, 15.0, 15.0, 15.0, 18.0, 30.0, 10.0, 12.0, 14.0, 14.0, 25.0];
+      for (var i = 0; i < widths1.length; i++) { s1.setColumnWidth(i, widths1[i]); }
+
+      // ── ITEMS_AND_BATCHES sheet (with reasons) ──
+      final s2 = excel['ITEMS_AND_BATCHES'];
+      final headers2 = ['#', 'DR #', 'Supplier', 'SKU', 'Product', 'Batch #',
+        'MFG Date', 'EXP Date', 'Qty', 'Cost', 'Retail', 'Line Total',
+        'Rejected By', 'Rejected Date', 'REJECTION REASON'];
+      for (var c = 0; c < headers2.length; c++) {
+        final cell = s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+        cell.value = xl.TextCellValue(headers2[c]);
+        cell.cellStyle = hStyle;
+      }
+
+      int rowIdx = 1;
+      int seq = 1;
+      for (final d in _rejected) {
+        for (final item in d.items) {
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value = xl.IntCellValue(seq);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = xl.TextCellValue(d.refNumber);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = xl.TextCellValue(d.supplier);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = xl.TextCellValue(item.sku);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = xl.TextCellValue(item.itemName);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = xl.TextCellValue(item.batchNumber);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: rowIdx)).value = xl.TextCellValue(item.mfgDate);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 7, rowIndex: rowIdx)).value = xl.TextCellValue(item.expDate);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: rowIdx)).value = xl.IntCellValue(item.quantity);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: rowIdx)).value = xl.DoubleCellValue(item.cost);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 10, rowIndex: rowIdx)).value = xl.DoubleCellValue(item.retail);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 11, rowIndex: rowIdx)).value = xl.DoubleCellValue(item.quantity * item.retail);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 12, rowIndex: rowIdx)).value = xl.TextCellValue(d.rejectedBy);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 13, rowIndex: rowIdx)).value = xl.TextCellValue(d.rejectedDate);
+          s2.cell(xl.CellIndex.indexByColumnRow(columnIndex: 14, rowIndex: rowIdx)).value = xl.TextCellValue(d.rejectionReason);
+          rowIdx++;
+          seq++;
+        }
+      }
+      final widths2 = [5.0, 12.0, 20.0, 12.0, 25.0, 12.0, 12.0, 12.0, 10.0, 10.0, 10.0, 14.0, 15.0, 18.0, 30.0];
+      for (var i = 0; i < widths2.length; i++) { s2.setColumnWidth(i, widths2[i]); }
+
+      final bytes = excel.encode();
+      if (bytes == null) throw Exception('Excel encoding failed');
+      final filename = 'Rejected_Deliveries_${DateFormat("yyyyMMdd_HHmmss").format(DateTime.now())}.xlsx';
+      await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: filename);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Exported: ${_rejected.length} rejected -> $filename'),
+        backgroundColor: const Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFFDC2626),
-        foregroundColor: Colors.white,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(mainAxisSize: MainAxisSize.min, children: const [
-              Icon(Icons.cancel_outlined, size: 20),
-              SizedBox(width: 8),
-              Text('REJECTED', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-            ]),
-            Text('${_rejected.length} rejected deliveries', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w500)),
-          ],
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.sort_rounded, size: 22), onPressed: _showSortDialog),
-          IconButton(icon: const Icon(Icons.refresh_rounded, size: 22), onPressed: _loadRejected),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            color: const Color(0xFFDC2626),
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (_) => _applyFiltersSort(),
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Search DR#, supplier, rejecter...',
-                hintStyle: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                prefixIcon: const Icon(Icons.search, size: 20),
-                filled: true, fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchCtrl.clear(); _applyFiltersSort(); })
-                    : null,
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : RejectedListTable(
+                items: _items,
+                onBack: () => Navigator.pop(context),
+                onRefresh: _loadRejected,
+                onExportAll: _exportAll,
+                onView: _openDetail,
               ),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _filtered.isEmpty
-                    ? _buildEmpty()
-                    : RefreshIndicator(
-                        onRefresh: _loadRejected,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            if (constraints.maxWidth > 1024) {
-                              return Column(
-                                children: [
-                                  _buildTableHeader(),
-                                  Expanded(
-                                    child: ListView.builder(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                      itemCount: _filtered.length,
-                                      itemBuilder: (_, i) => _buildTableRow(_filtered[i]),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-                            int columns = constraints.maxWidth < 600 ? 1 : 2;
-                            return GridView.builder(
-                              padding: const EdgeInsets.all(12),
-                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: columns,
-                                childAspectRatio: 2.4,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 10,
-                              ),
-                              itemCount: _filtered.length,
-                              itemBuilder: (_, i) => _buildCard(_filtered[i]),
-                            );
-                          },
-                        ),
-                      ),
-          ),
-        ],
       ),
-    );
-  }
-
-  Widget _buildEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(color: Color(0xFFFECACA), shape: BoxShape.circle),
-            child: const Icon(Icons.cancel_outlined, size: 60, color: Color(0xFFDC2626)),
-          ),
-          const SizedBox(height: 16),
-          Text(_searchCtrl.text.isEmpty ? 'No rejected deliveries' : 'No matches found',
-              style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
-
-  Widget _buildTableHeader() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFECACA),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          Expanded(flex: 2, child: _headerText('DATE')),
-          Expanded(flex: 2, child: _headerText('DR #')),
-          Expanded(flex: 2, child: _headerText('SUPPLIER')),
-          Expanded(flex: 2, child: _headerText('TOTAL', align: TextAlign.right)),
-          Expanded(flex: 2, child: _headerText('ITEMS / QTY', align: TextAlign.center)),
-          Expanded(flex: 2, child: _headerText('STATUS', align: TextAlign.center)),
-        ],
-      ),
-    );
-  }
-
-  Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
-    return Text(
-      text,
-      textAlign: align,
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFFDC2626),
-        letterSpacing: 0.5,
-      ),
-    );
-  }
-
-  Widget _buildTableRow(DeliveryRecord d) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.15)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => _showDetails(d),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: Row(
-                  children: [
-                    Icon(Icons.calendar_today_outlined, size: 12, color: Colors.grey[600]),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${_fmtDate(d.dateTime)} ${_fmtTime(d.dateTime)}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFECACA),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  d.supplier.isEmpty ? '-' : d.supplier,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  '\u20B1${_fmtInt(d.totalRetail.toInt())}',
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  '${d.totalItems} \u00B7 ${_fmtInt(d.totalQuantity)} pcs',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFDC2626),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Text(
-                      'REJECTED',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard(DeliveryRecord d) {
-    DateTime? rejectedDate;
-    try { rejectedDate = DateTime.parse(d.rejectedDate); } catch (_) {}
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFDC2626).withValues(alpha: 0.2), width: 1),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => _showDetails(d),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: const Color(0xFFFECACA), borderRadius: BorderRadius.circular(6)),
-                    child: Text('DR: ${d.refNumber.isEmpty ? "-" : d.refNumber}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: const Color(0xFFDC2626), borderRadius: BorderRadius.circular(10)),
-                    child: const Text('REJECTED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                  ),
-                ]),
-                const SizedBox(height: 8),
-                Text(d.supplier.isEmpty ? '(No supplier)' : d.supplier,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                if (rejectedDate != null) Row(children: [
-                  Icon(Icons.event_busy_outlined, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text('Rejected: ${_fmtDate(rejectedDate)} · ${_fmtTime(rejectedDate)}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[700])),
-                ]),
-                if (rejectedDate != null) const SizedBox(height: 3),
-                Row(children: [
-                  Icon(Icons.inventory_2_outlined, size: 12, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text('${d.totalItems} items · ${_fmtInt(d.totalQuantity)} pcs',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[700])),
-                  const Spacer(),
-                  Text('₱${_fmtInt(d.totalRetail.toInt())}',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
-                ]),
-                if (d.rejectionReason.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(color: const Color(0xFFFECACA).withValues(alpha: 0.5), borderRadius: BorderRadius.circular(6)),
-                    child: Row(children: [
-                      Icon(Icons.info_outline, size: 12, color: Colors.red[700]),
-                      const SizedBox(width: 4),
-                      Expanded(child: Text('Reason: ${d.rejectionReason}',
-                          style: TextStyle(fontSize: 11, color: Colors.red[900], fontStyle: FontStyle.italic))),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _confirmDelete(d),
-                      icon: const Icon(Icons.delete_outline, size: 16),
-                      label: const Text('Delete', style: TextStyle(fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[700],
-                        side: BorderSide(color: Colors.grey[400]!, width: 1),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _confirmResubmit(d),
-                      icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Resubmit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
-                      ),
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmResubmit(DeliveryRecord d) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(children: const [
-          Icon(Icons.refresh_rounded, color: Color(0xFF2563EB), size: 26),
-          SizedBox(width: 10),
-          Text('Resubmit Delivery?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('DR#: ${d.refNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 4),
-            Text('Previous reason: ${d.rejectionReason}',
-                style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.red)),
-            const SizedBox(height: 8),
-            const Text('This will resubmit the delivery for approval again.',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
-            child: const Text('Resubmit'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) await _resubmit(d);
-  }
-
-  Future<void> _resubmit(DeliveryRecord d) async {
-    try {
-      final now = DateTime.now();
-      final assign = await DeviceAssignmentService().read();
-      final user = (assign['userName'] ?? assign['userDisplayName'] ?? '').toString();
-
-      await DeliveryStorage.updateStatus(d.id, {
-        'status': DeliveryStatus.submitted,
-        'submittedDate': now.toIso8601String(),
-        'submittedBy': user,
-        'rejectedDate': '',
-        'rejectedBy': '',
-        'rejectionReason': '',
-        'syncStatus': 'Pending',
-      });
-
-      await DatabaseHelper().insertApprovalHistory({
-        'id': 'H-${now.millisecondsSinceEpoch}',
-        'deliveryId': d.id,
-        'action': 'Resubmitted',
-        'user': user,
-        'date': now.toIso8601String(),
-        'remarks': 'Resubmitted after rejection',
-      });
-
-      final updated = d.copyWith(
-        status: DeliveryStatus.submitted,
-        submittedDate: now.toIso8601String(),
-        submittedBy: user,
-        rejectedDate: '',
-        rejectedBy: '',
-        rejectionReason: '',
-      );
-      _moveFirebase(d.id, 'branchRejectedDelivery', 'branchSubmittedDelivery', updated);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: [
-            const Icon(Icons.refresh_rounded, color: Colors.white),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Resubmitted: ${d.refNumber}')),
-          ]),
-          backgroundColor: const Color(0xFF2563EB),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      _loadRejected();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-    }
-  }
-
-  Future<void> _confirmDelete(DeliveryRecord d) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(children: const [
-          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
-          SizedBox(width: 10),
-          Text('Delete Delivery?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        content: Text('This will permanently delete:\nDR#: ${d.refNumber}\n\nThis cannot be undone.',
-            style: const TextStyle(fontSize: 13)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[600], foregroundColor: Colors.white),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm == true) {
-      await DeliveryStorage.deleteDelivery(d.id);
-      _deleteFromFirebase(d.id, 'branchRejectedDelivery');
-      _loadRejected();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('Deleted'), backgroundColor: Colors.red[600], behavior: SnackBarBehavior.floating),
-        );
-      }
-    }
-  }
-
-  Future<void> _moveFirebase(String id, String fromNode, String toNode, DeliveryRecord updated) async {
-    try {
-      final cfg = await FirebaseConfigService().load();
-      if (cfg == null) return;
-      final assign = await DeviceAssignmentService().read();
-      final companyCode = (assign['companyCode'] ?? '').toString();
-      final branchId = (assign['branchId'] ?? '').toString();
-      if (companyCode.isEmpty || branchId.isEmpty) return;
-      if (!FirebaseRealtimeService.instance.isInitialized) {
-        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
-      }
-      final db = FirebaseRealtimeService.instance.db;
-      if (db == null) return;
-      await db.ref('companies/$companyCode/$fromNode/$branchId/$id').remove();
-      await db.ref('companies/$companyCode/$toNode/$branchId/$id').set(updated.toJson());
-    } catch (e) { debugPrint('[WORKFLOW] Move error: $e'); }
-  }
-
-  Future<void> _deleteFromFirebase(String id, String node) async {
-    try {
-      final cfg = await FirebaseConfigService().load();
-      if (cfg == null) return;
-      final assign = await DeviceAssignmentService().read();
-      final companyCode = (assign['companyCode'] ?? '').toString();
-      final branchId = (assign['branchId'] ?? '').toString();
-      if (companyCode.isEmpty || branchId.isEmpty) return;
-      final db = FirebaseRealtimeService.instance.db;
-      if (db == null) return;
-      await db.ref('companies/$companyCode/$node/$branchId/$id').remove();
-    } catch (e) { debugPrint('[WORKFLOW] Delete error: $e'); }
-  }
-
-  void _showDetails(DeliveryRecord d) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(16),
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Row(children: [
-              const Text('Rejected Delivery', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
-            ]),
-            const Divider(),
-            if (d.rejectionReason.isNotEmpty) Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: const Color(0xFFFECACA).withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Rejection Reason:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[900])),
-                  const SizedBox(height: 3),
-                  Text(d.rejectionReason, style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
-                ],
-              ),
-            ),
-            _detailRow('DR #', d.refNumber),
-            _detailRow('Supplier', d.supplier),
-            _detailRow('Driver', d.driverName),
-            _detailRow('Plate #', d.plateNumber),
-            _detailRow('Submitted By', d.submittedBy),
-            _detailRow('Rejected By', d.rejectedBy),
-            _detailRow('Rejected Date', d.rejectedDate.isEmpty ? '-' : _fmtFull(d.rejectedDate)),
-            _detailRow('Total Items', '${d.totalItems}'),
-            _detailRow('Total Qty', '${_fmtInt(d.totalQuantity)} pcs'),
-            _detailRow('Total @ Retail', '₱${_fmtInt(d.totalRetail.toInt())}'),
-            const Divider(),
-            const Text('Items:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 4),
-            ...d.items.map((i) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(4)),
-                  child: Text(i.sku, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800])),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(i.itemName, style: const TextStyle(fontSize: 12))),
-                Text('${i.quantity}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ]),
-            )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _fmtFull(String iso) { try { final d = DateTime.parse(iso); return '${_fmtDate(d)} ${_fmtTime(d)}'; } catch (_) { return iso; } }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 110, child: Text('$label:', style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
-          Expanded(child: Text(value.isEmpty ? '-' : value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500))),
-        ],
-      ),
-    );
-  }
-
-  void _showSortDialog() {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Sort By', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            _sortOption(ctx, 'newest', 'Newest first', Icons.arrow_downward),
-            _sortOption(ctx, 'oldest', 'Oldest first', Icons.arrow_upward),
-            _sortOption(ctx, 'supplier', 'By Supplier', Icons.business),
-            _sortOption(ctx, 'dr', 'By DR#', Icons.receipt),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sortOption(BuildContext ctx, String value, String label, IconData icon) {
-    final selected = _sortBy == value;
-    return ListTile(
-      leading: Icon(icon, color: selected ? const Color(0xFFDC2626) : Colors.grey[600], size: 20),
-      title: Text(label, style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
-      trailing: selected ? const Icon(Icons.check, color: Color(0xFFDC2626), size: 20) : null,
-      onTap: () { setState(() => _sortBy = value); _applyFiltersSort(); Navigator.pop(ctx); },
     );
   }
 }
