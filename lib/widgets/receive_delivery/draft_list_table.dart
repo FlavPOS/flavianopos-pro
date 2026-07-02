@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class _DraftTheme {
-  static const purple       = Color(0xFF6366F1);
-  static const purpleLight  = Color(0xFFEEF0FF);
+  static const purple       = Color(0xFF7C3AED);
+  static const purpleLight  = Color(0xFFEDE9FE);
   static const redDelete    = Color(0xFFEF4444);
   static const redLight     = Color(0xFFFEE2E2);
   static const rowEven      = Colors.white;
