@@ -822,9 +822,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       content: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('DR#: ${r.refNumber}\n${r.totalItems} items  |  +${r.totalQuantity} pcs\nCost: ${r.totalCost.toStringAsFixed(2)}\nRetail: ${r.totalRetail.toStringAsFixed(2)}', textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, height: 1.5)),
         const SizedBox(height: 20),
-        _dlgBtn(Icons.print, 'Print A4', const Color(0xFF2196F3), () { Navigator.pop(ctx); _printA4(r, up); }),
-        const SizedBox(height: 10),
-        _dlgBtn(Icons.picture_as_pdf, 'Save PDF', const Color(0xFF4CAF50), () { Navigator.pop(ctx); _savePdf(r, up); }),
+        
         const SizedBox(height: 10),
         SizedBox(width: double.infinity, child: OutlinedButton.icon(icon: const Icon(Icons.check), label: const Text('Done'),
           style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),

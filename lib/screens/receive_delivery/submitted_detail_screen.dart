@@ -3,6 +3,9 @@
 // Groups batches under single SKU row with lazy accordion expansion.
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../helpers/database_helper.dart';
 import '../../services/device_assignment_service.dart';
 import '../../services/firebase_config_service.dart';
@@ -193,7 +196,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           const SizedBox(width: 8), Expanded(child: Text('Approved: ${d.refNumber}'))]),
         backgroundColor: _green, behavior: SnackBarBehavior.floating,
       ));
-      Navigator.pop(context, true);
+      await _showApprovedSuccessDialog();
     } catch (e) {
       setState(() => _processing = false);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -294,6 +297,253 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
+  }
+
+
+
+  // ═══════════════ APPROVED SUCCESS DIALOG (Print/Save PDF) ═══════════════
+  Future<void> _showApprovedSuccessDialog() async {
+    final d = widget.record;
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: const [
+          Icon(Icons.check_circle, color: _green, size: 30),
+          SizedBox(width: 10),
+          Expanded(child: Text('Approved!',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _green,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text('APPROVED',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold,
+                    fontSize: 12, letterSpacing: 1.5)),
+          ),
+          const SizedBox(height: 14),
+          Text('DR#: ${d.refNumber}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('${d.totalItems} items · ${_int.format(d.totalQuantity)} pcs\nRetail: ${_peso.format(d.totalRetail)}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, height: 1.5, color: _muted)),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.print, color: Colors.white),
+              label: const Text('Print A4', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2196F3),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                await _printApprovedPdf();
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+              label: const Text('Save PDF', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _green,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                await _saveApprovedPdf();
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.check),
+              label: const Text('Done'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                if (mounted) Navigator.pop(context, true);
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  // ═══════════════ PDF BUILD (APPROVED DOCUMENT) ═══════════════
+  pw.Document _buildApprovedPdf() {
+    final d = widget.record;
+    final pdf = pw.Document();
+    final approvedBy = d.approvedBy.isEmpty ? 'Pending' : d.approvedBy;
+    final approvedDate = d.approvedDate.isEmpty ? DateTime.now().toIso8601String() : d.approvedDate;
+    String fmtD(String iso) {
+      try { return DateFormat('MM/dd/yyyy HH:mm').format(DateTime.parse(iso)); } catch (_) { return iso; }
+    }
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(20),
+      build: (ctx) => _buildPdfContent(d, 'TRUCKER COPY', approvedBy, fmtD(approvedDate)),
+    ));
+    pdf.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(20),
+      build: (ctx) => _buildPdfContent(d, 'STORE COPY', approvedBy, fmtD(approvedDate)),
+    ));
+    return pdf;
+  }
+
+  List<pw.Widget> _buildPdfContent(DeliveryRecord d, String copyLabel, String approvedBy, String approvedDate) {
+    final Map<String, List<DeliveryItemRecord>> grouped = {};
+    for (final item in d.items) {
+      final key = '${item.itemName}||${item.sku}';
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+    double totalRetail = 0;
+    int totalQty = 0;
+    final rows = <pw.TableRow>[];
+    rows.add(pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.blue700), children: [
+      _pdfCell('#', bold: true, color: PdfColors.white, align: pw.Alignment.center),
+      _pdfCell('SKU', bold: true, color: PdfColors.white),
+      _pdfCell('Description', bold: true, color: PdfColors.white),
+      _pdfCell('Qty', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+      _pdfCell('Unit Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+      _pdfCell('Total', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+    ]));
+    int idx = 1;
+    grouped.forEach((_, batches) {
+      final qty = batches.fold<int>(0, (s, b) => s + b.quantity);
+      final first = batches.first;
+      final subtotal = qty * first.retail;
+      totalQty += qty;
+      totalRetail += subtotal;
+      rows.add(pw.TableRow(children: [
+        _pdfCell('$idx', align: pw.Alignment.center),
+        _pdfCell(first.sku),
+        _pdfCell(first.itemName),
+        _pdfCell('${_int.format(qty)} pcs', align: pw.Alignment.centerRight),
+        _pdfCell(_peso.format(first.retail), align: pw.Alignment.centerRight),
+        _pdfCell(_peso.format(subtotal), align: pw.Alignment.centerRight, bold: true),
+      ]));
+      idx++;
+    });
+    rows.add(pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
+      _pdfCell(''), _pdfCell(''),
+      _pdfCell('TOTAL', bold: true, align: pw.Alignment.centerRight),
+      _pdfCell('${_int.format(totalQty)} pcs', bold: true, align: pw.Alignment.centerRight),
+      _pdfCell(''),
+      _pdfCell(_peso.format(totalRetail), bold: true, align: pw.Alignment.centerRight),
+    ]));
+
+    return [
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          pw.Text('DELIVERY RECEIPT', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text(copyLabel, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+        ]),
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: pw.BoxDecoration(color: PdfColors.green700, borderRadius: pw.BorderRadius.circular(6)),
+          child: pw.Text('APPROVED', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 16, letterSpacing: 2)),
+        ),
+      ]),
+      pw.Divider(color: PdfColors.grey400, thickness: 1),
+      pw.SizedBox(height: 8),
+      pw.Row(children: [
+        pw.Expanded(child: _pdfInfo('DR #', d.refNumber)),
+        pw.Expanded(child: _pdfInfo('Supplier', d.supplier)),
+        pw.Expanded(child: _pdfInfo('Date', DateFormat('MM/dd/yyyy').format(d.dateTime))),
+      ]),
+      pw.SizedBox(height: 4),
+      pw.Row(children: [
+        pw.Expanded(child: _pdfInfo('Driver', d.driverName)),
+        pw.Expanded(child: _pdfInfo('Plate #', d.plateNumber)),
+        pw.Expanded(child: _pdfInfo('Received By', d.receivedBy)),
+      ]),
+      if (d.notes.isNotEmpty) pw.SizedBox(height: 4),
+      if (d.notes.isNotEmpty) _pdfInfo('Notes', d.notes),
+      pw.SizedBox(height: 10),
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(0.5),
+          1: const pw.FlexColumnWidth(1.2),
+          2: const pw.FlexColumnWidth(2.5),
+          3: const pw.FlexColumnWidth(1.0),
+          4: const pw.FlexColumnWidth(1.2),
+          5: const pw.FlexColumnWidth(1.4),
+        },
+        children: rows,
+      ),
+      pw.SizedBox(height: 12),
+      pw.Container(
+        padding: const pw.EdgeInsets.all(10),
+        decoration: pw.BoxDecoration(color: PdfColors.green50, border: pw.Border.all(color: PdfColors.green400)),
+        child: pw.Row(children: [
+          pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            pw.Text('Approved by: $approvedBy', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+            pw.Text('Date: $approvedDate', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+          ])),
+        ]),
+      ),
+      pw.SizedBox(height: 20),
+      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
+        _pdfSig('Received By'), _pdfSig('Checked By'), _pdfSig('Approved By'),
+      ]),
+    ];
+  }
+
+  pw.Widget _pdfInfo(String label, String value) => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+    child: pw.RichText(text: pw.TextSpan(children: [
+      pw.TextSpan(text: '$label: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+      pw.TextSpan(text: value.isEmpty ? '-' : value, style: const pw.TextStyle(fontSize: 10)),
+    ])),
+  );
+
+  pw.Widget _pdfCell(String text, {bool bold = false, PdfColor color = PdfColors.black, pw.Alignment align = pw.Alignment.centerLeft}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      alignment: align,
+      child: pw.Text(text,
+          style: pw.TextStyle(fontSize: 9, color: color, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
+          maxLines: 2, overflow: pw.TextOverflow.clip),
+    );
+  }
+
+  pw.Widget _pdfSig(String label) => pw.Column(children: [
+    pw.SizedBox(height: 30),
+    pw.Container(width: 140,
+      decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: PdfColors.grey600))),
+      child: pw.Padding(padding: const pw.EdgeInsets.only(top: 4),
+        child: pw.Center(child: pw.Text(label, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700))))),
+  ]);
+
+  Future<void> _printApprovedPdf() async {
+    final pdf = _buildApprovedPdf();
+    await Printing.layoutPdf(onLayout: (_) async => pdf.save(), name: 'DR_${widget.record.refNumber}_APPROVED');
+  }
+
+  Future<void> _saveApprovedPdf() async {
+    final pdf = _buildApprovedPdf();
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'DR_${widget.record.refNumber}_APPROVED.pdf');
   }
 
   Future<void> _moveFirebase(String id, String from, String to, DeliveryRecord upd) async {
