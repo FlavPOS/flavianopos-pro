@@ -461,8 +461,8 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           _pCell(''),
           _pCell('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
           _pCell(_int.format(b.quantity), align: pw.Alignment.centerRight, size: 9),
-          _pCell(b.retail.toStringAsFixed(2), align: pw.Alignment.centerRight, size: 9),
-          _pCell(line.toStringAsFixed(2), align: pw.Alignment.centerRight, size: 9),
+          _pCell(_peso.format(b.retail).replaceAll("₱",""), align: pw.Alignment.centerRight, size: 9),
+          _pCell(_peso.format(line).replaceAll("₱",""), align: pw.Alignment.centerRight, size: 9),
         ]));
       }
 
@@ -474,7 +474,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           _pCell('   ITEM SUBTOTAL', bold: true, color: const PdfColor.fromInt(0xFF0D47A1)),
           _pCell(_int.format(subQty), bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
           _pCell('-', bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
-          _pCell(subRetail.toStringAsFixed(2), bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
+          _pCell(_peso.format(subRetail).replaceAll("₱",""), bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
         ],
       ));
 
@@ -580,7 +580,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           child: pw.Column(children: [
             pw.Text('GRAND TOTAL @ RETAIL', style: pw.TextStyle(color: PdfColors.white, fontSize: 10, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
-            pw.Text('PHP ${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(color: PdfColors.white, fontSize: 16, fontWeight: pw.FontWeight.bold)),
+            pw.Text('PHP ${_peso.format(grandTotal).replaceAll("₱","")}', style: pw.TextStyle(color: PdfColors.white, fontSize: 16, fontWeight: pw.FontWeight.bold)),
           ]),
         )),
       ]),
@@ -594,20 +594,10 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         ),
       pw.SizedBox(height: 6),
 
-      // ═══ APPROVAL BOX ═══
-      pw.Container(
-        padding: const pw.EdgeInsets.all(8),
-        decoration: pw.BoxDecoration(color: PdfColors.green50, border: pw.Border.all(color: PdfColors.green400)),
-        child: pw.Row(children: [
-          pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('Approved by: $approvedBy', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
-            pw.Text('Date: $approvedDate', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
-          ])),
-        ]),
-      ),
-      pw.SizedBox(height: 20),
 
-      // ═══ SIGNATURES ═══
+      // ═══ SPACER TO PUSH SIGNATURES TO BOTTOM ═══
+      pw.Spacer(),
+      // ═══ SIGNATURES (fixed bottom) ═══
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
         _pSig('Received By'),
         _pSig('Checked By'),
