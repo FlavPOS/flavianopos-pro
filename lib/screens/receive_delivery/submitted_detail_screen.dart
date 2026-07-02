@@ -388,152 +388,257 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
   }
 
   // ═══════════════ PDF BUILD (APPROVED DOCUMENT) ═══════════════
+
+  // ═══════════════ PDF BUILD - BEAUTIFUL BIR-STYLE LAYOUT ═══════════════
   pw.Document _buildApprovedPdf() {
     final d = widget.record;
     final pdf = pw.Document();
     final approvedBy = d.approvedBy.isEmpty ? 'Pending' : d.approvedBy;
     final approvedDate = d.approvedDate.isEmpty ? DateTime.now().toIso8601String() : d.approvedDate;
-    String fmtD(String iso) {
+    String fD(String iso) {
       try { return DateFormat('MM/dd/yyyy HH:mm').format(DateTime.parse(iso)); } catch (_) { return iso; }
     }
     pdf.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(20),
-      build: (ctx) => _buildPdfContent(d, 'TRUCKER COPY', approvedBy, fmtD(approvedDate)),
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(8 * PdfPageFormat.mm),
+      build: (ctx) => _buildPdfContent(d, 'TRUCKER COPY', approvedBy, fD(approvedDate)),
     ));
     pdf.addPage(pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(20),
-      build: (ctx) => _buildPdfContent(d, 'STORE COPY', approvedBy, fmtD(approvedDate)),
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(8 * PdfPageFormat.mm),
+      build: (ctx) => _buildPdfContent(d, 'STORE COPY', approvedBy, fD(approvedDate)),
     ));
     return pdf;
   }
 
   List<pw.Widget> _buildPdfContent(DeliveryRecord d, String copyLabel, String approvedBy, String approvedDate) {
+    // Group batches by SKU
     final Map<String, List<DeliveryItemRecord>> grouped = {};
     for (final item in d.items) {
       final key = '${item.itemName}||${item.sku}';
       grouped.putIfAbsent(key, () => []).add(item);
     }
-    double totalRetail = 0;
-    int totalQty = 0;
-    final rows = <pw.TableRow>[];
-    rows.add(pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.blue700), children: [
-      _pdfCell('#', bold: true, color: PdfColors.white, align: pw.Alignment.center),
-      _pdfCell('SKU', bold: true, color: PdfColors.white),
-      _pdfCell('Description', bold: true, color: PdfColors.white),
-      _pdfCell('Qty', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
-      _pdfCell('Unit Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
-      _pdfCell('Total', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
-    ]));
+
+    double grandTotal = 0;
+    int grandQty = 0;
+    final tableRows = <pw.TableRow>[];
+
+    // Header row
+    tableRows.add(pw.TableRow(
+      decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1976D2)),
+      children: [
+        _pCell('#', bold: true, color: PdfColors.white, align: pw.Alignment.center),
+        _pCell('Description', bold: true, color: PdfColors.white),
+        _pCell('Qty', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+        _pCell('Unit Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+        _pCell('Total @ Retail', bold: true, color: PdfColors.white, align: pw.Alignment.centerRight),
+      ],
+    ));
+
     int idx = 1;
     grouped.forEach((_, batches) {
-      final qty = batches.fold<int>(0, (s, b) => s + b.quantity);
       final first = batches.first;
-      final subtotal = qty * first.retail;
-      totalQty += qty;
-      totalRetail += subtotal;
-      rows.add(pw.TableRow(children: [
-        _pdfCell('$idx', align: pw.Alignment.center),
-        _pdfCell(first.sku),
-        _pdfCell(first.itemName),
-        _pdfCell('${_int.format(qty)} pcs', align: pw.Alignment.centerRight),
-        _pdfCell(_peso.format(first.retail), align: pw.Alignment.centerRight),
-        _pdfCell(_peso.format(subtotal), align: pw.Alignment.centerRight, bold: true),
-      ]));
+      final subQty = batches.fold<int>(0, (s, b) => s + b.quantity);
+      double subRetail = 0;
+
+      // SKU header row
+      tableRows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF5F5F5)),
+        children: [
+          _pCell('$idx', bold: true, align: pw.Alignment.center),
+          _pCell('${first.itemName}  (${first.sku})', bold: true),
+          _pCell(''), _pCell(''), _pCell(''),
+        ],
+      ));
+
+      // Batch sub-rows
+      for (final b in batches) {
+        final line = b.quantity * b.retail;
+        subRetail += line;
+        String mfg = b.mfgDate.isEmpty ? '-' : b.mfgDate.split('T').first;
+        String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
+        tableRows.add(pw.TableRow(children: [
+          _pCell(''),
+          _pCell('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
+          _pCell(_int.format(b.quantity), align: pw.Alignment.centerRight, size: 9),
+          _pCell(b.retail.toStringAsFixed(2), align: pw.Alignment.centerRight, size: 9),
+          _pCell(line.toStringAsFixed(2), align: pw.Alignment.centerRight, size: 9),
+        ]));
+      }
+
+      // ITEM SUBTOTAL row
+      tableRows.add(pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE3F2FD)),
+        children: [
+          _pCell(''),
+          _pCell('   ITEM SUBTOTAL', bold: true, color: const PdfColor.fromInt(0xFF0D47A1)),
+          _pCell(_int.format(subQty), bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
+          _pCell('-', bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
+          _pCell(subRetail.toStringAsFixed(2), bold: true, color: const PdfColor.fromInt(0xFF0D47A1), align: pw.Alignment.centerRight),
+        ],
+      ));
+
+      grandQty += subQty;
+      grandTotal += subRetail;
       idx++;
     });
-    rows.add(pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
-      _pdfCell(''), _pdfCell(''),
-      _pdfCell('TOTAL', bold: true, align: pw.Alignment.centerRight),
-      _pdfCell('${_int.format(totalQty)} pcs', bold: true, align: pw.Alignment.centerRight),
-      _pdfCell(''),
-      _pdfCell(_peso.format(totalRetail), bold: true, align: pw.Alignment.centerRight),
-    ]));
 
     return [
-      pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-        pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-          pw.Text('DELIVERY RECEIPT', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-          pw.SizedBox(height: 4),
-          pw.Text(copyLabel, style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
-        ]),
-        pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: pw.BoxDecoration(color: PdfColors.green700, borderRadius: pw.BorderRadius.circular(6)),
-          child: pw.Text('APPROVED', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 16, letterSpacing: 2)),
-        ),
-      ]),
-      pw.Divider(color: PdfColors.grey400, thickness: 1),
-      pw.SizedBox(height: 8),
-      pw.Row(children: [
-        pw.Expanded(child: _pdfInfo('DR #', d.refNumber)),
-        pw.Expanded(child: _pdfInfo('Supplier', d.supplier)),
-        pw.Expanded(child: _pdfInfo('Date', DateFormat('MM/dd/yyyy').format(d.dateTime))),
-      ]),
-      pw.SizedBox(height: 4),
-      pw.Row(children: [
-        pw.Expanded(child: _pdfInfo('Driver', d.driverName)),
-        pw.Expanded(child: _pdfInfo('Plate #', d.plateNumber)),
-        pw.Expanded(child: _pdfInfo('Received By', d.receivedBy)),
-      ]),
-      if (d.notes.isNotEmpty) pw.SizedBox(height: 4),
-      if (d.notes.isNotEmpty) _pdfInfo('Notes', d.notes),
-      pw.SizedBox(height: 10),
-      pw.Table(
-        border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
-        columnWidths: {
-          0: const pw.FlexColumnWidth(0.5),
-          1: const pw.FlexColumnWidth(1.2),
-          2: const pw.FlexColumnWidth(2.5),
-          3: const pw.FlexColumnWidth(1.0),
-          4: const pw.FlexColumnWidth(1.2),
-          5: const pw.FlexColumnWidth(1.4),
-        },
-        children: rows,
-      ),
-      pw.SizedBox(height: 12),
+      // ═══ TOP HEADER: DR badge + Copy Label + APPROVED + Serial ═══
       pw.Container(
-        padding: const pw.EdgeInsets.all(10),
+        padding: const pw.EdgeInsets.all(8),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: const PdfColor.fromInt(0xFF1976D2), width: 1),
+          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        ),
+        child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+          pw.Row(children: [
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1976D2)),
+              child: pw.Text('DR', style: pw.TextStyle(color: PdfColors.white, fontSize: 9, fontWeight: pw.FontWeight.bold)),
+            ),
+            pw.SizedBox(width: 8),
+            pw.Text(copyLabel, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF0D47A1), letterSpacing: 2)),
+            pw.SizedBox(width: 12),
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: pw.BoxDecoration(color: PdfColors.green700, borderRadius: pw.BorderRadius.circular(4)),
+              child: pw.Text('APPROVED', style: pw.TextStyle(color: PdfColors.white, fontSize: 11, fontWeight: pw.FontWeight.bold, letterSpacing: 1.5)),
+            ),
+          ]),
+          pw.Container(
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: pw.BoxDecoration(border: pw.Border.all(color: const PdfColor.fromInt(0xFF1976D2), width: 1), borderRadius: pw.BorderRadius.circular(3)),
+            child: pw.Text('Serial: DR-${d.refNumber}', style: const pw.TextStyle(fontSize: 9, color: PdfColor.fromInt(0xFF0D47A1))),
+          ),
+        ]),
+      ),
+      pw.SizedBox(height: 6),
+
+      // ═══ HEAD OFFICE BANNER ═══
+      pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(vertical: 6),
+        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF1976D2)),
+        child: pw.Column(children: [
+          pw.Text('HEAD OFFICE - DELIVERY RECEIVING REPORT', style: pw.TextStyle(color: PdfColors.white, fontSize: 12, fontWeight: pw.FontWeight.bold, letterSpacing: 1)),
+          pw.SizedBox(height: 2),
+          pw.Text('TIN: TO-BE-ASSIGNED   |   MIN: TO-BE-ASSIGNED   |   PTU: TO-BE-ASSIGNED', style: const pw.TextStyle(color: PdfColors.white, fontSize: 8)),
+        ]),
+      ),
+      pw.SizedBox(height: 8),
+
+      // ═══ INFO GRID (3 columns) ═══
+      pw.Row(children: [
+        pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          _pInfo('Date', DateFormat('yyyy-MM-dd').format(d.dateTime)),
+          _pInfo('Time', DateFormat('HH:mm:ss').format(d.dateTime)),
+          _pInfo('DR #', d.refNumber),
+        ])),
+        pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          _pInfo('Supplier', d.supplier.isEmpty ? '-' : d.supplier),
+          _pInfo('Driver', d.driverName.isEmpty ? '-' : d.driverName),
+          _pInfo('Plate #', d.plateNumber.isEmpty ? '-' : d.plateNumber),
+        ])),
+        pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+          _pInfo('Received By', d.receivedBy.isEmpty ? '-' : d.receivedBy),
+          _pInfo('Total Items', '${grouped.length}'),
+          _pInfo('Total Qty', '${_int.format(grandQty)} pcs'),
+        ])),
+      ]),
+      pw.SizedBox(height: 8),
+
+      // ═══ ITEMS TABLE ═══
+      pw.Table(
+        border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.4),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(0.4),
+          1: const pw.FlexColumnWidth(4.0),
+          2: const pw.FlexColumnWidth(1.2),
+          3: const pw.FlexColumnWidth(1.1),
+          4: const pw.FlexColumnWidth(1.3),
+        },
+        children: tableRows,
+      ),
+      pw.SizedBox(height: 10),
+
+      // ═══ TOTALS ROW ═══
+      pw.Row(children: [
+        pw.Expanded(child: pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: const PdfColor.fromInt(0xFF1976D2))),
+          child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+            _pInfo('Total Items', '${grouped.length}'),
+            _pInfo('Total Qty', '${_int.format(grandQty)} pcs'),
+          ]),
+        )),
+        pw.SizedBox(width: 8),
+        pw.Expanded(child: pw.Container(
+          padding: const pw.EdgeInsets.all(8),
+          decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF0D47A1)),
+          child: pw.Column(children: [
+            pw.Text('GRAND TOTAL @ RETAIL', style: pw.TextStyle(color: PdfColors.white, fontSize: 10, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
+            pw.Text('PHP ${grandTotal.toStringAsFixed(2)}', style: pw.TextStyle(color: PdfColors.white, fontSize: 16, fontWeight: pw.FontWeight.bold)),
+          ]),
+        )),
+      ]),
+      pw.SizedBox(height: 8),
+
+      if (d.notes.isNotEmpty)
+        pw.Container(
+          padding: const pw.EdgeInsets.all(6),
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400)),
+          child: pw.Text('Notes: ${d.notes}', style: const pw.TextStyle(fontSize: 9)),
+        ),
+      pw.SizedBox(height: 6),
+
+      // ═══ APPROVAL BOX ═══
+      pw.Container(
+        padding: const pw.EdgeInsets.all(8),
         decoration: pw.BoxDecoration(color: PdfColors.green50, border: pw.Border.all(color: PdfColors.green400)),
         child: pw.Row(children: [
           pw.Expanded(child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-            pw.Text('Approved by: $approvedBy', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-            pw.Text('Date: $approvedDate', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+            pw.Text('Approved by: $approvedBy', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+            pw.Text('Date: $approvedDate', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
           ])),
         ]),
       ),
       pw.SizedBox(height: 20),
+
+      // ═══ SIGNATURES ═══
       pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceAround, children: [
-        _pdfSig('Received By'), _pdfSig('Checked By'), _pdfSig('Approved By'),
+        _pSig('Received By'),
+        _pSig('Checked By'),
+        _pSig('Approved By'),
       ]),
     ];
   }
 
-  pw.Widget _pdfInfo(String label, String value) => pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 2),
-    child: pw.RichText(text: pw.TextSpan(children: [
-      pw.TextSpan(text: '$label: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-      pw.TextSpan(text: value.isEmpty ? '-' : value, style: const pw.TextStyle(fontSize: 10)),
-    ])),
+  pw.Widget _pInfo(String l, String v) => pw.Padding(
+    padding: const pw.EdgeInsets.symmetric(vertical: 1),
+    child: pw.Row(children: [
+      pw.SizedBox(width: 75, child: pw.Text('$l:', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700))),
+      pw.Expanded(child: pw.Text(v, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+    ]),
   );
 
-  pw.Widget _pdfCell(String text, {bool bold = false, PdfColor color = PdfColors.black, pw.Alignment align = pw.Alignment.centerLeft}) {
+  pw.Widget _pCell(String text, {bool bold = false, PdfColor color = PdfColors.black, pw.Alignment align = pw.Alignment.centerLeft, double size = 9}) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       alignment: align,
       child: pw.Text(text,
-          style: pw.TextStyle(fontSize: 9, color: color, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
-          maxLines: 2, overflow: pw.TextOverflow.clip),
+        style: pw.TextStyle(fontSize: size, color: color, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal),
+        maxLines: 2),
     );
   }
 
-  pw.Widget _pdfSig(String label) => pw.Column(children: [
-    pw.SizedBox(height: 30),
-    pw.Container(width: 140,
-      decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: PdfColors.grey600))),
-      child: pw.Padding(padding: const pw.EdgeInsets.only(top: 4),
-        child: pw.Center(child: pw.Text(label, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700))))),
+  pw.Widget _pSig(String label) => pw.Column(children: [
+    pw.Container(width: 200, height: 25, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey700)))),
+    pw.SizedBox(height: 2),
+    pw.Text(label, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+    pw.Text('Name / Signature / Date', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
   ]);
 
   Future<void> _printApprovedPdf() async {
