@@ -411,8 +411,6 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
                 onBack: () => Navigator.pop(context),
                 onRefresh: _loadSubmitted,
                 onView: _showDetails,
-                onApprove: _confirmApprove,
-                onReject: _showRejectDialog,
               ),
       ),
     );

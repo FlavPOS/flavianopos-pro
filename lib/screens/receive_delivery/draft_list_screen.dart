@@ -71,7 +71,7 @@ class _DraftListScreenState extends State<DraftListScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ReceiveDeliveryScreen(products: widget.products),
+        builder: (_) => ReceiveDeliveryScreen(products: widget.products, existingDraft: record),
       ),
     );
     _loadDrafts();

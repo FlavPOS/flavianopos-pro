@@ -455,17 +455,15 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           ],
         ),
         actions: [
-          TextButton.icon(
+          IconButton(
             onPressed: _processing ? null : _showRejectDialog,
-            icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 18),
-            label: const Text('REJECT',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            tooltip: 'Reject',
+            icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 26),
           ),
-          TextButton.icon(
+          IconButton(
             onPressed: _processing ? null : _confirmApprove,
-            icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
-            label: const Text('APPROVE',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            tooltip: 'Approve',
+            icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 26),
           ),
           const SizedBox(width: 8),
         ],

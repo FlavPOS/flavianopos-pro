@@ -15,7 +15,7 @@ import "../../services/firebase_realtime_service.dart";
 
 class ReceiveDeliveryScreen extends StatefulWidget {
   final List<Product> products;
-  final DeliveryRecord? existingDraft; const ReceiveDeliveryScreen({super.key, required this.products, this.existingDraft});
+  const ReceiveDeliveryScreen({super.key, required this.products});
   @override
   State<ReceiveDeliveryScreen> createState() => _ReceiveDeliveryScreenState();
 }
@@ -95,7 +95,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   void initState() {
     super.initState();
     _loadBranchStock();
-    _loadExistingDraft();
     // ═══ Load branch identity (matches Inventory pattern) ═══
     () async {
       final assign = await DeviceAssignmentService().read();
@@ -108,49 +107,6 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
     }();
   }
   // ═══ END PHASE B2 ═══
-
-  void _loadExistingDraft() {
-    final draft = widget.existingDraft;
-    if (draft == null) return;
-
-    _refCtrl.text = draft.refNumber;
-    _supplierCtrl.text = draft.supplier;
-    _driverCtrl.text = draft.driverName;
-    _plateCtrl.text = draft.plateNumber;
-    _receivedByCtrl.text = draft.receivedBy;
-    _notesCtrl.text = draft.notes;
-
-    for (final itemRec in draft.items) {
-      Product? product;
-      for (final p in widget.products) {
-        if (p.id == itemRec.productId || p.sku == itemRec.sku) {
-          product = p;
-          break;
-        }
-      }
-      if (product == null) continue;
-
-      final di = _DeliveryItem(product: product);
-      di.qtyController.text = itemRec.quantity.toString();
-      di.qtyController.addListener(() => setState(() {}));
-
-      if (itemRec.batchNumber.isNotEmpty) {
-        final batch = _BatchEntry();
-        batch.batchCtrl.text = itemRec.batchNumber;
-        batch.qtyCtrl.text = itemRec.quantity.toString();
-        try {
-          if (itemRec.mfgDate.isNotEmpty) batch.mfgDate = DateTime.parse(itemRec.mfgDate);
-        } catch (_) {}
-        try {
-          if (itemRec.expDate.isNotEmpty) batch.expDate = DateTime.parse(itemRec.expDate);
-        } catch (_) {}
-        di.batches.add(batch);
-      }
-      _items.add(di);
-    }
-
-    if (mounted) setState(() {});
-  }
 
   final _supplierCtrl = TextEditingController();
   final _driverCtrl = TextEditingController();
@@ -376,7 +332,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final myBranchId = (assign["branchId"] ?? "").toString();
       final myBranchName = (assign["branchName"] ?? "").toString();
       // Build initial record (status set based on user choice below)
-      final recordId = widget.existingDraft?.id ?? now.millisecondsSinceEpoch.toString();
+      final recordId = now.millisecondsSinceEpoch.toString();
 
       // 💾 Show dialog: Save as Draft OR Submit for Approval
       final choice = await _showSaveOrSubmitDialog(refNumber, _supplierCtrl.text.trim(), totalItems, tQty, tRetail);

@@ -1009,6 +1009,7 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       await txn.insert('delivery_records', delivery, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.delete('delivery_items', where: 'deliveryId = ?', whereArgs: [delivery['id']]);
       for (final item in items) { await txn.insert('delivery_items', {'deliveryId': delivery['id'], ...item}); }
     });
   }

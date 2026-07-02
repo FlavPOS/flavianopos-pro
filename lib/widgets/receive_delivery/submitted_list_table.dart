@@ -2,19 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class _SubTheme {
-  static const primary      = Color(0xFF2563EB);
-  static const primaryLight = Color(0xFFDBEAFE);
-  static const green        = Color(0xFF16A34A);
-  static const greenLight   = Color(0xFFDCFCE7);
-  static const red          = Color(0xFFEF4444);
-  static const redLight     = Color(0xFFFEE2E2);
-  static const rowEven      = Colors.white;
-  static const rowOdd       = Color(0xFFF8F9FC);
-  static const border       = Color(0xFFE5E7EB);
-  static const headerBg     = Color(0xFFF9FAFB);
-  static const textDark     = Color(0xFF111827);
-  static const textMuted    = Color(0xFF6B7280);
-  static const textLabel    = Color(0xFF374151);
+  static const primary   = Color(0xFF2563EB);
+  static const rowEven   = Colors.white;
+  static const rowOdd    = Color(0xFFF8F9FC);
+  static const border    = Color(0xFFE5E7EB);
+  static const headerBg  = Color(0xFFF9FAFB);
+  static const textDark  = Color(0xFF111827);
+  static const textMuted = Color(0xFF6B7280);
+  static const textLabel = Color(0xFF374151);
 }
 
 enum SubSortColumn { date, drNumber, supplier, items, qty, totalValue, submittedBy }
@@ -23,8 +18,6 @@ enum SubSortDir { asc, desc }
 class SubmittedListTable extends StatefulWidget {
   final List<SubmittedItem> items;
   final void Function(SubmittedItem) onView;
-  final void Function(SubmittedItem) onApprove;
-  final void Function(SubmittedItem) onReject;
   final VoidCallback? onBack;
   final VoidCallback? onRefresh;
   final VoidCallback? onFilter;
@@ -33,8 +26,6 @@ class SubmittedListTable extends StatefulWidget {
     super.key,
     required this.items,
     required this.onView,
-    required this.onApprove,
-    required this.onReject,
     this.onBack,
     this.onRefresh,
     this.onFilter,
@@ -122,9 +113,7 @@ class _SubmittedListTableState extends State<SubmittedListTable> {
             children: [
               _Header(
                 controller: _searchCtrl,
-                onSearch: (v) {
-                  setState(() => _currentPage = 1);
-                },
+                onSearch: (v) => setState(() => _currentPage = 1),
                 onBack: widget.onBack,
                 onFilter: widget.onFilter,
                 onRefresh: widget.onRefresh,
@@ -146,9 +135,7 @@ class _SubmittedListTableState extends State<SubmittedListTable> {
                           item: _pageItems[index], isEven: index.isEven,
                           showDate: showDate, showSupplier: showSupplier,
                           showItems: showItems, showQty: showQty, showSubmittedBy: showSubmittedBy,
-                          onView: () => widget.onView(_pageItems[index]),
-                          onApprove: () => widget.onApprove(_pageItems[index]),
-                          onReject: () => widget.onReject(_pageItems[index]),
+                          onTap: () => widget.onView(_pageItems[index]),
                         ),
                       ),
               ),
@@ -257,9 +244,6 @@ class _TableHeader extends StatelessWidget {
           if (showQty) _SortHeaderCell(label: 'QTY', flex: 1, align: TextAlign.center, active: sortCol == SubSortColumn.qty, dir: sortDir, onTap: () => onSort(SubSortColumn.qty)),
           _SortHeaderCell(label: 'TOTAL VALUE', flex: 3, align: TextAlign.right, active: sortCol == SubSortColumn.totalValue, dir: sortDir, onTap: () => onSort(SubSortColumn.totalValue)),
           if (showSubmittedBy) _SortHeaderCell(label: 'BY', flex: 2, active: sortCol == SubSortColumn.submittedBy, dir: sortDir, onTap: () => onSort(SubSortColumn.submittedBy)),
-          const _Cell(flex: 3, align: Alignment.center,
-            child: Text('ACTIONS', textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _SubTheme.textLabel, letterSpacing: 0.6))),
         ],
       ),
     );
@@ -310,13 +294,13 @@ class _TableRow extends StatelessWidget {
   final SubmittedItem item;
   final bool isEven;
   final bool showDate, showSupplier, showItems, showQty, showSubmittedBy;
-  final VoidCallback onView, onApprove, onReject;
+  final VoidCallback onTap;
 
   const _TableRow({
     required this.item, required this.isEven,
     required this.showDate, required this.showSupplier,
     required this.showItems, required this.showQty, required this.showSubmittedBy,
-    required this.onView, required this.onApprove, required this.onReject,
+    required this.onTap,
   });
 
   @override
@@ -328,54 +312,27 @@ class _TableRow extends StatelessWidget {
     const mutedStyle = TextStyle(fontSize: 13, color: _SubTheme.textMuted);
     const valueStyle = TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _SubTheme.primary);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: isEven ? _SubTheme.rowEven : _SubTheme.rowOdd,
-        border: const Border(bottom: BorderSide(color: _SubTheme.border, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          if (showDate) _Cell(flex: 2, child: Text(dateFmt.format(item.date), style: mutedStyle, overflow: TextOverflow.ellipsis)),
-          _Cell(flex: 2, child: Text(item.drNumber, style: cellStyle.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-          if (showSupplier) _Cell(flex: 3, child: Text(item.supplier.isEmpty ? '—' : item.supplier, style: cellStyle, overflow: TextOverflow.ellipsis)),
-          if (showItems) _Cell(flex: 1, align: Alignment.center, child: Text('${item.itemsCount}', style: cellStyle, textAlign: TextAlign.center)),
-          if (showQty) _Cell(flex: 1, align: Alignment.center, child: Text(qtyFmt.format(item.totalQty), style: cellStyle, textAlign: TextAlign.center)),
-          _Cell(flex: 3, align: Alignment.centerRight,
-              child: Text(peso.format(item.totalValue), style: valueStyle, textAlign: TextAlign.right, overflow: TextOverflow.ellipsis)),
-          if (showSubmittedBy) _Cell(flex: 2, child: Text(item.submittedBy.isEmpty ? '—' : item.submittedBy, style: mutedStyle, overflow: TextOverflow.ellipsis)),
-          _Cell(flex: 3, align: Alignment.center,
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-                _IconBtn(icon: Icons.visibility_outlined, color: _SubTheme.primary, bg: _SubTheme.primaryLight, onTap: onView, tooltip: 'View'),
-                const SizedBox(width: 4),
-                _IconBtn(icon: Icons.check_circle_outline, color: _SubTheme.green, bg: _SubTheme.greenLight, onTap: onApprove, tooltip: 'Approve'),
-                const SizedBox(width: 4),
-                _IconBtn(icon: Icons.cancel_outlined, color: _SubTheme.red, bg: _SubTheme.redLight, onTap: onReject, tooltip: 'Reject'),
-              ])),
-        ],
-      ),
-    );
-  }
-}
-
-class _IconBtn extends StatelessWidget {
-  final IconData icon;
-  final Color color, bg;
-  final VoidCallback onTap;
-  final String tooltip;
-
-  const _IconBtn({required this.icon, required this.color, required this.bg, required this.onTap, required this.tooltip});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
+    return Material(
+      color: isEven ? _SubTheme.rowEven : _SubTheme.rowOdd,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        hoverColor: _SubTheme.primary.withValues(alpha: 0.05),
         child: Container(
-          width: 30, height: 30,
-          decoration: BoxDecoration(color: bg, border: Border.all(color: color.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(6)),
-          child: Icon(icon, size: 15, color: color),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: _SubTheme.border, width: 0.5)),
+          ),
+          child: Row(
+            children: [
+              if (showDate) _Cell(flex: 2, child: Text(dateFmt.format(item.date), style: mutedStyle, overflow: TextOverflow.ellipsis)),
+              _Cell(flex: 2, child: Text(item.drNumber, style: cellStyle.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+              if (showSupplier) _Cell(flex: 3, child: Text(item.supplier.isEmpty ? '—' : item.supplier, style: cellStyle, overflow: TextOverflow.ellipsis)),
+              if (showItems) _Cell(flex: 1, align: Alignment.center, child: Text('${item.itemsCount}', style: cellStyle, textAlign: TextAlign.center)),
+              if (showQty) _Cell(flex: 1, align: Alignment.center, child: Text(qtyFmt.format(item.totalQty), style: cellStyle, textAlign: TextAlign.center)),
+              _Cell(flex: 3, align: Alignment.centerRight,
+                  child: Text(peso.format(item.totalValue), style: valueStyle, textAlign: TextAlign.right, overflow: TextOverflow.ellipsis)),
+              if (showSubmittedBy) _Cell(flex: 2, child: Text(item.submittedBy.isEmpty ? '—' : item.submittedBy, style: mutedStyle, overflow: TextOverflow.ellipsis)),
+            ],
+          ),
         ),
       ),
     );
@@ -436,7 +393,7 @@ class _PaginationFooter extends StatelessWidget {
     final maxShow = compact ? 1 : 3;
     int startP = (currentPage - (maxShow ~/ 2)).clamp(1, totalPages);
     int endP = (startP + maxShow - 1).clamp(1, totalPages);
-    if (endP - startP < maxShow - 1) startP = (endP - maxShow + 1).clamp(1, totalPages);
+    if (endP - startP < maxShow - 1) { startP = (endP - maxShow + 1).clamp(1, totalPages); }
     for (int i = startP; i <= endP; i++) { pages.add(i); }
     return pages.map((p) {
       final active = p == currentPage;
