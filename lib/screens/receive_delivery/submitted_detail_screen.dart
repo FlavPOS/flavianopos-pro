@@ -30,6 +30,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
   static const _muted     = Color(0xFF6B7280);
 
   bool _processing = false;
+  bool _deliveryInfoExpanded = true;
   int? _expandedIndex; // Only 1 accordion at a time
 
   // ═══════════════ FORMATTERS ═══════════════
@@ -897,18 +898,28 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))]),
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
-          Icon(Icons.description_outlined, size: 18, color: _blue),
-          SizedBox(width: 8),
-          Text('Delivery Information', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        ]),
+        InkWell(
+          onTap: () => setState(() => _deliveryInfoExpanded = !_deliveryInfoExpanded),
+          child: Row(children: [
+            const Icon(Icons.description_outlined, size: 18, color: _blue),
+            const SizedBox(width: 8),
+            const Text('Delivery Information', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            Icon(_deliveryInfoExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 22, color: _muted),
+          ]),
+        ),
         const SizedBox(height: 12),
-        LayoutBuilder(builder: (ctx, c) {
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 250),
+          crossFadeState: _deliveryInfoExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          secondChild: const SizedBox.shrink(),
+          firstChild: LayoutBuilder(builder: (ctx, c) {
           final colW = (c.maxWidth - (cols - 1) * 8) / cols;
           return Wrap(spacing: 8, runSpacing: 8, children: [
             for (final f in fields) SizedBox(width: colW, child: _infoField(f.$1, f.$2, f.$3)),
           ]);
-        }),
+          }),
+        ),
       ]),
     );
   }
