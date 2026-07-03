@@ -130,10 +130,18 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       }
       if (product == null) continue;
 
-      final di = _DeliveryItem(product: product);
-      di.qtyController.text = itemRec.quantity.toString();
-      di.qtyController.addListener(() => setState(() {}));
+      // ═══ GROUP BY SKU: reuse existing item or create new ═══
+      final existingIdx = _items.indexWhere((x) => x.product.id == product!.id);
+      _DeliveryItem di;
+      if (existingIdx >= 0) {
+        di = _items[existingIdx];
+      } else {
+        di = _DeliveryItem(product: product);
+        di.qtyController.addListener(() => setState(() {}));
+        _items.add(di);
+      }
 
+      // Add batch to the item (either new or existing)
       if (itemRec.batchNumber.isNotEmpty) {
         final batch = _BatchEntry();
         batch.batchCtrl.text = itemRec.batchNumber;
@@ -146,7 +154,9 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
         } catch (_) {}
         di.batches.add(batch);
       }
-      _items.add(di);
+
+      // Update total qty from all batches
+      di.updateQtyFromBatches();
     }
 
     if (mounted) setState(() {});
@@ -172,7 +182,12 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   double get _totalRetail => _items.fold(0.0, (s, i) => s + (int.tryParse(i.qtyController.text) ?? 0) * i.product.sellingPrice);
 
   void _addItem(Product p) {
-    if (_items.any((i) => i.product.id == p.id)) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${p.name} already added'), behavior: SnackBarBehavior.floating)); return; }
+    final existingIdx = _items.indexWhere((i) => i.product.id == p.id);
+    if (existingIdx >= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Adding another batch to ${p.name}'), backgroundColor: Colors.blue, behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 1)));
+      WidgetsBinding.instance.addPostFrameCallback((_) { _showBatchPopup(existingIdx); });
+      return;
+    }
     final di = _DeliveryItem(product: p);
     di.qtyController.addListener(() => setState(() {}));
     _items.add(di); setState(() {});
@@ -193,7 +208,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) {
           final filtered = widget.products.where((p) {
-            if (!_items.any((x) => x.product.id == p.id)) {
+            {
               if (localQuery.isEmpty) return true;
               final q = localQuery.toLowerCase();
               return p.name.toLowerCase().contains(q) ||
