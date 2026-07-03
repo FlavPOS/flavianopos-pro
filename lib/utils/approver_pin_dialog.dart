@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../helpers/database_helper.dart';
 import 'receive_delivery_theme.dart';
 
-Future<Map<String, String>?> showApproverPinDialog(BuildContext context, {
+Future<Map<String, dynamic>?> showApproverPinDialog(BuildContext context, {
   Color themeColor = ReceiveDeliveryTheme.blueSubmitted,
   String title = 'Verify User',
   String subtitle = 'Enter your PIN to proceed',
@@ -14,7 +14,7 @@ Future<Map<String, String>?> showApproverPinDialog(BuildContext context, {
   final pinCtrl = TextEditingController();
   bool obscure = true;
 
-  final result = await showDialog<Map<String, String>?>(
+  final result = await showDialog<Map<String, dynamic>?>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(
@@ -138,7 +138,7 @@ Future<Map<String, String>?> showApproverPinDialog(BuildContext context, {
                         final pin = pinCtrl.text.trim();
                         if (pin.isEmpty) return;
                         final users = await DatabaseHelper().getAllUsers();
-                        Map<String, String>? matchedUser;
+                        Map<String, dynamic>? matchedUser;
                         for (final u in users) {
                           final role = (u['role'] ?? '').toString().toLowerCase();
                           final userPin = (u['pin'] ?? '').toString();

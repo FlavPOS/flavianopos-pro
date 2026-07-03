@@ -401,7 +401,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final isDraft = choice == 'DRAFT';
 
       // ═══ USER PIN VERIFICATION for SUBMIT (skip for DRAFT) ═══
-      Map<String, String>? pinUser;
+      Map<String, dynamic>? pinUser;
       if (!isDraft) {
         pinUser = await _showUserPinDialog();
         if (pinUser == null) return;
@@ -610,7 +610,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
 
   // ═══ USER PIN VERIFICATION DIALOG ═══
-  Future<Map<String, String>?> _showUserPinDialog() async {
+  Future<Map<String, dynamic>?> _showUserPinDialog() async {
     return await showApproverPinDialog(
       context,
       themeColor: Colors.orange.shade700,
