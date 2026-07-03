@@ -59,6 +59,60 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
   }
 
   // ═══════════════ ROLE-BASED PIN ═══════════════
+  // ═══════════════ RETURN TO DRAFT ═══════════════
+  Future<void> _confirmReturnToDraft() async {
+    final d = widget.record;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(children: const [
+          Icon(Icons.undo, color: Color(0xFF7C3AED), size: 26),
+          SizedBox(width: 10),
+          Text('Return to Draft?', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ]),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('DR#: ' + d.refNumber, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          const SizedBox(height: 8),
+          const Text('This will move the delivery back to Draft for editing.', style: TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          const Text('Requires Supervisor / Manager / Admin PIN.', style: TextStyle(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.w600)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7C3AED), foregroundColor: Colors.white),
+            child: const Text('Return'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    if (!await showApproverPinDialog(context, themeColor: const Color(0xFF7C3AED))) return;
+    await _doReturnToDraft(d);
+  }
+
+  Future<void> _doReturnToDraft(DeliveryRecord d) async {
+    setState(() => _processing = true);
+    try {
+      final now = DateTime.now();
+      await DeliveryStorage.updateStatus(d.id, {
+        'status': DeliveryStatus.draft,
+        'submittedDate': '',
+        'submittedBy': '',
+        'lastEditedDate': now.toIso8601String(),
+        'syncStatus': 'Pending',
+      });
+      if (!mounted) return;
+      ReceiveDeliveryTheme.showInfo(context, 'Returned to Draft: ' + d.refNumber, color: const Color(0xFF7C3AED));
+      Navigator.pop(context, true);
+    } catch (e) {
+      setState(() => _processing = false);
+      if (mounted) ReceiveDeliveryTheme.showError(context, 'Error: ' + e.toString());
+    }
+  }
+
   Future<void> _confirmApprove() async {
     final d = widget.record;
     final confirm = await showDialog<bool>(
@@ -726,16 +780,51 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            onPressed: _processing ? null : _showRejectDialog,
-            tooltip: 'Reject',
-            icon: const Icon(Icons.cancel_outlined, color: Colors.white, size: 24),
-          ),
-          IconButton(
-            onPressed: _processing ? null : _confirmApprove,
-            tooltip: 'Approve',
-            icon: const Icon(Icons.check_circle_outline, color: Colors.white, size: 24),
-          ),
+          // ═══ Back to Draft (purple - matches Draft module) ═══
+          Builder(builder: (ctx) {
+            final isWide = MediaQuery.of(ctx).size.width >= 600;
+            return isWide
+              ? TextButton.icon(
+                  onPressed: _processing ? null : _confirmReturnToDraft,
+                  icon: const Icon(Icons.undo, color: Color(0xFFC4B5FD), size: 20),
+                  label: const Text('Back to Draft', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                )
+              : IconButton(
+                  onPressed: _processing ? null : _confirmReturnToDraft,
+                  tooltip: 'Back to Draft',
+                  icon: const Icon(Icons.undo, color: Color(0xFFC4B5FD), size: 26),
+                );
+          }),
+          // ═══ Reject (soft red) ═══
+          Builder(builder: (ctx) {
+            final isWide = MediaQuery.of(ctx).size.width >= 600;
+            return isWide
+              ? TextButton.icon(
+                  onPressed: _processing ? null : _showRejectDialog,
+                  icon: const Icon(Icons.cancel, color: Color(0xFFFCA5A5), size: 20),
+                  label: const Text('Reject', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                )
+              : IconButton(
+                  onPressed: _processing ? null : _showRejectDialog,
+                  tooltip: 'Reject',
+                  icon: const Icon(Icons.cancel, color: Color(0xFFFCA5A5), size: 26),
+                );
+          }),
+          // ═══ Approve (soft green) ═══
+          Builder(builder: (ctx) {
+            final isWide = MediaQuery.of(ctx).size.width >= 600;
+            return isWide
+              ? TextButton.icon(
+                  onPressed: _processing ? null : _confirmApprove,
+                  icon: const Icon(Icons.check_circle, color: Color(0xFFA7F3D0), size: 20),
+                  label: const Text('Approve', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                )
+              : IconButton(
+                  onPressed: _processing ? null : _confirmApprove,
+                  tooltip: 'Approve',
+                  icon: const Icon(Icons.check_circle, color: Color(0xFFA7F3D0), size: 26),
+                );
+          }),
           const SizedBox(width: 6),
         ],
         bottom: PreferredSize(
