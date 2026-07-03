@@ -398,14 +398,15 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       final choice = await _showSaveOrSubmitDialog(refNumber, _supplierCtrl.text.trim(), totalItems, tQty, tRetail);
       if (choice == null) return; // User cancelled
 
-      final userName = (assign["userName"] ?? assign["userDisplayName"] ?? "").toString();
       final isDraft = choice == 'DRAFT';
 
       // ═══ USER PIN VERIFICATION for SUBMIT (skip for DRAFT) ═══
+      Map<String, String>? pinUser;
       if (!isDraft) {
-        final pinOk = await _showUserPinDialog();
-        if (pinOk != true) return;
+        pinUser = await _showUserPinDialog();
+        if (pinUser == null) return;
       }
+      final userName = pinUser?["name"] ?? "";
 
       final record = DeliveryRecord(
         id: recordId,
@@ -609,7 +610,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
 
   // ═══ USER PIN VERIFICATION DIALOG ═══
-  Future<bool?> _showUserPinDialog() async {
+  Future<Map<String, String>?> _showUserPinDialog() async {
     return await showApproverPinDialog(
       context,
       themeColor: Colors.orange.shade700,

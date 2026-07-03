@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:excel/excel.dart' as xl;
 import 'package:printing/printing.dart';
+import '../../utils/receive_delivery_theme.dart';
 import 'delivery_model.dart';
 
 class RejectedDetailScreen extends StatefulWidget {
@@ -220,7 +221,7 @@ class _RejectedDetailScreenState extends State<RejectedDetailScreen> {
                 Row(children: [
                   Expanded(child: _info('Rejected By', d.rejectedBy, Icons.person)),
                   const SizedBox(width: 8),
-                  Expanded(child: _info('Rejected Date', d.rejectedDate.isEmpty ? '-' : d.rejectedDate, Icons.calendar_today)),
+                  Expanded(child: _info("Rejected Date", ReceiveDeliveryTheme.fmtDateTime(d.rejectedDate), Icons.calendar_today)),
                 ]),
               ]),
             ),

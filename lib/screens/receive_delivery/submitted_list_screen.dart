@@ -116,17 +116,17 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
     );
     if (confirm != true) return;
 
-    final pinOk = await showApproverPinDialog(context, themeColor: ReceiveDeliveryTheme.blueSubmitted);
-    if (!pinOk) return;
+    final pinUser = await showApproverPinDialog(context, themeColor: ReceiveDeliveryTheme.blueSubmitted);
+    if (pinUser == null) return;
 
-    await _approve(d);
+    await _approve(d, pinUser["name"] ?? "Unknown");
   }
 
-  Future<void> _approve(DeliveryRecord d) async {
+  Future<void> _approve(DeliveryRecord d, String approverName) async {
     try {
       final now = DateTime.now();
       final assign = await DeviceAssignmentService().read();
-      final approver = (assign['userName'] ?? assign['userDisplayName'] ?? '').toString();
+      final approver = approverName;
 
       await DeliveryStorage.updateStatus(d.id, {
         'status': DeliveryStatus.approved,
@@ -233,17 +233,17 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
 
     if (reason == null || reason.isEmpty) return;
 
-    final pinOk = await showApproverPinDialog(context, themeColor: ReceiveDeliveryTheme.blueSubmitted);
-    if (!pinOk) return;
+    final pinUser = await showApproverPinDialog(context, themeColor: ReceiveDeliveryTheme.blueSubmitted);
+    if (pinUser == null) return;
 
-    await _reject(d, reason);
+    await _reject(d, reason, pinUser["name"] ?? "Unknown");
   }
 
-  Future<void> _reject(DeliveryRecord d, String reason) async {
+  Future<void> _reject(DeliveryRecord d, String reason, String rejecterName) async {
     try {
       final now = DateTime.now();
       final assign = await DeviceAssignmentService().read();
-      final rejecter = (assign['userName'] ?? assign['userDisplayName'] ?? '').toString();
+      final rejecter = rejecterName;
 
       await DeliveryStorage.updateStatus(d.id, {
         'status': DeliveryStatus.rejected,

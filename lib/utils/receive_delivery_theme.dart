@@ -1,6 +1,7 @@
 // lib/utils/receive_delivery_theme.dart
 // Unified design system for Receive Delivery workflow
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 class ReceiveDeliveryTheme {
   // Module colors
@@ -116,6 +117,23 @@ class ReceiveDeliveryTheme {
       case 'rejected': return redRejected;
       default: return textMuted;
     }
+  }
+
+  // ═══════════════ DATE FORMATTER ═══════════════
+  static String fmtDateTime(String iso) {
+    if (iso.isEmpty) return "-";
+    try {
+      final d = DateTime.parse(iso);
+      return DateFormat("MM/dd/yy hh:mm a").format(d);
+    } catch (_) { return iso; }
+  }
+
+  static String fmtDateOnly(String iso) {
+    if (iso.isEmpty) return "-";
+    try {
+      final d = DateTime.parse(iso);
+      return DateFormat("MM/dd/yy").format(d);
+    } catch (_) { return iso; }
   }
 
   static Color statusLightColor(String status) {

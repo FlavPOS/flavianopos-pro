@@ -89,7 +89,9 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       ),
     );
     if (confirm != true) return;
-    if (!await showApproverPinDialog(context, themeColor: const Color(0xFF7C3AED))) return;
+    final pinUserD = await showApproverPinDialog(context, themeColor: const Color(0xFF7C3AED));
+    if (pinUserD == null) return;
+    final returnedBy = pinUserD["name"]!;
     await _doReturnToDraft(d);
   }
 
@@ -148,16 +150,18 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       ),
     );
     if (confirm != true) return;
-    if (!await showApproverPinDialog(context, themeColor: _blue)) return;
-    await _doApprove(d);
+    final pinUserA = await showApproverPinDialog(context, themeColor: _blue);
+    if (pinUserA == null) return;
+    final approverName = pinUserA["name"]!;
+    await _doApprove(d, approverName);
   }
 
-  Future<void> _doApprove(DeliveryRecord d) async {
+  Future<void> _doApprove(DeliveryRecord d, String approverName) async {
     setState(() => _processing = true);
     try {
       final now = DateTime.now();
       final assign = await DeviceAssignmentService().read();
-      final approver = (assign['userName'] ?? assign['userDisplayName'] ?? '').toString();
+      final approver = approverName;
       await DeliveryStorage.updateStatus(d.id, {
         'status': DeliveryStatus.approved,
         'approvedDate': now.toIso8601String(),
@@ -242,16 +246,18 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       ),
     );
     if (reason == null || reason.isEmpty) return;
-    if (!await showApproverPinDialog(context, themeColor: _blue)) return;
-    await _doReject(d, reason);
+    final pinUserR = await showApproverPinDialog(context, themeColor: _blue);
+    if (pinUserR == null) return;
+    final rejecterName = pinUserR["name"]!;
+    await _doReject(d, reason, rejecterName);
   }
 
-  Future<void> _doReject(DeliveryRecord d, String reason) async {
+  Future<void> _doReject(DeliveryRecord d, String reason, String rejecterName) async {
     setState(() => _processing = true);
     try {
       final now = DateTime.now();
       final assign = await DeviceAssignmentService().read();
-      final rejecter = (assign['userName'] ?? assign['userDisplayName'] ?? '').toString();
+      final rejecter = rejecterName;
       await DeliveryStorage.updateStatus(d.id, {
         'status': DeliveryStatus.rejected,
         'rejectedDate': now.toIso8601String(),

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../helpers/database_helper.dart';
 import 'receive_delivery_theme.dart';
 
-Future<bool> showApproverPinDialog(BuildContext context, {
+Future<Map<String, String>?> showApproverPinDialog(BuildContext context, {
   Color themeColor = ReceiveDeliveryTheme.blueSubmitted,
   String title = 'Verify User',
   String subtitle = 'Enter your PIN to proceed',
@@ -14,7 +14,7 @@ Future<bool> showApproverPinDialog(BuildContext context, {
   final pinCtrl = TextEditingController();
   bool obscure = true;
 
-  final result = await showDialog<bool>(
+  final result = await showDialog<Map<String, String>?>(
     context: context,
     barrierDismissible: false,
     builder: (ctx) => StatefulBuilder(
@@ -138,15 +138,23 @@ Future<bool> showApproverPinDialog(BuildContext context, {
                         final pin = pinCtrl.text.trim();
                         if (pin.isEmpty) return;
                         final users = await DatabaseHelper().getAllUsers();
-                        final valid = users.any((u) {
+                        Map<String, String>? matchedUser;
+                        for (final u in users) {
                           final role = (u['role'] ?? '').toString().toLowerCase();
                           final userPin = (u['pin'] ?? '').toString();
                           final active = u['isActive'] == 1 || u['isActive'] == true;
                           final auth = role.contains('supervisor') || role.contains('manager') || role.contains('admin');
-                          return active && auth && userPin == pin;
-                        });
-                        if (valid) {
-                          Navigator.pop(ctx, true);
+                          if (active && auth && userPin == pin) {
+                            matchedUser = {
+                              'name': (u['fullName'] ?? 'Unknown').toString(),
+                              'role': (u['role'] ?? '').toString(),
+                              'id': (u['id'] ?? '').toString(),
+                            };
+                            break;
+                          }
+                        }
+                        if (matchedUser != null) {
+                          Navigator.pop(ctx, matchedUser);
                         } else {
                           ReceiveDeliveryTheme.showError(ctx, 'Invalid PIN or insufficient role');
                         }
@@ -168,5 +176,5 @@ Future<bool> showApproverPinDialog(BuildContext context, {
       ),
     ),
   );
-  return result == true;
+  return result;
 }

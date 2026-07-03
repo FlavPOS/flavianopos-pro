@@ -423,7 +423,7 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
                 Padding(padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(children: [
                     SizedBox(width: 130, child: Text('Approved Date:', style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
-                    Expanded(child: Text(d.approvedDate.isEmpty ? '-' : d.approvedDate, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                    Expanded(child: Text(ReceiveDeliveryTheme.fmtDateTime(d.approvedDate), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
                   ])),
               ]),
             ),
