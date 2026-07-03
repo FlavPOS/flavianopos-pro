@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../models/product_model.dart';
 import '../../models/batch_model.dart';
+import '../../utils/approver_pin_dialog.dart';
 import 'delivery_model.dart';
 import '../../helpers/database_helper.dart';
 import "../../services/branch_inventory_service.dart";
@@ -609,133 +610,13 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
   // ═══ USER PIN VERIFICATION DIALOG ═══
   Future<bool?> _showUserPinDialog() async {
-    final pinCtrl = TextEditingController();
-    bool obscure = true;
-    return await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: Colors.orange[700],
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.lock_outline, color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text('Verify User', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Center(child: Icon(Icons.person_pin_circle_outlined, size: 48, color: Color(0xFF7C3AED))),
-                    const SizedBox(height: 12),
-                    const Center(child: Text('Enter your PIN to submit', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87))),
-                    const SizedBox(height: 2),
-                    Center(child: Text('this delivery', style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
-                    const SizedBox(height: 20),
-                    TextField(
-                      controller: pinCtrl,
-                      obscureText: obscure,
-                      maxLength: 6,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      autofocus: true,
-                      style: const TextStyle(fontSize: 22, letterSpacing: 8, fontWeight: FontWeight.bold),
-                      decoration: InputDecoration(
-                        counterText: '',
-                        hintText: '******',
-                        hintStyle: TextStyle(color: Colors.grey[300], letterSpacing: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                        suffixIcon: IconButton(
-                          icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                          onPressed: () => setState(() => obscure = !obscure),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Material(
-                      color: const Color(0xFF2563EB),
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: () {
-                          final pin = pinCtrl.text.trim();
-                          if (pin.isEmpty) {
-                            _snack('Please enter your PIN');
-                            return;
-                          }
-                          final user = AppUser.allUsers.where((u) => u.pin == pin).firstOrNull;
-                          if (user != null) {
-                            Navigator.pop(ctx, true);
-                          } else {
-                            _snack('Invalid PIN - please try again');
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-                              SizedBox(width: 8),
-                              Text('Verify & Submit', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Center(
-                      child: TextButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            SnackBar(
-                              content: const Text('Please contact your Manager or Admin to reset your PIN'),
-                              backgroundColor: Colors.orange[700],
-                              duration: const Duration(seconds: 3),
-                            ),
-                          );
-                        },
-                        child: Text('Forgot PIN?', style: TextStyle(color: Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: Text('Cancel', style: TextStyle(color: Colors.grey[700], fontSize: 13, fontWeight: FontWeight.w500)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return await showApproverPinDialog(
+      context,
+      themeColor: Colors.orange.shade700,
+      title: 'Verify User',
+      subtitle: 'Enter your PIN to submit',
+      actionLabel: 'Verify & Submit',
+      actionIcon: Icons.check_circle_outline,
     );
   }
 
