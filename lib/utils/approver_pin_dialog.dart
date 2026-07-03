@@ -116,7 +116,7 @@ Future<Map<String, String>?> showApproverPinDialog(BuildContext context, {
                 Row(children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx, false),
+                      onPressed: () => Navigator.pop(ctx, null),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.grey[700],
                         side: BorderSide(color: Colors.grey[400]!),

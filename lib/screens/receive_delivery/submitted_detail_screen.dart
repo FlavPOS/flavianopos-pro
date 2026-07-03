@@ -863,12 +863,12 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
             padding: const EdgeInsets.all(12),
             children: [
               _deliveryInfoCard(d, infoCols, width),
-              const SizedBox(height: 12),
-              _deliveryItemsCard(width),
               if (d.submittedBy.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _submissionInfoCard(d),
               ],
+              const SizedBox(height: 12),
+              _deliveryItemsCard(width),
               const SizedBox(height: 8),
             ],
           );
@@ -961,7 +961,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         ]),
         const SizedBox(height: 6),
         _kv('Submitted By', d.submittedBy),
-        _kv('Submitted Date', d.submittedDate.isEmpty ? '-' : _fmtISO(d.submittedDate)),
+        _kv('Submitted Date', ReceiveDeliveryTheme.fmtDateTime(d.submittedDate)),
       ]),
     );
   }
