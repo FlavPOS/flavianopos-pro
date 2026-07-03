@@ -541,17 +541,43 @@ class _SkuAccordionRow extends StatelessWidget {
               return Container(
                 margin: const EdgeInsets.symmetric(vertical: 3),
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.grey[50], border: Border.all(color: _border), borderRadius: BorderRadius.circular(6)),
-                child: Row(children: [
-                  Icon(Icons.qr_code, size: 12, color: _muted),
-                  const SizedBox(width: 4),
-                  Expanded(child: Text('Batch: ${b.batchNumber}   MFG: $mfg   EXP: $exp',
-                    style: const TextStyle(fontSize: 11))),
-                  Text('${intFmt.format(b.quantity)} pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _green)),
-                ]),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  border: Border.all(color: _border),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.qr_code, size: 12, color: _muted),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: _miniInfo('Qty', intFmt.format(b.quantity) + ' pcs', color: _green)),
+                      Expanded(child: _miniInfo('MFG', mfg)),
+                      Expanded(child: _miniInfo('EXP', exp)),
+                    ]),
+                  ],
+                ),
               );
             }).toList())),
       ]),
+    );
+  }
+  Widget _miniInfo(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color ?? const Color(0xFF111827))),
+      ],
     );
   }
 }
