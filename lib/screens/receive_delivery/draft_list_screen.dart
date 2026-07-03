@@ -77,55 +77,6 @@ class _DraftListScreenState extends State<DraftListScreen> {
     _loadDrafts();
   }
 
-  Future<void> _confirmDelete(DraftItem item) async {
-    final record = _findRecord(item);
-    if (record == null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(children: const [
-          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 26),
-          SizedBox(width: 10),
-          Text('Delete Draft?',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ]),
-        content: Text(
-          'This will permanently delete draft:\nDR#: ${record.refNumber}\n\nThis action cannot be undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red[600],
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await DeliveryStorage.deleteDelivery(record.id);
-      await _loadDrafts();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Draft deleted'),
-            backgroundColor: Colors.red[600],
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,8 +89,7 @@ class _DraftListScreenState extends State<DraftListScreen> {
                 drafts: _draftItems,
                 onBack: () => Navigator.pop(context),
                 onRefresh: _loadDrafts,
-                onContinue: _openDraft,
-                onDelete: _confirmDelete,
+                onTap: _openDraft,
               ),
       ),
     );
