@@ -10,6 +10,8 @@ import '../../helpers/database_helper.dart';
 import '../../services/device_assignment_service.dart';
 import '../../services/firebase_config_service.dart';
 import '../../services/firebase_realtime_service.dart';
+import '../../utils/receive_delivery_theme.dart';
+import '../../utils/approver_pin_dialog.dart';
 import 'delivery_model.dart';
 
 class SubmittedDetailScreen extends StatefulWidget {
@@ -57,78 +59,6 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
   }
 
   // ═══════════════ ROLE-BASED PIN ═══════════════
-  Future<bool> _verifyApproverPin() async {
-    final pinCtrl = TextEditingController();
-    bool obscure = true;
-
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateD) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          title: Row(children: const [
-            Icon(Icons.lock_outline, color: _blue, size: 24),
-            SizedBox(width: 10),
-            Text('Approver PIN Required',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ]),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Only Supervisor, Manager, or Admin can approve/reject.',
-                  style: TextStyle(fontSize: 12, color: _muted)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: pinCtrl,
-                obscureText: obscure,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: InputDecoration(
-                  labelText: 'Enter PIN',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  suffixIcon: IconButton(
-                    icon: Icon(obscure ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setStateD(() => obscure = !obscure),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            ElevatedButton(
-              onPressed: () async {
-                final pin = pinCtrl.text.trim();
-                if (pin.isEmpty) return;
-                final users = await DatabaseHelper().getAllUsers();
-                final valid = users.any((u) {
-                  final role = (u['role'] ?? '').toString().toLowerCase();
-                  final userPin = (u['pin'] ?? '').toString();
-                  final active = u['isActive'] == 1 || u['isActive'] == true;
-                  final auth = role.contains('supervisor') || role.contains('manager') || role.contains('admin');
-                  return active && auth && userPin == pin;
-                });
-                if (valid) {
-                  Navigator.pop(ctx, true);
-                } else {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                    content: Text('Invalid PIN or insufficient role'),
-                    backgroundColor: Colors.red, behavior: SnackBarBehavior.floating,
-                  ));
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white),
-              child: const Text('Verify'),
-            ),
-          ],
-        ),
-      ),
-    );
-    return result == true;
-  }
-
   Future<void> _confirmApprove() async {
     final d = widget.record;
     final confirm = await showDialog<bool>(
@@ -164,7 +94,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       ),
     );
     if (confirm != true) return;
-    if (!await _verifyApproverPin()) return;
+    if (!await showApproverPinDialog(context, themeColor: _blue)) return;
     await _doApprove(d);
   }
 
@@ -258,7 +188,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       ),
     );
     if (reason == null || reason.isEmpty) return;
-    if (!await _verifyApproverPin()) return;
+    if (!await showApproverPinDialog(context, themeColor: _blue)) return;
     await _doReject(d, reason);
   }
 

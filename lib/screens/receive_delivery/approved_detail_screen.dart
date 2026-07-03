@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import 'package:excel/excel.dart' as xl;
+import '../../utils/receive_delivery_theme.dart';
 import 'delivery_model.dart';
 
 class ApprovedDetailScreen extends StatefulWidget {
@@ -311,13 +312,9 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
       final filename = 'DR_${d.refNumber}_APPROVED.xlsx';
       await Printing.sharePdf(bytes: Uint8List.fromList(bytes), filename: filename);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Excel exported: $filename'),
-        backgroundColor: _green, behavior: SnackBarBehavior.floating,
-      ));
+      ReceiveDeliveryTheme.showSuccess(context, 'Excel exported: $filename');
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) ReceiveDeliveryTheme.showError(context, 'Error: $e');
     } finally {
       if (mounted) setState(() => _processing = false);
     }
