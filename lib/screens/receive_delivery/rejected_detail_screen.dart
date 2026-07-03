@@ -315,6 +315,16 @@ class _SkuGroup {
 }
 
 class _SkuAccordionRow extends StatelessWidget {
+  Widget _miniInfo(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9, color: Color(0xFF6B7280), fontWeight: FontWeight.w600)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color ?? const Color(0xFF111827))),
+      ],
+    );
+  }
   static const _red       = Color(0xFFEF4444);
   static const _redLight  = Color(0xFFFEE2E2);
   static const _border    = Color(0xFFE5E7EB);
@@ -357,20 +367,66 @@ class _SkuAccordionRow extends StatelessWidget {
           Container(width: double.infinity,
             decoration: const BoxDecoration(border: Border(top: BorderSide(color: _border))),
             padding: const EdgeInsets.all(8),
-            child: Column(children: group.batches.map((b) {
+            child: screenWidth >= 600
+              // ═══ WIDE SCREEN: ERP TABLE ═══
+              ? Column(children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.grey[50], border: Border(bottom: BorderSide(color: _border))),
+                    child: Row(children: [
+                      const Expanded(flex: 3, child: Text('BATCH #', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      const Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      const Expanded(flex: 2, child: Text('MFG', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      const Expanded(flex: 2, child: Text('EXP', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      if (screenWidth >= 800) const Expanded(flex: 2, child: Text('COST', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      if (screenWidth >= 1000) const Expanded(flex: 2, child: Text('RETAIL', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                    ]),
+                  ),
+                  for (int i = 0; i < group.batches.length; i++)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(color: i.isEven ? Colors.white : const Color(0xFFFEF7F7), border: Border(bottom: BorderSide(color: _border, width: 0.5))),
+                      child: Row(children: [
+                        Expanded(flex: 3, child: Text(group.batches[i].batchNumber.isEmpty ? '-' : group.batches[i].batchNumber, style: const TextStyle(fontSize: 13))),
+                        Expanded(flex: 2, child: Text('${intFmt.format(group.batches[i].quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _red))),
+                        Expanded(flex: 2, child: Text(group.batches[i].mfgDate.isEmpty ? '-' : group.batches[i].mfgDate.split('T').first, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
+                        Expanded(flex: 2, child: Text(group.batches[i].expDate.isEmpty ? '-' : group.batches[i].expDate.split('T').first, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
+                        if (screenWidth >= 800) Expanded(flex: 2, child: Text(' ${group.batches[i].cost.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                        if (screenWidth >= 1000) Expanded(flex: 2, child: Text(' ${group.batches[i].retail.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                      ]),
+                    ),
+                ])
+              // ═══ PHONE: BEAUTIFUL CARDS ═══
+              : Column(children: group.batches.map((b) {
               String mfg = b.mfgDate.isEmpty ? '-' : b.mfgDate.split('T').first;
               String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
               return Container(
                 margin: const EdgeInsets.symmetric(vertical: 3),
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.grey[50], border: Border.all(color: _border), borderRadius: BorderRadius.circular(6)),
-                child: Row(children: [
-                  Icon(Icons.qr_code, size: 12, color: _muted),
-                  const SizedBox(width: 4),
-                  Expanded(child: Text('Batch: ${b.batchNumber}   MFG: $mfg   EXP: $exp',
-                    style: const TextStyle(fontSize: 11))),
-                  Text('${intFmt.format(b.quantity)} pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _red)),
-                ]),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  border: Border.all(color: _border),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.qr_code, size: 12, color: _muted),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ]),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: _miniInfo('Qty', intFmt.format(b.quantity) + ' pcs', color: _red)),
+                      Expanded(child: _miniInfo('MFG', mfg)),
+                      Expanded(child: _miniInfo('EXP', exp)),
+                    ]),
+                  ],
+                ),
               );
             }).toList())),
       ]),
