@@ -25,6 +25,7 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
   static const _muted      = Color(0xFF6B7280);
 
   bool _processing = false;
+  bool _deliveryInfoExpanded = true;
   int? _expandedIndex;
 
   final _int = NumberFormat.decimalPattern();
@@ -384,23 +385,33 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
                 boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))]),
               padding: const EdgeInsets.all(12),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: const [
-                  Icon(Icons.description_outlined, size: 18, color: _green),
-                  SizedBox(width: 8),
-                  Text('Delivery Information', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                ]),
-                const SizedBox(height: 12),
-                LayoutBuilder(builder: (ctx, c) {
-                  final colW = (c.maxWidth - (cols - 1) * 8) / cols;
-                  return Wrap(spacing: 8, runSpacing: 8, children: [
-                    SizedBox(width: colW, child: _info('DR # / Reference', d.refNumber, Icons.receipt_long)),
-                    SizedBox(width: colW, child: _info('Supplier', d.supplier, Icons.business)),
-                    SizedBox(width: colW, child: _info('Driver', d.driverName, Icons.person)),
-                    SizedBox(width: colW, child: _info('Plate #', d.plateNumber, Icons.local_shipping)),
-                    SizedBox(width: colW, child: _info('Received By', d.receivedBy, Icons.assignment_ind)),
-                    SizedBox(width: colW, child: _info('Notes', d.notes, Icons.note_alt_outlined)),
-                  ]);
-                }),
+                InkWell(
+                  onTap: () => setState(() => _deliveryInfoExpanded = !_deliveryInfoExpanded),
+                  child: Row(children: [
+                    const Icon(Icons.description_outlined, size: 18, color: _green),
+                    const SizedBox(width: 8),
+                    const Text("Delivery Information", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Icon(_deliveryInfoExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 22, color: _muted),
+                  ]),
+                ),
+                Visibility(
+                  visible: _deliveryInfoExpanded,
+                  child: Column(children: [
+                    const SizedBox(height: 12),
+                    LayoutBuilder(builder: (ctx, c) {
+                      final colW = (c.maxWidth - (cols - 1) * 8) / cols;
+                      return Wrap(spacing: 8, runSpacing: 8, children: [
+                        SizedBox(width: colW, child: _info("DR # / Reference", d.refNumber, Icons.receipt_long)),
+                        SizedBox(width: colW, child: _info("Supplier", d.supplier, Icons.business)),
+                        SizedBox(width: colW, child: _info("Driver", d.driverName, Icons.person)),
+                        SizedBox(width: colW, child: _info("Plate #", d.plateNumber, Icons.local_shipping)),
+                        SizedBox(width: colW, child: _info("Received By", d.receivedBy, Icons.assignment_ind)),
+                        SizedBox(width: colW, child: _info("Notes", d.notes, Icons.note_alt_outlined)),
+                      ]);
+                    }),
+                  ]),
+                ),
               ]),
             ),
             const SizedBox(height: 12),
