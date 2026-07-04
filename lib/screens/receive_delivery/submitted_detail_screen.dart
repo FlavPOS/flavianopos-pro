@@ -1192,9 +1192,9 @@ class _BatchTable extends StatelessWidget {
               border: Border(bottom: BorderSide(color: _border))),
             children: [
               _hCell('BATCH #'),
-              _hCell('QTY', align: TextAlign.right),
               _hCell('MFG', align: TextAlign.center),
               _hCell('EXP', align: TextAlign.center),
+              _hCell('QTY', align: TextAlign.right),
               if (showCost) _hCell('RETAIL', align: TextAlign.right),
               if (showRetail) _hCell('TOTAL @ RETAIL', align: TextAlign.right),
             ],
@@ -1205,9 +1205,9 @@ class _BatchTable extends StatelessWidget {
               decoration: BoxDecoration(color: i.isEven ? Colors.white : _rowOdd),
               children: [
                 _dCell(batches[i].batchNumber.isEmpty ? '-' : batches[i].batchNumber),
-                _dCell('${intFmt.format(batches[i].quantity)} pcs', align: TextAlign.right, bold: true),
                 _dCell(fmtDate(batches[i].mfgDate), align: TextAlign.center),
                 _dCell(fmtDate(batches[i].expDate), align: TextAlign.center),
+                _dCell('${intFmt.format(batches[i].quantity)} pcs', align: TextAlign.right, bold: true),
                 if (showCost) _dCell(pesoFmt.format(batches[i].retail), align: TextAlign.right),
                 if (showRetail) _dCell(pesoFmt.format(batches[i].retail * batches[i].quantity), align: TextAlign.right),
               ],

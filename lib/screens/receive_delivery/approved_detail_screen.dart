@@ -387,9 +387,11 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
                         decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
                         child: Row(children: const [
                           Expanded(flex: 3, child: Text('BATCH #', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
-                          Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                           Expanded(flex: 2, child: Text('MFG', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                           Expanded(flex: 2, child: Text('EXP', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('RETAIL', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('TOTAL @ RETAIL', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                         ]),
                       ),
                       // Data rows
@@ -406,9 +408,11 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
                           ),
                           child: Row(children: [
                             Expanded(flex: 3, child: Text(b.batchNumber.isEmpty ? '-' : b.batchNumber, style: const TextStyle(fontSize: 13))),
-                            Expanded(flex: 2, child: Text('${_int.format(b.quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _green))),
                             Expanded(flex: 2, child: Text(mfg, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
                             Expanded(flex: 2, child: Text(exp, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
+                            Expanded(flex: 2, child: Text('${_int.format(b.quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _green))),
+                            Expanded(flex: 2, child: Text('${b.retail.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                            Expanded(flex: 2, child: Text('${(b.retail * b.quantity).toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                           ]),
                         );
                       }),
@@ -656,9 +660,9 @@ class _SkuAccordionRow extends StatelessWidget {
                     decoration: BoxDecoration(color: Colors.grey[50], border: Border(bottom: BorderSide(color: _border))),
                     child: Row(children: [
                       const Expanded(flex: 3, child: Text('BATCH #', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
-                      const Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                       const Expanded(flex: 2, child: Text('MFG', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                       const Expanded(flex: 2, child: Text('EXP', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                      const Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                       if (screenWidth >= 800) const Expanded(flex: 2, child: Text('RETAIL', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                       if (screenWidth >= 1000) const Expanded(flex: 2, child: Text('TOTAL @ RETAIL', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
                     ]),
@@ -670,9 +674,9 @@ class _SkuAccordionRow extends StatelessWidget {
                       decoration: BoxDecoration(color: i.isEven ? Colors.white : const Color(0xFFF8FCFA), border: Border(bottom: BorderSide(color: _border, width: 0.5))),
                       child: Row(children: [
                         Expanded(flex: 3, child: Text(group.batches[i].batchNumber.isEmpty ? '-' : group.batches[i].batchNumber, style: const TextStyle(fontSize: 13))),
-                        Expanded(flex: 2, child: Text('${intFmt.format(group.batches[i].quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _green))),
                         Expanded(flex: 2, child: Text(group.batches[i].mfgDate.isEmpty ? '-' : group.batches[i].mfgDate.split('T').first, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
                         Expanded(flex: 2, child: Text(group.batches[i].expDate.isEmpty ? '-' : group.batches[i].expDate.split('T').first, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
+                        Expanded(flex: 2, child: Text('${intFmt.format(group.batches[i].quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _green))),
                         if (screenWidth >= 800) Expanded(flex: 2, child: Text(' ${group.batches[i].retail.toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                         if (screenWidth >= 1000) Expanded(flex: 2, child: Text(' ${(group.batches[i].retail * group.batches[i].quantity).toStringAsFixed(2)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                       ]),
