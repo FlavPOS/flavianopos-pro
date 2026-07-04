@@ -338,6 +338,86 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
     );
   }
 
+
+  // ═══════════════ BATCH LIST DIALOG ═══════════════
+  void _showProductInfo(_SkuGroup group) {
+    final totalQty = group.batches.fold<int>(0, (s, b) => s + b.quantity);
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 700, maxHeight: MediaQuery.of(context).size.height * 0.8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+                decoration: const BoxDecoration(
+                  color: _greenLight,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.inventory_2_outlined, color: _green, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('Batch List', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, size: 20)),
+                ]),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          SizedBox(width: 100, child: Text('Total Qty:', style: TextStyle(fontSize: 12, color: Colors.grey[700]))),
+                          Expanded(child: Text('${_int.format(totalQty)} pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                        ]),
+                      ),
+                      const Divider(),
+                      const Text('Batch Details:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      ...group.batches.map((b) {
+                        String mfg = b.mfgDate.isEmpty ? '-' : b.mfgDate.split('T').first;
+                        String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            border: Border.all(color: _border),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(children: [
+                            Icon(Icons.qr_code, size: 14, color: Colors.grey[600]),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text('Batch: ${b.batchNumber}  MFG: $mfg  EXP: $exp', style: const TextStyle(fontSize: 12))),
+                            Text('${_int.format(b.quantity)} pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _green)),
+                          ]),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: const BoxDecoration(border: Border(top: BorderSide(color: _border))),
+                child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final d = widget.record;
@@ -459,7 +539,7 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
                   _SkuAccordionRow(group: _groups[i], index: i, isExpanded: _expandedIndex == i,
                     screenWidth: w,
                     onToggle: () => setState(() => _expandedIndex = _expandedIndex == i ? null : i),
-                    intFmt: _int),
+                    intFmt: _int, onViewDetails: () => _showProductInfo(_groups[i])),
               ]),
             ),
             const SizedBox(height: 8),
@@ -514,8 +594,9 @@ class _SkuAccordionRow extends StatelessWidget {
   final double screenWidth;
   final VoidCallback onToggle;
   final NumberFormat intFmt;
+  final VoidCallback? onViewDetails;
 
-  const _SkuAccordionRow({required this.group, required this.index, required this.isExpanded, required this.screenWidth, required this.onToggle, required this.intFmt});
+  const _SkuAccordionRow({required this.group, required this.index, required this.isExpanded, required this.screenWidth, required this.onToggle, required this.intFmt, this.onViewDetails});
 
   @override
   Widget build(BuildContext context) {
@@ -538,6 +619,14 @@ class _SkuAccordionRow extends StatelessWidget {
                 decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(6)),
                 child: Text('${intFmt.format(totalQty)} pcs', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold))),
               const SizedBox(width: 4),
+              if (screenWidth >= 600 && onViewDetails != null) IconButton(
+                onPressed: onViewDetails,
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                tooltip: 'View Details',
+                icon: const Icon(Icons.visibility_outlined, size: 18, color: _green),
+              ),
               AnimatedRotation(turns: isExpanded ? 0.5 : 0, duration: const Duration(milliseconds: 250),
                 child: const Icon(Icons.expand_more, size: 22, color: _green)),
             ]),
