@@ -696,7 +696,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
                       const SizedBox(height: 6),
                       ConstrainedBox(
                         constraints: const BoxConstraints(maxHeight: 300),
-                        child: _BatchTable(batches: group.batches, screenWidth: 999999),
+                        child: _BatchTable(batches: group.batches, screenWidth: 700),
                       ),
                     ],
                   ),

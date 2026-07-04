@@ -202,22 +202,34 @@ class _RejectedDetailScreenState extends State<RejectedDetailScreen> {
                       const Divider(),
                       const Text('Batch Details:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 6),
-                      ...group.batches.map((b) {
+                      // Header row
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
+                        child: Row(children: const [
+                          Expanded(flex: 3, child: Text('BATCH #', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('QTY', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('MFG', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                          Expanded(flex: 2, child: Text('EXP', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF374151), letterSpacing: 0.6))),
+                        ]),
+                      ),
+                      // Data rows
+                      ...group.batches.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final b = entry.value;
                         String mfg = b.mfgDate.isEmpty ? '-' : b.mfgDate.split('T').first;
                         String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
                         return Container(
-                          margin: const EdgeInsets.symmetric(vertical: 3),
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            border: Border.all(color: _border),
-                            borderRadius: BorderRadius.circular(6),
+                            color: i.isEven ? Colors.white : const Color(0xFFFEF7F7),
+                            border: Border(bottom: BorderSide(color: _border, width: 0.5)),
                           ),
                           child: Row(children: [
-                            Icon(Icons.qr_code, size: 14, color: Colors.grey[600]),
-                            const SizedBox(width: 6),
-                            Expanded(child: Text('Batch: ${b.batchNumber}  MFG: $mfg  EXP: $exp', style: const TextStyle(fontSize: 12))),
-                            Text('${_int.format(b.quantity)} pcs', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _red)),
+                            Expanded(flex: 3, child: Text(b.batchNumber.isEmpty ? '-' : b.batchNumber, style: const TextStyle(fontSize: 13))),
+                            Expanded(flex: 2, child: Text('${_int.format(b.quantity)} pcs', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _red))),
+                            Expanded(flex: 2, child: Text(mfg, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
+                            Expanded(flex: 2, child: Text(exp, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13))),
                           ]),
                         );
                       }),
