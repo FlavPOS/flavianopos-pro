@@ -678,7 +678,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
                 child: Row(children: [
                   const Icon(Icons.inventory_2_outlined, color: _blue, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(child: Text('Product Information',
+                  const Expanded(child: Text('Batch List',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
                   IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close, size: 20)),
                 ]),
@@ -689,14 +689,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _kv('SKU', group.sku),
-                      _kv('Description', group.itemName),
-                      _kv('Cost', _peso.format(first.cost)),
-                      _kv('Retail', _peso.format(first.retail)),
-                      _kv('Old Stock', _int.format(first.oldStock)),
-                      _kv('New Stock', _int.format(first.newStock)),
                       _kv('Total Qty', '${_int.format(totalQty)} pcs'),
-                      _kv('Number of Batches', '${group.batches.length}'),
                       const Divider(),
                       const Text('Batch Details:',
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
@@ -1080,8 +1073,8 @@ class _SkuAccordionRow extends StatelessWidget {
                   child: Text('${intFmt.format(totalQty)} pcs',
                       style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                const SizedBox(width: 4),
-                IconButton(
+                if (screenWidth >= 600) const SizedBox(width: 4),
+                if (screenWidth >= 600) IconButton(
                   onPressed: onViewDetails,
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
