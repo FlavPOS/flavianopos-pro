@@ -7,8 +7,22 @@ import '../models/product_model.dart';
 class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback onTap;
+  // ═══ PHASE B1.2: Branch-Aware Stock ═══
+  final int? branchStock;  // NEW: If provided, uses this instead of product.stockQty
+  // ═══ END PHASE B1.2 ═══
 
-  const ProductCard({super.key, required this.product, required this.onTap});
+  const ProductCard({
+    super.key,
+    required this.product,
+    required this.onTap,
+    this.branchStock,  // Optional - backward compatible!
+  });
+
+  // ═══ PHASE B1.2: Helper to get correct stock ═══
+  int get _displayStock => branchStock ?? product.stockQty;
+  bool get _isLowStock => _displayStock <= product.reorderLevel;
+  bool get _isOutOfStock => _displayStock <= 0;
+  // ═══ END PHASE B1.2 ═══
 
   IconData _getCategoryIcon() {
     switch (product.category) {
@@ -48,12 +62,16 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _getCategoryColor();
-    final bool lowStock = product.stockQty <= product.reorderLevel;
+    // ═══ PHASE B1.2: Use branch-aware stock ═══
+    final bool lowStock = _isLowStock;
+    // ═══ END PHASE B1.2 ═══
     final imageBytes = _getImageBytes();
     final hasImage = imageBytes != null;
 
     return GestureDetector(
-      onTap: (AppSettings.allowNegativeStock || product.stockQty > 0) ? onTap : null,
+      // ═══ PHASE B1.2: Use branch-aware stock check ═══
+      onTap: (AppSettings.allowNegativeStock || _displayStock > 0) ? onTap : null,
+      // ═══ END PHASE B1.2 ═══
       child: Card(
         elevation: 2,
         clipBehavior: Clip.antiAlias,
@@ -62,7 +80,9 @@ class ProductCard extends StatelessWidget {
           side: lowStock ? const BorderSide(color: Colors.red, width: 1.5) : BorderSide.none,
         ),
         child: Opacity(
-          opacity: (AppSettings.allowNegativeStock || product.stockQty > 0) ? 1.0 : 0.5,
+          // ═══ PHASE B1.2: Use branch-aware stock ═══
+          opacity: (AppSettings.allowNegativeStock || _displayStock > 0) ? 1.0 : 0.5,
+          // ═══ END PHASE B1.2 ═══
           child: hasImage ? _buildImageCard(imageBytes, lowStock) : _buildIconCard(color, lowStock),
         ),
       ),
@@ -73,11 +93,9 @@ class ProductCard extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Full background image
         Image.memory(imageBytes, fit: BoxFit.cover,
           errorBuilder: (c, e, s) => _buildIconCard(_getCategoryColor(), lowStock)),
 
-        // Gradient overlay for text readability
         Positioned.fill(
           child: DecoratedBox(
             decoration: BoxDecoration(
@@ -97,20 +115,20 @@ class ProductCard extends StatelessWidget {
           ),
         ),
 
-        // Low stock badge
+        // Low stock badge - USES BRANCH STOCK NOW
         if (lowStock)
           Positioned(top: 4, left: 4,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
               child: Text(
-                product.stockQty == 0 ? 'OUT' : 'LOW',
+                _displayStock == 0 ? 'OUT' : 'LOW',
                 style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold),
               ),
             ),
           ),
 
-        // Text at bottom
+        // Text at bottom - USES BRANCH STOCK NOW
         Positioned(left: 6, right: 6, bottom: 6,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,7 +145,7 @@ class ProductCard extends StatelessWidget {
                   Text(product.sellingPrice.toStringAsFixed(2),
                     style: const TextStyle(color: Colors.yellowAccent, fontSize: 13, fontWeight: FontWeight.bold,
                       shadows: [Shadow(blurRadius: 4, color: Colors.black)])),
-                  AppSettings.showStockOnCard ? Text(product.stockQty > 0 ? '${product.stockQty} pcs' : 'OUT',
+                  AppSettings.showStockOnCard ? Text(_displayStock > 0 ? '$_displayStock pcs' : 'OUT',
                     style: TextStyle(
                       color: lowStock ? Colors.redAccent[100] : Colors.white70,
                       fontSize: 9, fontWeight: FontWeight.w600,
@@ -159,8 +177,9 @@ class ProductCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(product.sellingPrice.toStringAsFixed(2),
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+          // USES BRANCH STOCK NOW
           Text(
-            AppSettings.showStockOnCard ? (product.stockQty > 0 ? 'Stock: ${product.stockQty}' : 'OUT OF STOCK') : '',
+            AppSettings.showStockOnCard ? (_displayStock > 0 ? 'Stock: $_displayStock' : 'OUT OF STOCK') : '',
             style: TextStyle(fontSize: 9,
               color: lowStock ? Colors.red : Colors.grey[600],
               fontWeight: lowStock ? FontWeight.bold : FontWeight.normal)),

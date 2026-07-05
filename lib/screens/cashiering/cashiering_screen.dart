@@ -1016,7 +1016,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             maxCrossAxisExtent: 160, childAspectRatio: 0.75, crossAxisSpacing: 8, mainAxisSpacing: 8),
           itemCount: _filteredProducts.length,
           itemBuilder: (context, index) {
-            return ProductCard(product: _filteredProducts[index], onTap: () => _addToCart(_filteredProducts[index]));
+            return ProductCard(product: _filteredProducts[index], onTap: () => _addToCart(_filteredProducts[index]), branchStock: _stockOf(_filteredProducts[index]));
           })),
     ]);
   }
