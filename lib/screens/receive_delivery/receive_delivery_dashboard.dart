@@ -1,6 +1,7 @@
 // lib/screens/receive_delivery/receive_delivery_dashboard.dart
 // Modern SaaS-style dashboard with Plus Jakarta Sans typography
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../models/product_model.dart';
 import 'receive_delivery_screen.dart';
 import 'delivery_model.dart';
@@ -25,6 +26,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
   bool _loading = true;
   String _selectedModule = 'receive';
   bool _sidebarCollapsed = false;
+  bool _detailShowing = false;
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = "";
 
@@ -79,7 +81,11 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(Theme.of(context).textTheme),
+      ),
+      child: Scaffold(
       backgroundColor: _bgSlate,
       body: LayoutBuilder(builder: (context, cons) {
         final isWide = cons.maxWidth >= 900;
@@ -91,7 +97,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
         }
         return _buildMobileLayout();
       }),
-    );
+    ));
   }
 
   // ═══════════════ SIDEBAR (Wide Screen) ═══════════════
@@ -275,7 +281,7 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
   // ═══════════════ MAIN AREA ═══════════════
   Widget _buildMainArea() {
     return Column(children: [
-      _buildTopBar(),
+      if (!_detailShowing) _buildTopBar(),
       Expanded(child: _buildMainContent()),
       _buildFooter(),
     ]);
@@ -388,11 +394,46 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
   Widget _buildMainContent() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     switch (_selectedModule) {
-      case 'receive': return ReceiveDeliveryScreen(products: widget.products);
-      case 'draft': return DraftListScreen(products: widget.products, externalSearchQuery: _searchQuery);
-      case 'submitted': return SubmittedListScreen(products: widget.products, externalSearchQuery: _searchQuery);
-      case 'approved': return ApprovedListScreen(products: widget.products, externalSearchQuery: _searchQuery);
-      case 'rejected': return RejectedListScreen(products: widget.products, externalSearchQuery: _searchQuery);
+      case 'receive':
+        return Navigator(
+          key: ValueKey('nav-receive'),
+          observers: [_DetailRouteObserver(onPush: () => setState(() => _detailShowing = true), onPop: () => setState(() => _detailShowing = false))],
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (_) => ReceiveDeliveryScreen(products: widget.products),
+          ),
+        );
+      case 'draft':
+        return Navigator(
+          key: ValueKey('nav-draft'),
+          observers: [_DetailRouteObserver(onPush: () => setState(() => _detailShowing = true), onPop: () => setState(() => _detailShowing = false))],
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (_) => DraftListScreen(products: widget.products, externalSearchQuery: _searchQuery),
+          ),
+        );
+      case 'submitted':
+        return Navigator(
+          key: ValueKey('nav-submitted'),
+          observers: [_DetailRouteObserver(onPush: () => setState(() => _detailShowing = true), onPop: () => setState(() => _detailShowing = false))],
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (_) => SubmittedListScreen(products: widget.products, externalSearchQuery: _searchQuery),
+          ),
+        );
+      case 'approved':
+        return Navigator(
+          key: ValueKey('nav-approved'),
+          observers: [_DetailRouteObserver(onPush: () => setState(() => _detailShowing = true), onPop: () => setState(() => _detailShowing = false))],
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (_) => ApprovedListScreen(products: widget.products, externalSearchQuery: _searchQuery),
+          ),
+        );
+      case 'rejected':
+        return Navigator(
+          key: ValueKey('nav-rejected'),
+          observers: [_DetailRouteObserver(onPush: () => setState(() => _detailShowing = true), onPop: () => setState(() => _detailShowing = false))],
+          onGenerateRoute: (settings) => MaterialPageRoute(
+            builder: (_) => RejectedListScreen(products: widget.products, externalSearchQuery: _searchQuery),
+          ),
+        );
       default: return _buildDashboardCards();
     }
   }
@@ -643,5 +684,19 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
   void _openRejectedList() async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => RejectedListScreen(products: widget.products)));
     _loadCounts();
+  }
+}
+// Custom NavigatorObserver to detect route push/pop
+class _DetailRouteObserver extends NavigatorObserver {
+  final VoidCallback onPush;
+  final VoidCallback onPop;
+  _DetailRouteObserver({required this.onPush, required this.onPop});
+  @override
+  void didPush(Route route, Route? previousRoute) {
+    if (previousRoute != null) onPush();
+  }
+  @override
+  void didPop(Route route, Route? previousRoute) {
+    onPop();
   }
 }
