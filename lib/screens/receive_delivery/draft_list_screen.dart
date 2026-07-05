@@ -7,7 +7,8 @@ import 'receive_delivery_screen.dart';
 
 class DraftListScreen extends StatefulWidget {
   final List<Product> products;
-  const DraftListScreen({super.key, required this.products});
+  final String externalSearchQuery;
+  const DraftListScreen({super.key, required this.products, this.externalSearchQuery = ""});
 
   @override
   State<DraftListScreen> createState() => _DraftListScreenState();
@@ -90,6 +91,7 @@ class _DraftListScreenState extends State<DraftListScreen> {
                 onBack: () => Navigator.pop(context),
                 onRefresh: _loadDrafts,
                 onTap: _openDraft,
+                externalSearchQuery: widget.externalSearchQuery,
               ),
       ),
     );

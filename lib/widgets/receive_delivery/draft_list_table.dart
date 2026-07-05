@@ -22,6 +22,7 @@ class DraftListTable extends StatefulWidget {
   final VoidCallback? onBack;
   final VoidCallback? onFilter;
   final VoidCallback? onRefresh;
+  final String externalSearchQuery;
 
   const DraftListTable({
     super.key,
@@ -31,6 +32,7 @@ class DraftListTable extends StatefulWidget {
     this.onBack,
     this.onFilter,
     this.onRefresh,
+    this.externalSearchQuery = "",
   });
 
   @override
@@ -50,7 +52,7 @@ class _DraftListTableState extends State<DraftListTable> {
 
   List<DraftItem> get _processed {
     var list = List<DraftItem>.from(widget.drafts);
-    final q = _searchCtrl.text.trim().toLowerCase();
+    final q = widget.externalSearchQuery.isNotEmpty ? widget.externalSearchQuery.toLowerCase() : _searchCtrl.text.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((d) =>
           d.drNumber.toLowerCase().contains(q) ||
@@ -133,10 +135,12 @@ class _Header extends StatelessWidget {
   final ValueChanged<String> onSearch;
   final VoidCallback? onBack, onFilter, onRefresh;
   final int totalCount;
-  const _Header({required this.controller, required this.onSearch, required this.onBack, required this.onFilter, required this.onRefresh, required this.totalCount});
+  const _Header({required this.controller, required this.onSearch, required this.onBack, required this.onFilter, required this.onRefresh,
+    required this.totalCount});
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.of(context).size.width >= 900) return const SizedBox.shrink();
     return Container(color: _DraftTheme.purple,
       padding: const EdgeInsets.fromLTRB(8, 12, 12, 16),
       child: Column(children: [

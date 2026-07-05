@@ -13,7 +13,8 @@ import 'delivery_model.dart';
 
 class SubmittedListScreen extends StatefulWidget {
   final List<Product> products;
-  const SubmittedListScreen({super.key, required this.products});
+  final String externalSearchQuery;
+  const SubmittedListScreen({super.key, required this.products, this.externalSearchQuery = ""});
 
   @override
   State<SubmittedListScreen> createState() => _SubmittedListScreenState();

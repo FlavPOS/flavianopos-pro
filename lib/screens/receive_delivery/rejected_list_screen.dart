@@ -11,7 +11,8 @@ import 'delivery_model.dart';
 
 class RejectedListScreen extends StatefulWidget {
   final List<Product> products;
-  const RejectedListScreen({super.key, required this.products});
+  final String externalSearchQuery;
+  const RejectedListScreen({super.key, required this.products, this.externalSearchQuery = ""});
 
   @override
   State<RejectedListScreen> createState() => _RejectedListScreenState();
@@ -224,6 +225,7 @@ class _RejectedListScreenState extends State<RejectedListScreen> {
                 onRefresh: _loadRejected,
                 onExportAll: _exportAll,
                 onView: _openDetail,
+                externalSearchQuery: widget.externalSearchQuery,
               ),
       ),
     );

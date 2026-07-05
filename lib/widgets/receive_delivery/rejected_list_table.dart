@@ -21,6 +21,7 @@ class RejectedListTable extends StatefulWidget {
   final VoidCallback? onBack;
   final VoidCallback? onRefresh;
   final VoidCallback? onExportAll;
+  final String externalSearchQuery;
 
   const RejectedListTable({
     super.key,
@@ -29,6 +30,7 @@ class RejectedListTable extends StatefulWidget {
     this.onBack,
     this.onRefresh,
     this.onExportAll,
+    this.externalSearchQuery = "",
   });
 
   @override
@@ -48,7 +50,7 @@ class _RejectedListTableState extends State<RejectedListTable> {
 
   List<RejectedItem> get _processed {
     var list = List<RejectedItem>.from(widget.items);
-    final q = _searchCtrl.text.trim().toLowerCase();
+    final q = widget.externalSearchQuery.isNotEmpty ? widget.externalSearchQuery.toLowerCase() : _searchCtrl.text.trim().toLowerCase();
     if (q.isNotEmpty) {
       list = list.where((d) =>
           d.drNumber.toLowerCase().contains(q) ||
@@ -141,6 +143,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.of(context).size.width >= 900) return const SizedBox.shrink();
     return Container(color: _RjTheme.primary,
       padding: const EdgeInsets.fromLTRB(8, 12, 12, 16),
       child: Column(children: [

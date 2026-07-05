@@ -11,7 +11,8 @@ import 'delivery_model.dart';
 
 class ApprovedListScreen extends StatefulWidget {
   final List<Product> products;
-  const ApprovedListScreen({super.key, required this.products});
+  final String externalSearchQuery;
+  const ApprovedListScreen({super.key, required this.products, this.externalSearchQuery = ""});
 
   @override
   State<ApprovedListScreen> createState() => _ApprovedListScreenState();
@@ -216,6 +217,7 @@ class _ApprovedListScreenState extends State<ApprovedListScreen> {
                 onRefresh: _loadApproved,
                 onExportAll: _exportAll,
                 onView: _openDetail,
+                externalSearchQuery: widget.externalSearchQuery,
               ),
       ),
     );
