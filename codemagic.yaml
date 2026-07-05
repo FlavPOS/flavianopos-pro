@@ -7,8 +7,7 @@ workflows:
     environment:
       groups:
         - firebase_credentials
-      android_signing:
-        - flavpos_keystore
+        - keystore_credentials
       flutter: stable
     
     triggering:
@@ -23,6 +22,16 @@ workflows:
       - name: Set up local.properties
         script: |
           echo "flutter.sdk=$HOME/programs/flutter" > "$CM_BUILD_DIR/android/local.properties"
+      
+      - name: Set up keystore from environment
+        script: |
+          echo $CM_KEYSTORE | base64 --decode > $CM_BUILD_DIR/android/app/upload-keystore.jks
+          cat > $CM_BUILD_DIR/android/key.properties <<PROPS
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          PROPS
       
       - name: Get Flutter packages
         script: |
