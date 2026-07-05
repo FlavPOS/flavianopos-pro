@@ -47,5 +47,3 @@ workflows:
           app_id: $FIREBASE_APP_ID
           groups:
             - myphone
-          release_notes: |
-            🚀 FLAV POS auto-build from Codemagic
