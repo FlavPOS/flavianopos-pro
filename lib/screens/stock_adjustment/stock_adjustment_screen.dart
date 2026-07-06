@@ -255,8 +255,9 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       );
       print('[ADJ] setStock $branchCode/${item.product.sku}: $currentBranchStock -> $newBranchStock (ok=$ok)');
 
-      // Sync to Firebase per-branch
-      SyncBridge.enqueueAdjustment(record, op: SyncOp.create);
+      // Sync to Firebase per-branch (await to ensure it starts before navigation)
+      await SyncBridge.enqueueAdjustment(record, op: SyncOp.create);
+      print('[ADJ] Enqueued to sync: ${record.id} branch=${record.branchCode}');
 
       // Legacy: also update in-memory Product cache (backward compat)
       final updated = item.updatedProduct;
