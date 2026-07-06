@@ -237,12 +237,22 @@ class _JoinExistingBranchScreenState extends State<JoinExistingBranchScreen> {
       // 4) 🎯 KEY: Write user to local SQLite with the typed PIN
       await _writeUserToLocalDb(fbUser: me, typedPin: pin);
 
-      // 5) Mirror company + branches
+      // 5) Mirror company + branches + INVENTORY (multi-device sync)
       try {
         final profile = await _lookup.fetchCompanyProfile(companyCode) ?? {};
         await _mirror.mirrorCompany(profile: profile, companyCode: companyCode, deviceId: deviceId);
         await _mirror.mirrorBranches(branches: _branches, companyCode: companyCode, deviceId: deviceId);
-      } catch (_) {}
+
+        // Mirror inventory of the branch being joined (so this device sees existing stock)
+        final invCount = await _mirror.mirrorBranchInventory(
+          companyCode: companyCode,
+          branchCode: myBranchId,
+          deviceId: deviceId,
+        );
+        print('[JOIN] Mirrored $invCount inventory items for branch $myBranchId');
+      } catch (e) {
+        print('[JOIN] Mirror error: $e');
+      }
 
       // 6) Self-heal: refresh Firebase user record with normalized role
       await _selfHealUploadUser(user: me, companyCode: companyCode, branchId: myBranchId);

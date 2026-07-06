@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart' hide Transaction;
 import 'database_helper.dart';
+import '../services/firebase_config_service.dart';
+import '../services/firebase_realtime_service.dart';
 import '../models/company_model.dart';
 import '../models/sync_queue_model.dart';
 
@@ -110,6 +112,79 @@ class FirebaseToSqliteMirror {
         'updatedBy_sync': 'mirror',
         'isDeleted': 0,
       }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+  }
+
+
+  /// Mirror ALL branch inventory items from Firebase to local SQLite.
+  /// Called when device joins an existing branch/company.
+  /// Path: companies/{companyCode}/branchInventory/{branchCode}/{sku}
+  Future<int> mirrorBranchInventory({
+    required String companyCode,
+    required String branchCode,
+    required String deviceId,
+  }) async {
+    int synced = 0;
+    try {
+      final cfg = await FirebaseConfigService().load();
+      if (cfg == null) return 0;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final fbDb = FirebaseRealtimeService.instance.db;
+      if (fbDb == null) return 0;
+
+      final path = 'companies/$companyCode/branchInventory/$branchCode';
+      print('[MIRROR-INV] Fetching from: $path');
+
+      final snap = await fbDb.ref(path).get();
+      if (!snap.exists) {
+        print('[MIRROR-INV] No inventory found for branch $branchCode');
+        return 0;
+      }
+
+      final data = snap.value as Map?;
+      if (data == null) return 0;
+
+      final db = await DatabaseHelper().database;
+      final now = DateTime.now().toUtc().toIso8601String();
+
+      for (final entry in data.entries) {
+        final sku = entry.key.toString();
+        final item = entry.value;
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+
+        try {
+          await db.insert(
+            'branch_inventory',
+            {
+              'branchId': branchCode,
+              'productId': sku,
+              'stockQty': (m['stockQty'] as num?)?.toInt() ?? 0,
+              'reservedQty': (m['reservedQty'] as num?)?.toInt() ?? 0,
+              'inTransitInQty': (m['inTransitInQty'] as num?)?.toInt() ?? 0,
+              'inTransitOutQty': (m['inTransitOutQty'] as num?)?.toInt() ?? 0,
+              'reorderLevel': (m['reorderLevel'] as num?)?.toInt() ?? 5,
+              'lastUpdated': m['lastUpdated']?.toString() ?? now,
+              'updatedAt': m['updatedAt']?.toString() ?? now,
+              'deviceId': m['deviceId']?.toString() ?? deviceId,
+              'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+              'isMigrated': 1,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          synced++;
+        } catch (e) {
+          print('[MIRROR-INV] Failed to insert $sku: $e');
+        }
+      }
+
+      print('[MIRROR-INV] Synced $synced items for branch $branchCode');
+      return synced;
+    } catch (e) {
+      print('[MIRROR-INV] Error: $e');
+      return synced;
     }
   }
 }
