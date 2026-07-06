@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:sqflite/sqflite.dart' hide Transaction;
 import '../helpers/database_helper.dart';
+import 'device_id_service.dart';
 import '../helpers/sync_queue_dao.dart';
 import '../helpers/cache_reload_helper.dart';
 import '../models/sync_queue_model.dart';
@@ -282,6 +283,14 @@ class SyncManager {
           .onChildAdded.listen((event) => _onUserUpdate(event, branchId)));
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
           .onChildChanged.listen((event) => _onUserUpdate(event, branchId)));
+
+      // 📦 BRANCH INVENTORY (multi-device same-branch real-time sync)
+      // Listens for stock changes made by other devices in the same branch.
+      // Uses deviceId comparison to prevent sync loops (ignore own writes).
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchInventory/$branchId')
+          .onChildAdded.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchInventory/$branchId')
+          .onChildChanged.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
     }
   }
 
@@ -328,6 +337,53 @@ class SyncManager {
       _showSnackBar?.call('🔄 Branch "${m['branchName']}" updated from cloud');
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ branch realtime: $e');
+    }
+  }
+
+  /// Handles real-time branchInventory updates from Firebase.
+  /// Prevents sync loops by ignoring changes from THIS device.
+  Future<void> _onInventoryUpdate(DatabaseEvent event, String companyCode, String branchId) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final sku = (event.snapshot.key ?? '').toString();
+      if (sku.isEmpty) return;
+
+      // ═══ SYNC LOOP PREVENTION ═══
+      // Skip updates that originated from THIS device
+      final incomingDeviceId = (m['deviceId'] ?? '').toString();
+      final myDeviceId = await DeviceIdService().getOrCreate();
+      if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) {
+        // Own change - already applied locally, no need to re-apply
+        return;
+      }
+
+      // Update local SQLite from Firebase (from OTHER device)
+      final db = await DatabaseHelper().database;
+      await db.insert('branch_inventory', {
+        'branchId': branchId,
+        'productId': sku,
+        'stockQty': (m['stockQty'] as num?)?.toInt() ?? 0,
+        'reservedQty': (m['reservedQty'] as num?)?.toInt() ?? 0,
+        'inTransitInQty': (m['inTransitInQty'] as num?)?.toInt() ?? 0,
+        'inTransitOutQty': (m['inTransitOutQty'] as num?)?.toInt() ?? 0,
+        'reorderLevel': (m['reorderLevel'] as num?)?.toInt() ?? 5,
+        'lastUpdated': (m['lastUpdated'] ?? DateTime.now().toUtc().toIso8601String()).toString(),
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        'deviceId': incomingDeviceId,  // Preserve which device made the change
+        'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
+        'isMigrated': 1,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      if (kDebugMode) {
+        debugPrint('[SYNC-INV] Updated $sku from device $incomingDeviceId (stock: ${m['stockQty']}) in branch $branchId');
+      }
+
+      // Show notification (throttled to avoid spam)
+      _showSnackBar?.call('📦 Inventory synced from another device');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SYNC-INV] Error: $e');
     }
   }
 
