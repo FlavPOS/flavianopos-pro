@@ -42,6 +42,7 @@ class SyncBridge {
       'companyCode': cfg?.companyCode ?? '',
       'branchId': assign['branchId'] ?? '',
       'branchName': assign['branchName'] ?? '',
+      'role': assign['role'] ?? '',
       'deviceId': deviceId,
     };
   }
@@ -496,8 +497,38 @@ class SyncBridge {
     if (!await _isMultiple()) return;
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
-    final branchId = ctx['branchId']!;
-    if (companyCode.isEmpty || branchId.isEmpty) return;
+    String branchId = ctx['branchId']!;
+    final role = (ctx['role'] ?? '').toLowerCase();
+
+    if (companyCode.isEmpty) return;
+
+    // ═══ HEAD OFFICE DETECTION ═══
+    // If branchId is empty (Head Office context has no branchId)
+    // or role indicates Head Office, use HO001 branch code
+    final isHeadOffice = branchId.isEmpty ||
+                         branchId.toUpperCase() == 'HEADOFFICE' ||
+                         branchId.toUpperCase() == 'HO' ||
+                         role == 'admin' ||
+                         role == 'headoffice' ||
+                         role == 'head_office';
+
+    if (isHeadOffice) {
+      // Load Branch masterfile if needed
+      if (Branch.allBranches.isEmpty) {
+        await Branch.loadFromDB();
+      }
+      // Find configured Head Office branch
+      final ho = Branch.getHeadOffice();
+      branchId = ho?.id ?? 'HO001';
+      if (kDebugMode) debugPrint('[Z-SYNC] Head Office user - using branchId=\$branchId');
+    } else {
+      if (kDebugMode) debugPrint('[Z-SYNC] Branch user - using branchId=\$branchId');
+    }
+
+    if (branchId.isEmpty) {
+      if (kDebugMode) debugPrint('[Z-SYNC] SKIP - no branchId resolved');
+      return;
+    }
 
     // 💰 Fetch denominations from local SQLite to include in Firebase payload
     final denomList = <Map<String, dynamic>>[];
@@ -521,13 +552,31 @@ class SyncBridge {
       if (kDebugMode) debugPrint("⚠️ Denom fetch for sync failed: $e");
     }
 
+    // ═══ Resolve branch metadata from masterfile ═══
+    // This ensures branchName is correct even when device has empty branchName
+    if (Branch.allBranches.isEmpty) {
+      await Branch.loadFromDB();
+    }
+    final branchInfo = Branch.findByCode(branchId);
+    final resolvedBranchName = branchInfo?.name ??
+                                (ctx['branchName']?.isNotEmpty == true ? ctx['branchName']! :
+                                 (r.branch.isNotEmpty ? r.branch : 'Head Office'));
+    final resolvedBranchType = branchInfo?.branchType ??
+                               (isHeadOffice ? Branch.typeHeadOffice : Branch.typeBranch);
+
     final payload = {
       'reportId': r.reportId,
       'reportDate': r.reportDate.toIso8601String(),
       'generatedAt': r.generatedAt.toIso8601String(),
-      'branch': r.branch,
-      'branchId': branchId,
-      'branchName': ctx['branchName'] ?? '',
+
+      // ═══ Branch identity (per-branch isolation) ═══
+      'branch': resolvedBranchName,           // Display name (backward compat)
+      'branchId': branchId,                    // Legacy field
+      'branchCode': branchId,                  // ⭐ NEW: System key (same as branchId)
+      'branchName': resolvedBranchName,        // ⭐ FIXED: Uses masterfile name
+      'branchType': resolvedBranchType,        // ⭐ NEW: BRANCH | HEAD_OFFICE | WAREHOUSE
+      'isHeadOffice': isHeadOffice,            // ⭐ NEW: Boolean flag
+
       'cashier': r.cashier,
       'companyCode': companyCode,
       'grossSales': r.grossSales,

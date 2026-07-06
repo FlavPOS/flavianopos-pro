@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sqflite/sqflite.dart' hide Transaction;
 import 'package:uuid/uuid.dart';
 import '../../helpers/database_helper.dart';
@@ -7,10 +8,12 @@ import '../../helpers/sync_queue_dao.dart';
 import '../../helpers/cache_reload_helper.dart';
 import '../../models/sync_queue_model.dart';
 import '../../models/user_model.dart';
+import '../../models/branch_model.dart';
 import '../../services/company_lookup_service.dart';
 import '../../services/device_assignment_service.dart';
 import '../../services/device_id_service.dart';
 import '../../services/firebase_config_service.dart';
+import '../../utils/uppercase_text_formatter.dart';
 import '../auth/login_screen.dart';
 
 class AddNewBranchScreen extends StatefulWidget {
@@ -23,6 +26,7 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
   static const Color _purple = Color(0xFF6A1B9A);
   static const Color _lightPurple = Color(0xFFEDE7F6);
 
+  final _branchCode = TextEditingController();
   final _branchName = TextEditingController();
   final _branchAddress = TextEditingController();
   final _branchPhone = TextEditingController();
@@ -30,26 +34,49 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
   final _newAdminFullName = TextEditingController();
   final _newAdminPin = TextEditingController();
   final _newAdminConfirmPin = TextEditingController();
+  String _branchType = Branch.typeHeadOffice; // Default: first branch = Head Office
   bool _saving = false;
   bool _showPw = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _autoGenerateCode();
+  }
+
+  void _autoGenerateCode() {
+    switch (_branchType) {
+      case 'HEAD_OFFICE': _branchCode.text = 'HO001'; break;
+      case 'WAREHOUSE': _branchCode.text = 'WH001'; break;
+      default: _branchCode.text = 'BR001'; break;
+    }
+  }
+
+  @override
+  void dispose() {
+    _branchCode.dispose();
+    _branchName.dispose();
+    _branchAddress.dispose();
+    _branchPhone.dispose();
+    _newAdminUsername.dispose();
+    _newAdminFullName.dispose();
+    _newAdminPin.dispose();
+    _newAdminConfirmPin.dispose();
+    super.dispose();
+  }
+
   Future<void> _onCreate() async {
-    // ---- Validation ----
-    if (_branchName.text.trim().isEmpty) {
-      _snack('Enter the branch name.'); return;
-    }
-    if (_newAdminUsername.text.trim().isEmpty) {
-      _snack('Enter the new branch admin username.'); return;
-    }
-    if (_newAdminFullName.text.trim().isEmpty) {
-      _snack('Enter the admin full name.'); return;
-    }
-    if (_newAdminPin.text.length != 6) {
-      _snack('PIN must be exactly 6 digits.'); return;
-    }
-    if (_newAdminPin.text != _newAdminConfirmPin.text) {
-      _snack('PINs do not match.'); return;
-    }
+    final code = _branchCode.text.trim().toUpperCase();
+
+    // ⭐ Branch Code Validation
+    final codeError = Branch.validateBranchCode(code);
+    if (codeError != null) { _snack(codeError); return; }
+
+    if (_branchName.text.trim().isEmpty) { _snack('Enter the branch name.'); return; }
+    if (_newAdminUsername.text.trim().isEmpty) { _snack('Enter the new branch admin username.'); return; }
+    if (_newAdminFullName.text.trim().isEmpty) { _snack('Enter the admin full name.'); return; }
+    if (_newAdminPin.text.length != 6) { _snack('PIN must be exactly 6 digits.'); return; }
+    if (_newAdminPin.text != _newAdminConfirmPin.text) { _snack('PINs do not match.'); return; }
 
     setState(() => _saving = true);
     try {
@@ -60,17 +87,27 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
       final lookup = CompanyLookupService();
       final deviceId = await DeviceIdService().getOrCreate();
 
-      // Also check locally
+      // ⭐ Check Branch Code uniqueness in Firebase
+      try {
+        final existing = await lookup.fetchBranches(companyCode);
+        final exists = existing.any((b) =>
+            ((b['branchCode'] ?? '').toString().toUpperCase() == code) ||
+            ((b['branchId'] ?? '').toString().toUpperCase() == code));
+        if (exists) throw Exception('Branch Code "$code" already exists in this company!');
+      } catch (e) {
+        if (e.toString().contains('already exists')) rethrow;
+        // Ignore other errors (device may be offline)
+      }
+
       final db = await DatabaseHelper().database;
       final localTaken = await db.rawQuery(
         'SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1',
         [_newAdminUsername.text.trim()],
       );
       if (localTaken.isNotEmpty) {
-        throw Exception('Username "${_newAdminUsername.text.trim()}" is already used on THIS device. (Each branch can have its own admin — this error only fires if you try to create the same username twice on the same device.)');
+        throw Exception('Username "${_newAdminUsername.text.trim()}" already used on this device.');
       }
 
-      // ---- Mirror existing company + branches ----
       final mirror = FirebaseToSqliteMirror();
       try {
         final profile = await lookup.fetchCompanyProfile(companyCode) ?? {};
@@ -79,17 +116,20 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
         await mirror.mirrorBranches(branches: existing, companyCode: companyCode, deviceId: deviceId);
       } catch (_) {}
 
-      // ---- 1) CREATE THE BRANCH ----
-      final newBranchId = const Uuid().v4();
+      // ⭐ USE BRANCH CODE AS ID (not UUID!)
+      final newBranchId = code;
       final now = DateTime.now().toUtc().toIso8601String();
+      final isHeadOffice = _branchType == Branch.typeHeadOffice;
+
       final branchPayload = {
         'branchId': newBranchId,
         'companyCode': companyCode,
-        'branchCode': _branchName.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '-'),
+        'branchCode': code,
         'branchName': _branchName.text.trim(),
+        'branchType': _branchType,
         'address': _branchAddress.text.trim(),
         'phone': _branchPhone.text.trim(),
-        'isMainBranch': false,
+        'isMainBranch': isHeadOffice,
         'isActive': true,
         'createdAt': now,
         'updatedAt': now,
@@ -98,8 +138,9 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
       };
 
       await db.insert('branches', {
-        'id': newBranchId,
+        'id': newBranchId,               // ⭐ CODE, NOT UUID!
         'name': _branchName.text.trim(),
+        'branchType': _branchType,        // ⭐ NEW
         'address': _branchAddress.text.trim(),
         'phone': _branchPhone.text.trim(),
         'isActive': 1,
@@ -118,7 +159,7 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
         'createdBy_sync': _newAdminUsername.text.trim(),
         'updatedBy_sync': _newAdminUsername.text.trim(),
         'isDeleted': 0,
-        'isMainBranch': 0,
+        'isMainBranch': isHeadOffice ? 1 : 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       await SyncQueueDao().enqueue(
@@ -138,9 +179,9 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
             where: 'entityType = ? AND entityId = ?', whereArgs: ['branch', newBranchId]);
       } catch (_) {}
 
-      // ---- 2) CREATE THE NEW BRANCH ADMIN USER ----
+      final adminRole = isHeadOffice ? 'Admin' : 'Manager';
       final newAdminUserId = 'USR-${const Uuid().v4().substring(0, 8).toUpperCase()}';
-      final perms = AppUser.rolePresets['Manager'] ?? <String>[];
+      final perms = AppUser.rolePresets[adminRole] ?? <String>[];
       final newAdmin = AppUser(
         id: newAdminUserId,
         name: _newAdminFullName.text.trim(),
@@ -148,17 +189,16 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
         pin: _newAdminPin.text,
         email: '',
         phone: '',
-        role: 'Manager',
+        role: adminRole,
         branch: _branchName.text.trim(),
         joinDate: DateTime.now(),
         lastLogin: null,
         isActive: true,
         permissions: perms,
       );
-      AppUser.addUser(newAdmin);   // 🎯 canonical — SyncBridge auto-syncs to Firebase
+      AppUser.addUser(newAdmin);
       await Future.delayed(const Duration(milliseconds: 80));
 
-      // Patch sync metadata on the just-inserted row
       await db.update('users', {
         'syncStatus': SyncStatus.pending,
         'lastModifiedAt': now,
@@ -172,21 +212,19 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
         'isDeleted': 0,
       }, where: 'id = ?', whereArgs: [newAdminUserId]);
 
-      // ---- 3) ASSIGN THIS DEVICE TO THE NEW BRANCH ----
       await DeviceAssignmentService().assign(
         companyId: companyCode,
         companyCode: companyCode,
-        branchId: newBranchId,
+        branchId: newBranchId,           // ⭐ Now HO001 or BR001!
         branchName: _branchName.text.trim(),
-        role: 'Manager',
+        role: adminRole,
       );
 
-      // ---- 4) REGISTER DEVICE ----
       try {
         await lookup.registerDevice(
           companyCode: companyCode, deviceId: deviceId,
           branchId: newBranchId, branchName: _branchName.text.trim(),
-          role: 'Manager',
+          role: adminRole,
           userId: newAdminUserId,
           username: _newAdminUsername.text.trim(),
         );
@@ -197,16 +235,16 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
 
       if (!mounted) return;
       await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('🎉 New Branch Ready!'),
+        title: Text('🎉 ${isHeadOffice ? "Head Office" : "Branch"} Ready!'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Branch "${_branchName.text.trim()}" is live.', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('$code - ${_branchName.text.trim()}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             const Text('This device is now assigned to it.'),
             const SizedBox(height: 12),
-            const Text('Login as the new branch admin:', style: TextStyle(color: Colors.black54)),
+            const Text('Login credentials:', style: TextStyle(color: Colors.black54)),
             const SizedBox(height: 4),
             Text('• Username: ${_newAdminUsername.text.trim()}'),
             const Text('• PIN: (the one you just typed)'),
@@ -237,7 +275,7 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
       backgroundColor: _lightPurple,
       appBar: AppBar(
         backgroundColor: _purple, foregroundColor: Colors.white,
-        title: const Text('Add New Branch'),
+        title: const Text('Set Up Branch'),
       ),
       body: SafeArea(child: Center(child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -249,28 +287,90 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 const Icon(Icons.add_business_outlined, size: 56, color: _purple),
                 const SizedBox(height: 8),
-                const Text('Set Up a New Branch', textAlign: TextAlign.center,
+                const Text('Set Up Your Location', textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _purple)),
                 const SizedBox(height: 4),
                 const Text(
-                  'Create the branch and its first admin in one step. This device will be assigned to the new branch.',
+                  'Create the location (Head Office / Warehouse / Branch) and its admin. This device will be assigned to it.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
                 const SizedBox(height: 18),
 
-                // ── Branch section ──
-                _section('Branch Details'),
-                _field(_branchName, 'Branch Name * (e.g. Lapu-Lapu Branch)', Icons.store_outlined),
+                // ⭐ Branch Identity Section
+                _section('Location Identity'),
+
+                // Branch Type dropdown
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _branchType,
+                    decoration: InputDecoration(
+                      labelText: 'Location Type *',
+                      prefixIcon: const Icon(Icons.category, color: _purple),
+                      filled: true, fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Colors.black12)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _purple, width: 1.5)),
+                      helperText: 'First location is usually Head Office',
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'HEAD_OFFICE', child: Text('🏢 Head Office / Main Warehouse')),
+                      DropdownMenuItem(value: 'WAREHOUSE', child: Text('🏭 Warehouse')),
+                      DropdownMenuItem(value: 'BRANCH', child: Text('🏪 Branch / Store')),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setState(() {
+                        _branchType = v;
+                        _autoGenerateCode();
+                      });
+                    },
+                  ),
+                ),
+
+                // Branch Code field
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller: _branchCode,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_-]')),
+                      LengthLimitingTextInputFormatter(20),
+                      UpperCaseTextFormatter(),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Location Code *',
+                      hintText: 'HO001',
+                      helperText: 'Example: HO001 (Head Office), BR001 (Branch), WH001 (Warehouse)',
+                      prefixIcon: const Icon(Icons.qr_code_2, color: _purple),
+                      filled: true, fillColor: Colors.white,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Colors.black12)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: _purple, width: 1.5)),
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.refresh, color: _purple),
+                        tooltip: 'Auto-generate code',
+                        onPressed: _autoGenerateCode,
+                      ),
+                    ),
+                  ),
+                ),
+
+                _section('Location Details'),
+                _field(_branchName, 'Location Name * (e.g. Head Office)', Icons.store_outlined),
                 _field(_branchAddress, 'Address', Icons.location_on_outlined),
                 _field(_branchPhone, 'Phone', Icons.phone_outlined,
                     keyboardType: TextInputType.phone),
 
                 const SizedBox(height: 14),
-                _section('New Branch Admin'),
+                _section('Admin Account'),
                 const Padding(
                   padding: EdgeInsets.only(bottom: 8),
-                  child: Text('A fresh admin account that controls this branch.',
+                  child: Text('This admin will control this location and can add cashiers later.',
                       style: TextStyle(fontSize: 11, color: Colors.black54)),
                 ),
                 _field(_newAdminFullName, 'Full Name *', Icons.badge_outlined),
@@ -296,7 +396,7 @@ class _AddNewBranchScreenState extends State<AddNewBranchScreen> {
                       ? const SizedBox(height: 18, width: 18,
                           child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
                       : const Icon(Icons.check),
-                  label: Text(_saving ? 'Creating...' : 'Create Branch & Admin'),
+                  label: Text(_saving ? 'Creating...' : 'Create Location & Admin'),
                 )),
               ]),
             ),
