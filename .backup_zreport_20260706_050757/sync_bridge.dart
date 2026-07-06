@@ -5,7 +5,6 @@ import '../models/incident_report_model.dart';
 import '../helpers/database_helper.dart';
 import '../helpers/sync_queue_dao.dart';
 import '../models/sync_queue_model.dart';
-import '../screens/stock_adjustment/adjustment_model.dart';
 import '../models/user_model.dart';
 import '../models/branch_model.dart';
 import '../models/product_model.dart';
@@ -43,7 +42,6 @@ class SyncBridge {
       'companyCode': cfg?.companyCode ?? '',
       'branchId': assign['branchId'] ?? '',
       'branchName': assign['branchName'] ?? '',
-      'role': assign['role'] ?? '',
       'deviceId': deviceId,
     };
   }
@@ -498,38 +496,8 @@ class SyncBridge {
     if (!await _isMultiple()) return;
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
-    String branchId = ctx['branchId']!;
-    final role = (ctx['role'] ?? '').toLowerCase();
-
-    if (companyCode.isEmpty) return;
-
-    // ═══ HEAD OFFICE DETECTION ═══
-    // If branchId is empty (Head Office context has no branchId)
-    // or role indicates Head Office, use HO001 branch code
-    final isHeadOffice = branchId.isEmpty ||
-                         branchId.toUpperCase() == 'HEADOFFICE' ||
-                         branchId.toUpperCase() == 'HO' ||
-                         role == 'admin' ||
-                         role == 'headoffice' ||
-                         role == 'head_office';
-
-    if (isHeadOffice) {
-      // Load Branch masterfile if needed
-      if (Branch.allBranches.isEmpty) {
-        await Branch.loadFromDB();
-      }
-      // Find configured Head Office branch
-      final ho = Branch.getHeadOffice();
-      branchId = ho?.id ?? 'HO001';
-      if (kDebugMode) debugPrint('[Z-SYNC] Head Office user - using branchId=\$branchId');
-    } else {
-      if (kDebugMode) debugPrint('[Z-SYNC] Branch user - using branchId=\$branchId');
-    }
-
-    if (branchId.isEmpty) {
-      if (kDebugMode) debugPrint('[Z-SYNC] SKIP - no branchId resolved');
-      return;
-    }
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty || branchId.isEmpty) return;
 
     // 💰 Fetch denominations from local SQLite to include in Firebase payload
     final denomList = <Map<String, dynamic>>[];
@@ -553,48 +521,13 @@ class SyncBridge {
       if (kDebugMode) debugPrint("⚠️ Denom fetch for sync failed: $e");
     }
 
-    // ═══ Resolve branch metadata from masterfile ═══
-    // Force reload branches from DB to ensure fresh data
-    await Branch.loadFromDB();
-    final branchInfo = Branch.findByCode(branchId);
-
-    final resolvedBranchName = branchInfo?.name ??
-                                (ctx['branchName']?.isNotEmpty == true ? ctx['branchName']! :
-                                 (r.branch.isNotEmpty ? r.branch : 'Head Office'));
-
-    // Determine branchType with priority:
-    // 1. From Branch masterfile if found
-    // 2. If detected as Head Office (isHeadOffice = true), use HEAD_OFFICE
-    // 3. If branchId starts with 'HO', use HEAD_OFFICE
-    // 4. If branchId starts with 'WH', use WAREHOUSE
-    // 5. Default: BRANCH
-    String resolvedBranchType;
-    if (branchInfo != null) {
-      resolvedBranchType = branchInfo.branchType;
-    } else if (isHeadOffice || branchId.toUpperCase().startsWith('HO')) {
-      resolvedBranchType = Branch.typeHeadOffice;
-    } else if (branchId.toUpperCase().startsWith('WH')) {
-      resolvedBranchType = Branch.typeWarehouse;
-    } else {
-      resolvedBranchType = Branch.typeBranch;
-    }
-
-    // Update isHeadOffice based on resolved type (consistency)
-    final actuallyIsHeadOffice = resolvedBranchType == Branch.typeHeadOffice;
-
     final payload = {
       'reportId': r.reportId,
       'reportDate': r.reportDate.toIso8601String(),
       'generatedAt': r.generatedAt.toIso8601String(),
-
-      // ═══ Branch identity (per-branch isolation) ═══
-      'branch': resolvedBranchName,           // Display name (backward compat)
-      'branchId': branchId,                    // Legacy field
-      'branchCode': branchId,                  // ⭐ NEW: System key (same as branchId)
-      'branchName': resolvedBranchName,        // ⭐ FIXED: Uses masterfile name
-      'branchType': resolvedBranchType,        // ⭐ NEW: BRANCH | HEAD_OFFICE | WAREHOUSE
-      'isHeadOffice': actuallyIsHeadOffice,   // ⭐ NEW: Boolean flag (resolved)
-
+      'branch': r.branch,
+      'branchId': branchId,
+      'branchName': ctx['branchName'] ?? '',
       'cashier': r.cashier,
       'companyCode': companyCode,
       'grossSales': r.grossSales,
@@ -1153,82 +1086,6 @@ class SyncBridge {
       await _markQueueSynced('auditTrail', auditId);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Audit Trail upload failed: $e');
-    }
-  }
-
-
-  // ═══════════════════ STOCK ADJUSTMENTS (per-branch multi-device sync) ═══════════════════
-  static Future<void> enqueueAdjustment(AdjustmentRecord adj, {required String op}) async {
-    if (!await _isMultiple()) return;
-    final ctx = await _context();
-    final companyCode = ctx['companyCode']!;
-    final branchId = adj.branchCode.isNotEmpty ? adj.branchCode : (ctx['branchId'] ?? '');
-
-    if (companyCode.isEmpty || branchId.isEmpty) {
-      if (kDebugMode) debugPrint('[ADJ-SYNC] Skip - missing companyCode or branchId');
-      return;
-    }
-
-    final payload = {
-      'id': adj.id,
-      'companyCode': companyCode,
-      'branchCode': branchId,
-      'branchName': adj.branchName,
-      'productId': adj.productId,
-      'sku': adj.sku,
-      'itemName': adj.itemName,
-      'adjustmentType': adj.adjustmentType,
-      'quantity': adj.quantity,
-      'oldStock': adj.oldStock,
-      'newStock': adj.newStock,
-      'reason': adj.reason,
-      'notes': adj.notes,
-      'cost': adj.cost,
-      'retail': adj.retail,
-      'costImpact': adj.costImpact,
-      'createdBy': adj.createdBy,
-      'createdByUserId': adj.createdByUserId,
-      'approvedBy': adj.approvedBy,
-      'approvedByUserId': adj.approvedByUserId,
-      'deviceId': adj.deviceId,
-      'dateTime': adj.dateTime.toIso8601String(),
-      'updatedAt': DateTime.now().toUtc().toIso8601String(),
-      'isDeleted': op == SyncOp.delete,
-    };
-
-    final path = 'companies/$companyCode/stockAdjustments/$branchId/${adj.id}';
-
-    await _queue.enqueue(
-      entityType: 'stockAdjustment',
-      entityId: adj.id,
-      operation: op,
-      firebasePath: path,
-      payload: payload,
-      companyId: companyCode,
-      branchId: branchId,
-      deviceId: adj.deviceId,
-      priority: SyncPriority.p4Transactional,
-    );
-
-    _fireAndForget(() => _uploadAdjustmentToFirebase(companyCode, branchId, adj.id, payload));
-  }
-
-  static Future<void> _uploadAdjustmentToFirebase(
-      String companyCode, String branchId, String adjId,
-      Map<String, dynamic> payload) async {
-    try {
-      final cfg = await _cfgSvc.load();
-      if (cfg == null) return;
-      if (!FirebaseRealtimeService.instance.isInitialized) {
-        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
-      }
-      final db = FirebaseRealtimeService.instance.db;
-      if (db == null) return;
-      await db.ref('companies/$companyCode/stockAdjustments/$branchId/$adjId').set(payload);
-      await _markQueueSynced('stockAdjustment', adjId);
-      if (kDebugMode) debugPrint('[ADJ-SYNC] Uploaded: $adjId');
-    } catch (e) {
-      if (kDebugMode) debugPrint('[ADJ-SYNC] Upload failed: $e');
     }
   }
 }

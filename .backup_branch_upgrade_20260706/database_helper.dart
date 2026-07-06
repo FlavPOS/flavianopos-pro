@@ -235,14 +235,11 @@ class DatabaseHelper {
     await db.execute('''
     CREATE TABLE branches (
     id TEXT PRIMARY KEY, name TEXT NOT NULL,
-    branchType TEXT DEFAULT 'BRANCH',
     address TEXT DEFAULT '', phone TEXT DEFAULT '',
     isActive INTEGER DEFAULT 1, email TEXT DEFAULT '',
     manager TEXT DEFAULT '', createdDate TEXT, imagePath TEXT
     )
     ''');
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_branches_type ON branches(branchType)");
-    await db.execute("CREATE INDEX IF NOT EXISTS idx_branches_active ON branches(isActive)");
 
     // ── 8. employees ──
     await db.execute('''
@@ -444,10 +441,6 @@ class DatabaseHelper {
       await db.execute("ALTER TABLE branches ADD COLUMN manager TEXT DEFAULT ''");
       await db.execute("ALTER TABLE branches ADD COLUMN createdDate TEXT");
       await db.execute("ALTER TABLE branches ADD COLUMN imagePath TEXT");
-      // Branch Code architecture - Phase 1
-      try { await db.execute("ALTER TABLE branches ADD COLUMN branchType TEXT DEFAULT 'BRANCH'"); } catch (_) {}
-      try { await db.execute("CREATE INDEX IF NOT EXISTS idx_branches_type ON branches(branchType)"); } catch (_) {}
-      try { await db.execute("CREATE INDEX IF NOT EXISTS idx_branches_active ON branches(isActive)"); } catch (_) {}
 
       // Create 10 new tables
       await db.execute('CREATE TABLE IF NOT EXISTS employees (id TEXT PRIMARY KEY, branchId TEXT NOT NULL, name TEXT NOT NULL, role TEXT DEFAULT \'Staff\', phone TEXT DEFAULT \'\', email TEXT DEFAULT \'\', salary REAL DEFAULT 0, isActive INTEGER DEFAULT 1, dateHired TEXT NOT NULL, notes TEXT DEFAULT \'\', FOREIGN KEY (branchId) REFERENCES branches(id))');
