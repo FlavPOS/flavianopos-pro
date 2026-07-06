@@ -199,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           context,
           MaterialPageRoute(
             builder: (context) =>
-                StockAdjustmentScreen(branch: widget.branch),
+                StockAdjustmentScreen(branch: widget.branch, userName: widget.userName),
           ),
         ).then((_) => setState(() {}));
         break;

@@ -11,13 +11,25 @@ import 'adjustment_icon_map.dart';
 import 'adjustment_reasons_settings_screen.dart';
 import '../../helpers/database_helper.dart';
 import '../../models/user_model.dart';
+import '../../models/branch_model.dart';
+import '../../services/branch_inventory_service.dart';
+import '../../services/device_assignment_service.dart';
+import '../../services/device_id_service.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 import '../inventory/inventory_screen.dart';
 
 class StockAdjustmentScreen extends StatefulWidget {
   final Product? initialProduct;
   final String branch;
+  final String userName;
 
-  const StockAdjustmentScreen({super.key, this.initialProduct, required this.branch});
+  const StockAdjustmentScreen({
+    super.key,
+    this.initialProduct,
+    required this.branch,
+    this.userName = '',
+  });
 
   @override
   State<StockAdjustmentScreen> createState() => _StockAdjustmentScreenState();
@@ -170,26 +182,83 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
       if (pinOk != true) return;
     }
 
+    // ═══ ENTERPRISE: Detect branch code (HO001 for Head Office user) ═══
+    final assign = await DeviceAssignmentService().read();
+    String branchCode = (assign['branchId'] ?? '').toString();
+    final role = (assign['role'] ?? '').toString().toLowerCase();
+    final deviceId = await DeviceIdService().getOrCreate();
+
+    // Head Office detection
+    final isHeadOffice = branchCode.isEmpty ||
+                         branchCode.toUpperCase() == 'HEADOFFICE' ||
+                         role == 'admin' || role == 'headoffice' || role == 'companyadmin';
+
+    if (isHeadOffice) {
+      if (Branch.allBranches.isEmpty) await Branch.loadFromDB();
+      final ho = Branch.getHeadOffice();
+      branchCode = ho?.id ?? 'HO001';
+    }
+
+    // Get branch info for name
+    final branchInfo = Branch.findByCode(branchCode);
+    final branchName = branchInfo?.name ?? widget.branch;
+
+    // Get current user
+    final currentUser = AppUser.allUsers.firstWhere(
+      (u) => u.name == widget.userName || u.username == widget.userName,
+      orElse: () => AppUser(
+        id: 'unknown', name: widget.userName, username: '', pin: '',
+        role: 'Cashier', branch: widget.branch,
+        joinDate: DateTime.now(),
+      ),
+    );
+
     final List<AdjustmentRecord> records = [];
     for (var item in _items) {
+      // ═══ ENTERPRISE: Get current branch stock (not product.stockQty!) ═══
+      final currentBranchStock = await BranchInventoryService.getStock(branchCode, item.product.id);
+      final newBranchStock = item.isAdd
+          ? currentBranchStock + item.quantity
+          : currentBranchStock - item.quantity;
+
       final record = AdjustmentRecord(
         id: 'ADJ-${DateTime.now().millisecondsSinceEpoch}-${_items.indexOf(item)}',
         sku: item.product.sku,
         itemName: item.product.name,
+        productId: item.product.id,           // NEW
         cost: item.product.costPrice,
         retail: item.product.sellingPrice,
         adjustmentType: item.isAdd ? 'Add' : 'Deduct',
         quantity: item.quantity,
-        oldStock: item.product.stockQty,
-        newStock: item.newStock,
+        oldStock: currentBranchStock,          // NEW: Uses branch stock
+        newStock: newBranchStock,              // NEW: Uses branch stock
         reason: item.selectedReason,
         notes: item.notesController.text,
         dateTime: DateTime.now(),
-        
+        branchCode: branchCode,                // NEW: Branch key
+        branchName: branchName,                // NEW
+        createdBy: widget.userName,            // NEW: Audit
+        createdByUserId: currentUser.id,       // NEW
+        deviceId: deviceId,                    // NEW: Device audit
       );
       records.add(record);
+
+      // Save to SQLite
       await AdjustmentStorage.saveAdjustment(record);
 
+      // ═══ ENTERPRISE: Update BRANCH INVENTORY (not just product!) ═══
+      // This ensures Cashiering sees the new stock immediately
+      final ok = await BranchInventoryService.setStock(
+        branchCode,
+        item.product.id,
+        newBranchStock,
+      );
+      print('[ADJ] setStock $branchCode/${item.product.sku}: $currentBranchStock -> $newBranchStock (ok=$ok)');
+
+      // Sync to Firebase per-branch
+      SyncBridge.enqueueAdjustment(record, op: SyncOp.create);
+
+      // Legacy: also update in-memory Product cache (backward compat)
       final updated = item.updatedProduct;
       Product.updateProduct(updated.id, updated);
     }

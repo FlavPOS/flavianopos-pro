@@ -5,6 +5,7 @@ import '../models/incident_report_model.dart';
 import '../helpers/database_helper.dart';
 import '../helpers/sync_queue_dao.dart';
 import '../models/sync_queue_model.dart';
+import '../screens/stock_adjustment/adjustment_model.dart';
 import '../models/user_model.dart';
 import '../models/branch_model.dart';
 import '../models/product_model.dart';
@@ -1152,6 +1153,82 @@ class SyncBridge {
       await _markQueueSynced('auditTrail', auditId);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ Audit Trail upload failed: $e');
+    }
+  }
+
+
+  // ═══════════════════ STOCK ADJUSTMENTS (per-branch multi-device sync) ═══════════════════
+  static Future<void> enqueueAdjustment(AdjustmentRecord adj, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = adj.branchCode.isNotEmpty ? adj.branchCode : (ctx['branchId'] ?? '');
+
+    if (companyCode.isEmpty || branchId.isEmpty) {
+      if (kDebugMode) debugPrint('[ADJ-SYNC] Skip - missing companyCode or branchId');
+      return;
+    }
+
+    final payload = {
+      'id': adj.id,
+      'companyCode': companyCode,
+      'branchCode': branchId,
+      'branchName': adj.branchName,
+      'productId': adj.productId,
+      'sku': adj.sku,
+      'itemName': adj.itemName,
+      'adjustmentType': adj.adjustmentType,
+      'quantity': adj.quantity,
+      'oldStock': adj.oldStock,
+      'newStock': adj.newStock,
+      'reason': adj.reason,
+      'notes': adj.notes,
+      'cost': adj.cost,
+      'retail': adj.retail,
+      'costImpact': adj.costImpact,
+      'createdBy': adj.createdBy,
+      'createdByUserId': adj.createdByUserId,
+      'approvedBy': adj.approvedBy,
+      'approvedByUserId': adj.approvedByUserId,
+      'deviceId': adj.deviceId,
+      'dateTime': adj.dateTime.toIso8601String(),
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': op == SyncOp.delete,
+    };
+
+    final path = 'companies/$companyCode/stockAdjustments/$branchId/${adj.id}';
+
+    await _queue.enqueue(
+      entityType: 'stockAdjustment',
+      entityId: adj.id,
+      operation: op,
+      firebasePath: path,
+      payload: payload,
+      companyId: companyCode,
+      branchId: branchId,
+      deviceId: adj.deviceId,
+      priority: SyncPriority.p3Important,
+    );
+
+    _fireAndForget(() => _uploadAdjustmentToFirebase(companyCode, branchId, adj.id, payload));
+  }
+
+  static Future<void> _uploadAdjustmentToFirebase(
+      String companyCode, String branchId, String adjId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/stockAdjustments/$branchId/$adjId').set(payload);
+      await _markQueueSynced('stockAdjustment', adjId);
+      if (kDebugMode) debugPrint('[ADJ-SYNC] Uploaded: $adjId');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ADJ-SYNC] Upload failed: $e');
     }
   }
 }
