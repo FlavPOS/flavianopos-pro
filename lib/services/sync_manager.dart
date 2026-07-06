@@ -528,6 +528,27 @@ class SyncManager {
       final m = val.map((k, v) => MapEntry(k.toString(), v));
       final id = (m['txnId'] ?? event.snapshot.key ?? '').toString();
       if (id.isEmpty) return;
+
+      // ═══ SYNC LOOP PREVENTION ═══
+      // Skip transactions created by THIS device (already saved locally)
+      // Same pattern as inventory sync
+      final incomingDeviceId = (m['deviceId'] ?? '').toString();
+      final myDeviceId = await DeviceIdService().getOrCreate();
+      if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) {
+        if (kDebugMode) debugPrint('[SYNC-SALE] Skip own transaction: \$id');
+        return;
+      }
+
+      // Also check if transaction already exists locally (double safety)
+      final dbCheck = await DatabaseHelper().database;
+      final existing = await dbCheck.query('transactions',
+          where: 'id = ?', whereArgs: [id], limit: 1);
+      if (existing.isNotEmpty) {
+        // Already have this transaction (maybe from own device write)
+        if (kDebugMode) debugPrint('[SYNC-SALE] Skip existing transaction: \$id');
+        return;
+      }
+
       final db = await DatabaseHelper().database;
 
       // Insert transaction header
