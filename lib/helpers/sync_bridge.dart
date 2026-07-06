@@ -553,16 +553,33 @@ class SyncBridge {
     }
 
     // ═══ Resolve branch metadata from masterfile ═══
-    // This ensures branchName is correct even when device has empty branchName
-    if (Branch.allBranches.isEmpty) {
-      await Branch.loadFromDB();
-    }
+    // Force reload branches from DB to ensure fresh data
+    await Branch.loadFromDB();
     final branchInfo = Branch.findByCode(branchId);
+
     final resolvedBranchName = branchInfo?.name ??
                                 (ctx['branchName']?.isNotEmpty == true ? ctx['branchName']! :
                                  (r.branch.isNotEmpty ? r.branch : 'Head Office'));
-    final resolvedBranchType = branchInfo?.branchType ??
-                               (isHeadOffice ? Branch.typeHeadOffice : Branch.typeBranch);
+
+    // Determine branchType with priority:
+    // 1. From Branch masterfile if found
+    // 2. If detected as Head Office (isHeadOffice = true), use HEAD_OFFICE
+    // 3. If branchId starts with 'HO', use HEAD_OFFICE
+    // 4. If branchId starts with 'WH', use WAREHOUSE
+    // 5. Default: BRANCH
+    String resolvedBranchType;
+    if (branchInfo != null) {
+      resolvedBranchType = branchInfo.branchType;
+    } else if (isHeadOffice || branchId.toUpperCase().startsWith('HO')) {
+      resolvedBranchType = Branch.typeHeadOffice;
+    } else if (branchId.toUpperCase().startsWith('WH')) {
+      resolvedBranchType = Branch.typeWarehouse;
+    } else {
+      resolvedBranchType = Branch.typeBranch;
+    }
+
+    // Update isHeadOffice based on resolved type (consistency)
+    final actuallyIsHeadOffice = resolvedBranchType == Branch.typeHeadOffice;
 
     final payload = {
       'reportId': r.reportId,
@@ -575,7 +592,7 @@ class SyncBridge {
       'branchCode': branchId,                  // ⭐ NEW: System key (same as branchId)
       'branchName': resolvedBranchName,        // ⭐ FIXED: Uses masterfile name
       'branchType': resolvedBranchType,        // ⭐ NEW: BRANCH | HEAD_OFFICE | WAREHOUSE
-      'isHeadOffice': isHeadOffice,            // ⭐ NEW: Boolean flag
+      'isHeadOffice': actuallyIsHeadOffice,   // ⭐ NEW: Boolean flag (resolved)
 
       'cashier': r.cashier,
       'companyCode': companyCode,
