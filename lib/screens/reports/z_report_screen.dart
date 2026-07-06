@@ -37,6 +37,11 @@ class _ZReportScreenState extends State<ZReportScreen> {
   bool _cashDeclared = false;
   String _redeclareReason = "";
   int _redeclareCount = 0;
+
+  // ═══ MULTI-DEVICE SYNC: Today's saved Z Report (if generated/synced) ═══
+  // When set, display uses these authoritative values instead of local computation.
+  // This ensures Device 2 (viewer) shows same variance as Device 1 (source).
+  ZReportRecord? _savedTodayReport;
   bool _isReportGenerated = false;
   CashierSession? _activeSession;
   CashierSession? _todaysClosedSession;
@@ -80,10 +85,35 @@ class _ZReportScreenState extends State<ZReportScreen> {
   Future<void> _checkExistingReport() async {
     try {
       await ZReportRecord.loadFromDB();
-      if (mounted && await ZReportRecord.hasReportForToday()) {
-        setState(() => _isReportGenerated = true);
+      if (!mounted) return;
+
+      // Find today's Z Report (locally or synced from another device)
+      ZReportRecord? todaysReport;
+      final today = DateTime.now();
+      for (final r in ZReportRecord.history) {
+        if (r.reportDate.year == today.year &&
+            r.reportDate.month == today.month &&
+            r.reportDate.day == today.day) {
+          todaysReport = r;
+          break;
+        }
       }
-    } catch (_) {}
+
+      if (todaysReport != null) {
+        setState(() {
+          _isReportGenerated = true;
+          _savedTodayReport = todaysReport;
+          // Populate ending cash so declaration state looks correct
+          if (_endingCashController.text.isEmpty) {
+            _endingCashController.text = todaysReport!.endingCash.toStringAsFixed(2);
+          }
+          _cashDeclared = true;
+        });
+        debugPrint('[Z-REPORT] Loaded saved Z Report: \${todaysReport.reportId} (endingCash: \${todaysReport.endingCash}, overShort: \${todaysReport.overShort})');
+      }
+    } catch (e) {
+      debugPrint('[Z-REPORT] Check existing error: \$e');
+    }
   }
 
   Future<void> _loadSessionData() async {
@@ -207,8 +237,17 @@ class _ZReportScreenState extends State<ZReportScreen> {
     }
     return total;
   }
-  double get _endingCash => _useDenominations ? _totalCounted : (double.tryParse(_endingCashController.text) ?? 0);
-  double get _overShort => _endingCash - _expectedCash;
+  double get _endingCash {
+    // Priority: saved report -> local denomination count -> text field
+    if (_savedTodayReport != null) return _savedTodayReport!.endingCash;
+    return _useDenominations ? _totalCounted : (double.tryParse(_endingCashController.text) ?? 0);
+  }
+
+  double get _overShort {
+    // Priority: saved report -> live calculation
+    if (_savedTodayReport != null) return _savedTodayReport!.overShort;
+    return _endingCash - _expectedCash;
+  }
   double get _averageTransaction =>
       _totalTransactions > 0 ? _totalNetSales / _totalTransactions : 0;
 
