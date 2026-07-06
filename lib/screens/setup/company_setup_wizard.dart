@@ -1,7 +1,10 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/multi_store_setup_service.dart';
 import '../../services/device_assignment_service.dart';
+import '../../models/branch_model.dart';
+import '../../utils/uppercase_text_formatter.dart';
 import '../auth/login_screen.dart';
 import '../../helpers/cache_reload_helper.dart';
 
@@ -22,6 +25,9 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
   final _ownerName = TextEditingController();
   final _f1 = GlobalKey<FormState>();
 
+  final _branchCode = TextEditingController(text: 'HO001');
+  String _branchType = Branch.typeHeadOffice;
+
   final _branchName = TextEditingController(text: 'Head Office');
   final _branchAddress = TextEditingController();
   final _branchPhone = TextEditingController();
@@ -37,10 +43,19 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
   @override
   void dispose() {
     _companyName.dispose(); _ownerName.dispose();
+    _branchCode.dispose();
     _branchName.dispose(); _branchAddress.dispose(); _branchPhone.dispose();
     _adminUsername.dispose(); _adminFullName.dispose();
     _adminPin.dispose(); _adminConfirmPin.dispose();
     super.dispose();
+  }
+
+  void _autoGenerateCode() {
+    switch (_branchType) {
+      case 'HEAD_OFFICE': _branchCode.text = 'HO001'; break;
+      case 'WAREHOUSE': _branchCode.text = 'WH001'; break;
+      default: _branchCode.text = 'BR001'; break;
+    }
   }
 
   String? _req(String? v, String label) =>
@@ -56,6 +71,15 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
     if (_adminPin.text != _adminConfirmPin.text) {
       _snack('PINs do not match.'); return;
     }
+
+    final code = _branchCode.text.trim().toUpperCase();
+    final codeError = Branch.validateBranchCode(code);
+    if (codeError != null) {
+      _snack(codeError);
+      setState(() => _step = 1);
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final res = await MultiStoreSetupService().performSetup(
@@ -64,6 +88,8 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
         mainBranchName: _branchName.text.trim(),
         mainBranchAddress: _branchAddress.text.trim(),
         mainBranchPhone: _branchPhone.text.trim(),
+        mainBranchCode: code,
+        mainBranchType: _branchType,
         adminUsername: _adminUsername.text.trim(),
         adminFullName: _adminFullName.text.trim(),
         adminPassword: _adminPin.text,
@@ -77,7 +103,6 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
         return;
       }
 
-      // Assign founding device locally as well.
       await DeviceAssignmentService().assign(
         companyId: res.companyId!,
         companyCode: res.companyCode!,
@@ -94,9 +119,14 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Company Code: ${res.companyCode}'),
+              Text('Company Code: ${res.companyCode}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text('Main Branch: $code - ${_branchName.text.trim()}',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              Text('Main Branch ID: ${res.mainBranchId}'),
+              Text('Type: ${_typeDisplay(_branchType)}',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 4),
               Text('Admin User: ${_adminUsername.text}'),
               const SizedBox(height: 10),
@@ -129,6 +159,15 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
       if (!mounted) return;
       _snack('$e');
       setState(() => _saving = false);
+    }
+  }
+
+  String _typeDisplay(String type) {
+    switch (type) {
+      case 'HEAD_OFFICE': return '🏢 Head Office';
+      case 'WAREHOUSE': return '🏭 Warehouse';
+      case 'BRANCH': return '🏪 Branch';
+      default: return type;
     }
   }
 
@@ -216,8 +255,77 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
       const Text('Controls master data (products, reasons, users).',
           textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.black54)),
       const SizedBox(height: 18),
-      _field(_branchName, 'Branch Name *', Icons.store_outlined,
-          validator: (v) => _req(v, 'Branch Name')),
+
+      // Branch Type Dropdown
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: DropdownButtonFormField<String>(
+          initialValue: _branchType,
+          decoration: InputDecoration(
+            labelText: 'Location Type *',
+            prefixIcon: const Icon(Icons.category, color: _purple),
+            filled: true, fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.black12)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: _purple, width: 1.5)),
+            helperText: 'First location is usually Head Office',
+          ),
+          items: const [
+            DropdownMenuItem(value: 'HEAD_OFFICE', child: Text('🏢 Head Office / Main Warehouse')),
+            DropdownMenuItem(value: 'WAREHOUSE', child: Text('🏭 Warehouse')),
+            DropdownMenuItem(value: 'BRANCH', child: Text('🏪 Branch / Store')),
+          ],
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() {
+              _branchType = v;
+              _autoGenerateCode();
+              if (v == 'HEAD_OFFICE') {
+                _branchName.text = 'Head Office';
+              } else if (v == 'WAREHOUSE') {
+                _branchName.text = 'Main Warehouse';
+              } else if (v == 'BRANCH' && (_branchName.text == 'Head Office' || _branchName.text == 'Main Warehouse')) {
+                _branchName.text = 'Main Branch';
+              }
+            });
+          },
+        ),
+      ),
+
+      // Branch Code Field
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextFormField(
+          controller: _branchCode,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_-]')),
+            LengthLimitingTextInputFormatter(20),
+            UpperCaseTextFormatter(),
+          ],
+          decoration: InputDecoration(
+            labelText: 'Location Code *',
+            hintText: 'HO001',
+            helperText: 'Example: HO001, BR001, WH001',
+            prefixIcon: const Icon(Icons.qr_code_2, color: _purple),
+            filled: true, fillColor: Colors.white,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.black12)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: _purple, width: 1.5)),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.refresh, color: _purple),
+              tooltip: 'Auto-generate code',
+              onPressed: _autoGenerateCode,
+            ),
+          ),
+          validator: (v) => Branch.validateBranchCode(v?.trim().toUpperCase() ?? ''),
+        ),
+      ),
+
+      _field(_branchName, 'Location Name *', Icons.store_outlined,
+          validator: (v) => _req(v, 'Location Name')),
       _field(_branchAddress, 'Address', Icons.location_on_outlined),
       _field(_branchPhone, 'Phone', Icons.phone_outlined, keyboardType: TextInputType.phone),
     ],
@@ -237,7 +345,7 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
           validator: (v) => _req(v, 'Username')),
       _field(_adminFullName, 'Full Name *', Icons.badge_outlined,
           validator: (v) => _req(v, 'Full Name')),
-      _field(_adminPin, "PIN (6 digits) *", Icons.lock_outline,
+      _field(_adminPin, 'PIN (6 digits) *', Icons.lock_outline,
           keyboardType: TextInputType.number,
           obscure: !_showPw,
           suffix: IconButton(
@@ -247,10 +355,10 @@ class _CompanySetupWizardState extends State<CompanySetupWizard> {
           validator: (v) {
             final r = _req(v, 'Password');
             if (r != null) return r;
-            if (v!.length != 6) return "PIN must be exactly 6 digits";
+            if (v!.length != 6) return 'PIN must be exactly 6 digits';
             return null;
           }),
-      _field(_adminConfirmPin, "Confirm PIN *", Icons.lock_reset,
+      _field(_adminConfirmPin, 'Confirm PIN *', Icons.lock_reset,
           keyboardType: TextInputType.number,
           obscure: !_showPw, validator: (v) => _req(v, 'Confirm Password')),
     ],

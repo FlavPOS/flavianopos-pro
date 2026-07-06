@@ -21,6 +21,8 @@ class MultiStoreSetupService {
     required String mainBranchName,
     String mainBranchAddress = '',
     String mainBranchPhone = '',
+    String mainBranchCode = 'HO001',           // NEW: system key
+    String mainBranchType = 'HEAD_OFFICE',      // NEW: business type
     required String adminUsername,
     required String adminFullName,
     required String adminPassword,
@@ -70,10 +72,12 @@ class MultiStoreSetupService {
     );
 
     // ----- MAIN BRANCH -----
-    final mainBranchId = _uuid.v4();
+    // Use branchCode as system key (BR001, HO001) instead of UUID
+    final mainBranchId = mainBranchCode.trim().toUpperCase();
     await db.insert('branches', {
       'id': mainBranchId,
       'name': mainBranchName.trim(),
+      'branchType': mainBranchType,
       'address': mainBranchAddress.trim(),
       'phone': mainBranchPhone.trim(),
       'isActive': 1,
@@ -95,15 +99,17 @@ class MultiStoreSetupService {
       'isMainBranch': 1,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
+    final isHeadOffice = mainBranchType == 'HEAD_OFFICE';
     final mainBranchPayload = {
       'branchId': mainBranchId,
       'companyId': companyId,
       'companyCode': companyCode,
-      'branchCode': 'MAIN',
+      'branchCode': mainBranchId,
       'branchName': mainBranchName.trim(),
+      'branchType': mainBranchType,
       'address': mainBranchAddress.trim(),
       'phone': mainBranchPhone.trim(),
-      'isMainBranch': true,
+      'isMainBranch': isHeadOffice,
       'isActive': true,
       'createdAt': now,
       'updatedAt': now,
