@@ -6,6 +6,7 @@ import '../../models/settings_model.dart';
 import '../../utils/sound_helper.dart';
 import '../../services/cashier_session_service.dart';
 import '../../models/product_model.dart';
+import '../../models/branch_model.dart';
 import '../../models/cart_item_model.dart';
 import '../../widgets/product_card_widget.dart';
 import '../../widgets/cart_item_widget.dart';
@@ -78,30 +79,60 @@ class _CashieringScreenState extends State<CashieringScreen> {
   Future<void> _loadBranchStock() async {
     try {
       final assign = await DeviceAssignmentService().read();
-      final bid = (assign["branchId"] ?? "").toString();
-      _binvBranchId = bid;
-      if (bid.isEmpty) {
-        print("[POS-B1.2] no branchId, fallback to global stock");
-        if (mounted) setState(() => _binvLoaded = true);
-        return;
+      String bid = (assign["branchId"] ?? "").toString();
+      final role = (assign["role"] ?? "").toString().toLowerCase();
+
+      // ═══ HEAD OFFICE DETECTION ═══
+      // If branchId is empty OR role indicates Head Office/Admin,
+      // load Head Office branch inventory (HO001 or first HEAD_OFFICE branch)
+      final isHeadOffice = bid.isEmpty ||
+                           bid.toUpperCase() == "HEADOFFICE" ||
+                           bid.toUpperCase() == "HO" ||
+                           role == "admin" ||
+                           role == "headoffice" ||
+                           role == "head_office";
+
+      if (isHeadOffice) {
+        // Ensure branches loaded from DB
+        if (Branch.allBranches.isEmpty) {
+          await Branch.loadFromDB();
+        }
+        // Find the Head Office branch
+        final ho = Branch.getHeadOffice();
+        if (ho != null) {
+          bid = ho.id;
+          print("[POS] Head Office user - using branch ${ho.id} (${ho.name})");
+        } else {
+          // Fallback: use HO001 convention
+          bid = "HO001";
+          print("[POS] Head Office user - no HO branch found, using HO001");
+        }
+      } else {
+        print("[POS] Branch user - using branch $bid");
       }
+
+      _binvBranchId = bid;
+
+      // Load branch inventory (never falls back to product.stockQty)
       final map = await BranchInventoryService.getStockMapForBranch(bid);
+
       if (!mounted) return;
       setState(() {
         _branchStock = map;
         _binvLoaded = true;
       });
-      print("[POS-B1.2] loaded ${map.length} products for branch=$bid");
+      print("[POS] Loaded ${map.length} products for branch=$bid (isHO=$isHeadOffice)");
     } catch (e) {
-      print("[POS-B1.2] ERROR: $e");
+      print("[POS] ERROR loading branch stock: $e");
       if (mounted) setState(() => _binvLoaded = true);
     }
   }
 
   int _stockOf(Product p) {
-    if (!_binvLoaded) return p.stockQty;
-    if (_binvBranchId.isNotEmpty) return _branchStock[p.id] ?? 0;
-    return p.stockQty;
+    // Show loading state while inventory loads
+    if (!_binvLoaded) return 0;
+    // Always use branch-specific stock, never fall back to stale product.stockQty
+    return _branchStock[p.id] ?? 0;
   }
   // ═══ END PHASE B1.2 ═══
 
