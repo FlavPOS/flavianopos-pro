@@ -100,6 +100,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _loadBranchStock();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Auto-reload every time screen becomes visible
+    // (e.g., returning from Stock Adjustment, Delivery, etc.)
+    if (mounted && !_stockLoading) {
+      _loadBranchStock();
+    }
+  }
+
   bool get _canEdit {
     final r = widget.role.toLowerCase().trim();
     return r == "admin" || r == "companyadmin" || widget.permissions.contains("Manage Products");
