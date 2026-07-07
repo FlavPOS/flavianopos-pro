@@ -127,7 +127,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
               subtitle: 'View adjustments that are submitted and awaiting approval.',
               count: _submittedCount,
               countColor: const Color(0xFF3B82F6),
-              onTap: () => _open(const AdjustmentSubmittedScreen()),
+              onTap: () => _open(AdjustmentSubmittedScreen(branch: widget.branch, userName: widget.userName)),
             ),
             const SizedBox(height: 12),
             _buildCard(

@@ -25,7 +25,6 @@ class _AdjustmentDraftScreenState extends State<AdjustmentDraftScreen> {
   static const _card = Color(0xFFFFFFFF);
   static const _textPrimary = Color(0xFF111827);
   static const _textSecondary = Color(0xFF6B7280);
-  static const _divider = Color(0xFFE5E7EB);
 
   List<AdjustmentV3> _drafts = [];
   bool _loading = true;

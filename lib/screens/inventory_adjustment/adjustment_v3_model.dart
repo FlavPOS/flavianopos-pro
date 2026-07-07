@@ -31,6 +31,9 @@ class AdjustmentV3 {
   final String rejectedBy;
   final String rejectionReason;
   final String syncStatus;
+  final String submittedBy;
+  final String approvedByPin;
+  final String approvedByRole;
   final String createdAt;
   final String updatedAt;
 
@@ -55,6 +58,9 @@ class AdjustmentV3 {
     this.rejectedBy = '',
     this.rejectionReason = '',
     this.syncStatus = 'PENDING',
+    this.submittedBy = '',
+    this.approvedByPin = '',
+    this.approvedByRole = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -80,6 +86,9 @@ class AdjustmentV3 {
     'rejected_by': rejectedBy,
     'rejection_reason': rejectionReason,
     'sync_status': syncStatus,
+    'submitted_by': submittedBy,
+    'approved_by_pin': approvedByPin,
+    'approved_by_role': approvedByRole,
     'created_at': createdAt,
     'updated_at': updatedAt,
   };
@@ -105,6 +114,9 @@ class AdjustmentV3 {
     rejectedBy: (m['rejected_by'] ?? '') as String,
     rejectionReason: (m['rejection_reason'] ?? '') as String,
     syncStatus: (m['sync_status'] ?? 'PENDING') as String,
+    submittedBy: (m['submitted_by'] ?? '') as String,
+    approvedByPin: (m['approved_by_pin'] ?? '') as String,
+    approvedByRole: (m['approved_by_role'] ?? '') as String,
     createdAt: (m['created_at'] ?? '') as String,
     updatedAt: (m['updated_at'] ?? '') as String,
   );
@@ -271,6 +283,9 @@ class AdjustmentV3Dao {
     required String adjustmentId,
     required String newStatus,
     String? approvedBy,
+    String? approvedByPin,
+    String? approvedByRole,
+    String? submittedBy,
     String? rejectedBy,
     String? rejectionReason,
   }) async {
@@ -283,10 +298,13 @@ class AdjustmentV3Dao {
     switch (newStatus) {
       case 'SUBMITTED':
         updates['submitted_at'] = now;
+        if (submittedBy != null) updates['submitted_by'] = submittedBy;
         break;
       case 'APPROVED':
         updates['approved_at'] = now;
         if (approvedBy != null) updates['approved_by'] = approvedBy;
+        if (approvedByPin != null) updates['approved_by_pin'] = approvedByPin;
+        if (approvedByRole != null) updates['approved_by_role'] = approvedByRole;
         break;
       case 'REJECTED':
         updates['rejected_at'] = now;

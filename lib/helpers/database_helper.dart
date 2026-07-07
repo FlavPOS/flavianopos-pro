@@ -142,7 +142,13 @@ class DatabaseHelper {
     // ═══ ENTERPRISE STOCK MOVEMENTS LEDGER ═══
     // Unified audit log for ALL SOH changes (Adjustment/Sale/Void/Refund/Delivery)
 
-        // ═══ ADJUSTMENTS V3 HEADER (workflow) ═══
+        
+    // ═══ ADJUSTMENTS V3 approval columns (safety net) ═══
+    try { await db.execute("ALTER TABLE adjustments_v3 ADD COLUMN submitted_by TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE adjustments_v3 ADD COLUMN approved_by_pin TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE adjustments_v3 ADD COLUMN approved_by_role TEXT DEFAULT ''"); } catch (_) {}
+
+    // ═══ ADJUSTMENTS V3 HEADER (workflow) ═══
     // Stores adjustment documents with status: DRAFT/SUBMITTED/APPROVED/REJECTED
     try {
       await db.execute("""
