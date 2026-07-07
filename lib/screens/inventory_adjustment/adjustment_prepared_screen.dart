@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
+import '../../services/branch_inventory_service.dart';
 import '../../models/product_model.dart';
 import '../inventory/inventory_screen.dart';
 import 'adjustment_reason_v3_model.dart';
@@ -46,6 +48,44 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   void initState() {
     super.initState();
     _loadReasons();
+    _loadBranchStock();
+  }
+
+  // ═══ VALIDATION HELPERS ═══
+  // Stock lookup map — loaded on init from BranchInventoryService
+  final Map<String, int> _stockMap = {};
+
+  int _currentStockOf(_AdjItem item) {
+    // Match by product ID (BranchInventoryService returns productId -> qty)
+    return _stockMap[item.product.id] ?? 0;
+  }
+
+  int _projectedStockOf(_AdjItem item) {
+    if (item.reason == null) return _currentStockOf(item);
+    final direction = item.reason!.direction;
+    return _currentStockOf(item) + (item.qty * direction);
+  }
+
+  bool _wouldGoNegative(_AdjItem item) {
+    return _projectedStockOf(item) < 0;
+  }
+
+  Future<void> _loadBranchStock() async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final bid = (assign['branchId'] ?? '').toString();
+      if (bid.isEmpty) return;
+      final map = await BranchInventoryService.getStockMapForBranch(bid);
+      if (mounted) {
+        setState(() {
+          _stockMap.clear();
+          _stockMap.addAll(map);
+        });
+        debugPrint('[PREPARED] Loaded ${_stockMap.length} stock entries');
+      }
+    } catch (e) {
+      debugPrint('[PREPARED] Stock load failed: $e');
+    }
   }
 
   Future<void> _loadReasons() async {
@@ -171,7 +211,124 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
     );
   }
 
+  // ═══ Show insufficient stock error dialog ═══
+  void _showInsufficientStockDialog(List<_AdjItem> invalidItems) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            const SizedBox(width: 8),
+            const Text('Insufficient Stock'),
+          ],
+        ),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'The following items cannot be adjusted (would result in negative stock):',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            ...invalidItems.map((item) {
+              final current = _currentStockOf(item);
+              final projected = _projectedStockOf(item);
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.product.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Current: $current  •  Adjust: ${item.qty} (${item.reason?.direction == -1 ? "-" : "+"})  •  Result: $projected',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 12),
+            const Text(
+              '💡 Tips:',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            const Text(
+              '• Use Receive Delivery to add stock first\n'
+              '• Reduce the adjustment quantity\n'
+              '• Use positive reason if it\'s a Found Stock scenario',
+              style: TextStyle(fontSize: 11, color: Colors.black87),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveDraft() async {
+    // ═══ VALIDATION: Warn about negative stock (but allow save) ═══
+    final invalidItems = _items.where(_wouldGoNegative).toList();
+    if (invalidItems.isNotEmpty) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+              const SizedBox(width: 8),
+              const Text('Save Draft?'),
+            ],
+          ),
+          content: Text(
+            '${invalidItems.length} item(s) would result in negative stock. '
+            'Draft can be saved but cannot be submitted until fixed.',
+            style: const TextStyle(fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+
     if (_items.isEmpty) {
       _showSnack('Add at least one item', color: _red);
       return;
@@ -245,6 +402,13 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
         _showSnack('Enter valid qty for ${item.product.name}', color: _red);
         return;
       }
+    }
+
+    // ── Block if any item would go negative ──
+    final invalidItems = _items.where(_wouldGoNegative).toList();
+    if (invalidItems.isNotEmpty) {
+      _showInsufficientStockDialog(invalidItems);
+      return;
     }
 
     // ── Confirmation dialog ──
