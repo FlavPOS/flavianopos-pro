@@ -314,7 +314,7 @@ class _AdjustmentSubmittedDetailScreenState
 
             // 1. Write stock movement (BIR ledger)
             await fb.ref(
-              'companies/$companyCode/stockMovements/$movId'
+              'companies/$companyCode/stockMovements/$branchCode/$movId'
             ).set(movement);
 
             // 2. Update branchInventory
