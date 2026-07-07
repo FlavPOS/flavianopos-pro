@@ -8,11 +8,13 @@ import 'adjustment_v3_model.dart';
 class AdjustmentPreparedScreen extends StatefulWidget {
   final String branch;
   final String userName;
+  final String? draftId;
 
   const AdjustmentPreparedScreen({
     super.key,
     required this.branch,
     required this.userName,
+    this.draftId,
   });
 
   @override
@@ -33,6 +35,7 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   final List<_AdjItem> _items = [];
   String _searchQuery = '';
+  String? _existingDraftId;
 
   // Reasons loaded from DB
   List<AdjustmentReasonV3> _dbReasons = [];
@@ -51,6 +54,56 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
     setState(() {
       _dbReasons = list;
       _loadingReasons = false;
+    });
+    if (widget.draftId != null) {
+      await _loadDraft(widget.draftId!);
+    }
+  }
+
+  Future<void> _loadDraft(String draftId) async {
+    final draft = await AdjustmentV3Dao.getById(draftId);
+    if (draft == null) return;
+    final draftItems = await AdjustmentV3Dao.getItems(draftId);
+    if (!mounted) return;
+
+    final loaded = <_AdjItem>[];
+    for (final di in draftItems) {
+      Product? prod;
+      try {
+        prod = Product.allProducts.firstWhere((p) => p.id == di.productId);
+      } catch (_) {
+        prod = Product(
+          id: di.productId,
+          sku: di.sku,
+          name: di.productName,
+          category: di.category,
+          costPrice: di.unitCost,
+          sellingPrice: 0,
+          stockQty: 0,
+        );
+      }
+      final reason = _dbReasons.firstWhere(
+        (r) => r.reasonCode == di.reasonCode,
+        orElse: () => _dbReasons.isNotEmpty
+            ? _dbReasons.first
+            : AdjustmentReasonV3(
+                reasonCode: di.reasonCode,
+                reasonName: di.reasonName,
+                direction: di.direction,
+                createdAt: '',
+                updatedAt: '',
+              ),
+      );
+      loaded.add(_AdjItem(
+        product: prod,
+        qtyCtrl: TextEditingController(text: di.qty.toString()),
+        qty: di.qty,
+      )..reason = reason);
+    }
+
+    setState(() {
+      _existingDraftId = draftId;
+      _items.addAll(loaded);
     });
   }
 
@@ -123,7 +176,8 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       return;
     }
     try {
-      final adjustmentId = AdjustmentV3Dao.generateId(branchCode: widget.branch);
+      final adjustmentId = _existingDraftId ??
+          AdjustmentV3Dao.generateId(branchCode: widget.branch);
       final now = DateTime.now().toIso8601String();
       final positives = _items.where((i) => i.reason?.isPositive == true).length;
       final negatives = _items.where((i) => i.reason?.isNegative == true).length;
@@ -203,9 +257,9 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
         backgroundColor: _amber,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Prepared Adjustment',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        title: Text(
+          widget.draftId != null ? 'Edit Draft' : 'Prepared Adjustment',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
