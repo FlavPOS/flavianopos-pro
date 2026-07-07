@@ -19,6 +19,7 @@ import 'reports/z_report_screen.dart';
 import 'reports/sales_history_screen.dart';
 import 'reports/discount_monitoring_screen.dart';
 import 'stock_adjustment/stock_adjustment_screen.dart';
+import 'stock_adjustment/stock_adjustment_screen_v2.dart';
 import 'stock_transfer/stock_transfer_screen.dart';
 import '../models/product_model.dart';
 import '../models/transaction_model.dart';
@@ -48,6 +49,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // Feature flag: toggle true/false to switch v1/v2 UI
+  static const bool _useAdjustmentV2 = true;
+
   int _selectedIndex = 0;
   bool _hasAccess(String module) => widget.permissions.contains('all') || widget.permissions.contains(module);
 
@@ -198,8 +202,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                StockAdjustmentScreen(branch: widget.branch, userName: widget.userName),
+            builder: (context) => _useAdjustmentV2
+                ? StockAdjustmentScreenV2(branch: widget.branch, userName: widget.userName)
+                : StockAdjustmentScreen(branch: widget.branch, userName: widget.userName),
           ),
         ).then((_) => setState(() {}));
         break;
