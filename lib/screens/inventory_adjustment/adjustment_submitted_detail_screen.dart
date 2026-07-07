@@ -144,21 +144,24 @@ class _AdjustmentSubmittedDetailScreenState
           // Match by ID OR SKU (bulletproof for imported products with different IDs)
           int currentSOH = 0;
 
-          // Try 1: branch_inventory by productId
-          var invRows = await txn.query(
-            'branch_inventory',
-            where: 'branchId = ? AND productId = ?',
-            whereArgs: [widget.branch, item.productId],
-          );
-
-          // Try 2: branch_inventory by SKU-based productId
-          if (invRows.isEmpty && item.sku.isNotEmpty) {
+          // Try 1: branch_inventory JOIN products by SKU (most reliable)
+          var invRows = <Map<String, Object?>>[];
+          if (item.sku.isNotEmpty) {
             invRows = await txn.rawQuery('''
               SELECT bi.* FROM branch_inventory bi
-              JOIN products p ON bi.productId = p.id
+              INNER JOIN products p ON bi.productId = p.id
               WHERE bi.branchId = ? AND p.sku = ?
               LIMIT 1
             ''', [widget.branch, item.sku]);
+          }
+
+          // Try 2: branch_inventory by direct productId
+          if (invRows.isEmpty) {
+            invRows = await txn.query(
+              'branch_inventory',
+              where: 'branchId = ? AND productId = ?',
+              whereArgs: [widget.branch, item.productId],
+            );
           }
 
           if (invRows.isNotEmpty) {
@@ -196,10 +199,25 @@ class _AdjustmentSubmittedDetailScreenState
           }
 
           // Update or insert branch_inventory
+          // Get REAL productId from products.sku (bulletproof)
+          String realProductId = item.productId;
+          if (item.sku.isNotEmpty) {
+            final pRows = await txn.query(
+              'products',
+              columns: ['id'],
+              where: 'sku = ?',
+              whereArgs: [item.sku],
+              limit: 1,
+            );
+            if (pRows.isNotEmpty) {
+              realProductId = (pRows.first['id'] as String?) ?? item.productId;
+            }
+          }
+
           if (invRows.isEmpty) {
             await txn.insert('branch_inventory', {
               'branchId': widget.branch,
-              'productId': item.productId,
+              'productId': realProductId,
               'stockQty': newSOH,
               'reservedQty': 0,
               'inTransitInQty': 0,
@@ -212,12 +230,13 @@ class _AdjustmentSubmittedDetailScreenState
               'isMigrated': 0,
             });
           } else {
+            final existingProductId = (invRows.first['productId'] as String?) ?? realProductId;
             await txn.update('branch_inventory', {
               'stockQty': newSOH,
               'lastUpdated': now,
               'updatedAt': now,
             }, where: 'branchId = ? AND productId = ?',
-                whereArgs: [widget.branch, item.productId]);
+                whereArgs: [widget.branch, existingProductId]);
           }
 
           // Also update products.stockQty by ID or SKU (bulletproof)
