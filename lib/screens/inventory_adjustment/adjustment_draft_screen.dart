@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'adjustment_v3_model.dart';
+import 'adjustment_draft_detail_screen.dart';
 
 /// Draft Adjustments — list of saved drafts.
 class AdjustmentDraftScreen extends StatefulWidget {
@@ -48,6 +49,20 @@ class _AdjustmentDraftScreenState extends State<AdjustmentDraftScreen> {
     });
   }
 
+  Future<void> _openDetail(AdjustmentV3 draft) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AdjustmentDraftDetailScreen(
+          draftId: draft.adjustmentId,
+          branch: widget.branch,
+          userName: widget.userName,
+        ),
+      ),
+    );
+    if (result == true || result == null) _load();
+  }
+
   Future<void> _deleteDraft(AdjustmentV3 draft) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -84,132 +99,7 @@ class _AdjustmentDraftScreenState extends State<AdjustmentDraftScreen> {
     }
   }
 
-  Future<void> _viewDetails(AdjustmentV3 draft) async {
-    final items = await AdjustmentV3Dao.getItems(draft.adjustmentId);
-    if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (_, scrollCtrl) {
-            return Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: _purple,
-                    borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(20)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.description_rounded,
-                          color: Colors.white),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          draft.docNumber.isEmpty ? draft.adjustmentId : draft.docNumber,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded,
-                            color: Colors.white),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollCtrl,
-                    padding: const EdgeInsets.all(12),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      final color =
-                          item.direction < 0 ? _red : _green;
-                      final sign = item.direction < 0 ? '-' : '+';
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _card,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _divider),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: color.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '$sign${item.qty}',
-                                style: TextStyle(
-                                    color: color,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    item.productName,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    'SKU: ${item.sku}',
-                                    style: const TextStyle(
-                                        color: _textSecondary,
-                                        fontSize: 11),
-                                  ),
-                                  Text(
-                                    item.reasonName,
-                                    style: TextStyle(
-                                        color: color,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -307,7 +197,7 @@ class _AdjustmentDraftScreenState extends State<AdjustmentDraftScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _viewDetails(draft),
+        onTap: () => _openDetail(draft),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
