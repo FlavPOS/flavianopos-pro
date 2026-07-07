@@ -140,27 +140,54 @@ class _AdjustmentSubmittedDetailScreenState
 
         // 2. FOR EACH ITEM: Update SOH + Write ledger
         for (final item in _items) {
-          // Read current SOH — fallback to products.stockQty if branch_inventory empty
-          final invRows = await txn.query(
+          // Read current SOH — try branch_inventory first, then products
+          // Match by ID OR SKU (bulletproof for imported products with different IDs)
+          int currentSOH = 0;
+
+          // Try 1: branch_inventory by productId
+          var invRows = await txn.query(
             'branch_inventory',
             where: 'branchId = ? AND productId = ?',
             whereArgs: [widget.branch, item.productId],
           );
-          int currentSOH;
+
+          // Try 2: branch_inventory by SKU-based productId
+          if (invRows.isEmpty && item.sku.isNotEmpty) {
+            invRows = await txn.rawQuery('''
+              SELECT bi.* FROM branch_inventory bi
+              JOIN products p ON bi.productId = p.id
+              WHERE bi.branchId = ? AND p.sku = ?
+              LIMIT 1
+            ''', [widget.branch, item.sku]);
+          }
+
           if (invRows.isNotEmpty) {
             currentSOH = ((invRows.first['stockQty'] as num?) ?? 0).toInt();
           } else {
-            // Fallback: read from products table (global master)
-            final prodRows = await txn.query(
+            // Try 3: products by id
+            var prodRows = await txn.query(
               'products',
               where: 'id = ?',
               whereArgs: [item.productId],
               limit: 1,
             );
+
+            // Try 4: products by SKU (bulletproof — SKU is business ID)
+            if (prodRows.isEmpty && item.sku.isNotEmpty) {
+              prodRows = await txn.query(
+                'products',
+                where: 'sku = ?',
+                whereArgs: [item.sku],
+                limit: 1,
+              );
+            }
+
             currentSOH = prodRows.isEmpty
                 ? 0
                 : ((prodRows.first['stockQty'] as num?) ?? 0).toInt();
           }
+
+          debugPrint('[APPROVE] SOH read: ${item.sku}/${item.productId} = $currentSOH');
 
           final qtyChange = item.qty * item.direction; // signed
           final newSOH = (currentSOH + qtyChange).clamp(0, 999999);
@@ -193,11 +220,18 @@ class _AdjustmentSubmittedDetailScreenState
                 whereArgs: [widget.branch, item.productId]);
           }
 
-          // Also update products.stockQty (global master) for Inventory module
+          // Also update products.stockQty by ID or SKU (bulletproof)
           try {
-            await txn.update('products', {
+            final updated = await txn.update('products', {
               'stockQty': newSOH,
             }, where: 'id = ?', whereArgs: [item.productId]);
+
+            // If ID didn't match, try SKU
+            if (updated == 0 && item.sku.isNotEmpty) {
+              await txn.update('products', {
+                'stockQty': newSOH,
+              }, where: 'sku = ?', whereArgs: [item.sku]);
+            }
           } catch (_) {}
 
           // 3. Write to stock_movements (BIR ledger)
