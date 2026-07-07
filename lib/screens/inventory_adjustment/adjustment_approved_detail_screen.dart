@@ -296,54 +296,9 @@ class _AdjustmentApprovedDetailScreenState
   }
 
   Widget _buildBottomBar() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildSummaryStrip(),
-        Container(
-          padding: EdgeInsets.only(
-            left: 12,
-            right: 12,
-            top: 12,
-            bottom: MediaQuery.of(context).padding.bottom + 12,
-          ),
-          decoration: const BoxDecoration(color: _card),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _preview,
-                  icon: const Icon(Icons.picture_as_pdf_rounded),
-                  label: const Text('Preview'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _green,
-                    side: const BorderSide(color: _green, width: 1.5),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _download,
-                  icon: const Icon(Icons.download_rounded, size: 18),
-                  label: const Text('Download'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _green,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return SafeArea(
+      top: false,
+      child: _buildSummaryStrip(),
     );
   }
 
