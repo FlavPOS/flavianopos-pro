@@ -1,72 +1,509 @@
 import 'package:flutter/material.dart';
+import '../../models/product_model.dart';
+import '../inventory/inventory_screen.dart';
 
-/// Prepared Adjustment screen — placeholder.
-/// TODO: Design this module inside.
-class AdjustmentPreparedScreen extends StatelessWidget {
-  const AdjustmentPreparedScreen({super.key});
+/// Prepared Adjustment — create/edit list of adjustments before submission.
+class AdjustmentPreparedScreen extends StatefulWidget {
+  final String branch;
+  final String userName;
 
+  const AdjustmentPreparedScreen({
+    super.key,
+    required this.branch,
+    required this.userName,
+  });
+
+  @override
+  State<AdjustmentPreparedScreen> createState() =>
+      _AdjustmentPreparedScreenState();
+}
+
+class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
+  static const _amber = Color(0xFFF59E0B);
+  static const _red = Color(0xFFEF4444);
+  static const _green = Color(0xFF22C55E);
+  static const _bg = Color(0xFFF5F6FA);
+  static const _card = Color(0xFFFFFFFF);
+  static const _textPrimary = Color(0xFF111827);
+  static const _textSecondary = Color(0xFF6B7280);
+  static const _divider = Color(0xFFE5E7EB);
+
+  final TextEditingController _searchCtrl = TextEditingController();
+  final List<_AdjItem> _items = [];
+  String _searchQuery = '';
+
+  // ─── Reason codes with direction ────────────────────────
+  static const List<_Reason> _reasons = [
+    // Negative (Red)
+    _Reason('Cycle Count Shortage', -1, Icons.warning_amber_rounded),
+    _Reason('Damaged Item',         -1, Icons.broken_image_rounded),
+    _Reason('Expired Item',         -1, Icons.schedule_rounded),
+    _Reason('Theft / Loss',         -1, Icons.error_rounded),
+    _Reason('Supplier Return',      -1, Icons.undo_rounded),
+    _Reason('Stock Write-Off',      -1, Icons.delete_rounded),
+    // Positive (Green)
+    _Reason('Cycle Count Overage',  1, Icons.add_task_rounded),
+    _Reason('Found Stock',          1, Icons.search_rounded),
+    _Reason('Inventory Correction', 1, Icons.edit_rounded),
+    _Reason('Warehouse Recovery',   1, Icons.warehouse_rounded),
+    _Reason('Supplier Replacement', 1, Icons.refresh_rounded),
+  ];
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    for (final item in _items) {
+      item.qtyCtrl.dispose();
+    }
+    super.dispose();
+  }
+
+  // ─── Filtered items ─────────────────────────────────────
+  List<_AdjItem> get _filteredItems {
+    if (_searchQuery.isEmpty) return _items;
+    final q = _searchQuery.toLowerCase();
+    return _items.where((i) =>
+      i.product.name.toLowerCase().contains(q) ||
+      i.product.sku.toLowerCase().contains(q)
+    ).toList();
+  }
+
+  // ─── Actions ────────────────────────────────────────────
+  Future<void> _addProduct() async {
+    final product = await Navigator.push<Product>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InventoryScreen(
+          branch: widget.branch,
+          isSelecting: true,
+        ),
+      ),
+    );
+    if (product == null || !mounted) return;
+
+    if (_items.any((i) => i.product.id == product.id)) {
+      _showSnack('${product.name} already added', color: _amber);
+      return;
+    }
+
+    setState(() {
+      _items.add(_AdjItem(
+        product: product,
+        qtyCtrl: TextEditingController(text: '1'),
+        qty: 1,
+      ));
+    });
+  }
+
+  void _removeItem(_AdjItem item) {
+    setState(() {
+      _items.remove(item);
+    });
+    item.qtyCtrl.dispose();
+  }
+
+  void _showSnack(String msg, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color ?? _amber,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _saveDraft() async {
+    if (_items.isEmpty) {
+      _showSnack('Add at least one item', color: _red);
+      return;
+    }
+    // TODO: Save to SQLite as draft
+    _showSnack('Draft saved (${_items.length} items)', color: _amber);
+  }
+
+  Future<void> _submit() async {
+    if (_items.isEmpty) {
+      _showSnack('Add at least one item', color: _red);
+      return;
+    }
+    // Validate all items have reason
+    for (final item in _items) {
+      if (item.reason == null) {
+        _showSnack('Select reason for ${item.product.name}', color: _red);
+        return;
+      }
+      if (item.qty <= 0) {
+        _showSnack('Enter valid qty for ${item.product.name}', color: _red);
+        return;
+      }
+    }
+    // TODO: Submit for approval (change status to SUBMITTED)
+    _showSnack('Submitted for approval (${_items.length} items)', color: _green);
+  }
+
+  // ─── BUILD ──────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: const Color(0xfff59e0b),
+        backgroundColor: _amber,
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Prepared Adjustment',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Add Product',
+            onPressed: _addProduct,
+          ),
+        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
+      body: Column(
+        children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Container(
               decoration: BoxDecoration(
-                color: const Color(0xfff59e0b).withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+                color: _card,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: Icon(
-                Icons.assignment_rounded,
-                size: 64,
-                color: const Color(0xfff59e0b),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Prepared Adjustment',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF111827),
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Coming soon — this module is under construction.',
-              style: TextStyle(fontSize: 14, color: Color(0xFF6B7280)),
-            ),
-            const SizedBox(height: 32),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xfff59e0b).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '🚧 TODO: Design this module',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: const Color(0xfff59e0b),
-                  fontWeight: FontWeight.w600,
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (q) => setState(() => _searchQuery = q),
+                decoration: InputDecoration(
+                  hintText: 'Search SKU or Product',
+                  hintStyle: const TextStyle(color: _textSecondary),
+                  prefixIcon: const Icon(Icons.search_rounded,
+                      color: _textSecondary, size: 22),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+
+          // Item list
+          Expanded(
+            child: _items.isEmpty
+                ? _buildEmpty()
+                : _buildList(),
+          ),
+        ],
+      ),
+      bottomNavigationBar: _items.isEmpty ? null : _buildBottomBar(),
+    );
+  }
+
+  Widget _buildEmpty() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: _amber.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.assignment_rounded,
+                size: 64, color: _amber),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No items yet',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: _textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Tap + to add products',
+            style: TextStyle(fontSize: 14, color: _textSecondary),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _addProduct,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Add Product'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _amber,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildList() {
+    final filtered = _filteredItems;
+    if (filtered.isEmpty) {
+      return const Center(
+        child: Text('No matching items',
+            style: TextStyle(color: _textSecondary)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      itemCount: filtered.length,
+      itemBuilder: (context, index) {
+        return _buildItemCard(filtered[index]);
+      },
+    );
+  }
+
+  Widget _buildItemCard(_AdjItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: SKU + Name + Qty + Delete
+          Row(
+            children: [
+              Expanded(
+                child: RichText(
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: const TextStyle(color: _textPrimary, fontSize: 14),
+                    children: [
+                      TextSpan(
+                        text: '${item.product.sku} ',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _amber,
+                        ),
+                      ),
+                      TextSpan(
+                        text: item.product.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Qty
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: item.qtyCtrl,
+                  onChanged: (v) {
+                    item.qty = int.tryParse(v) ?? 0;
+                  },
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                  decoration: InputDecoration(
+                    labelText: 'Qty',
+                    labelStyle: const TextStyle(
+                        fontSize: 11, color: _textSecondary),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: _divider),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: _divider),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: _amber, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: _red, size: 20),
+                onPressed: () => _removeItem(item),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Row 2: Reason dropdown
+          Container(
+            decoration: BoxDecoration(
+              color: _bg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _divider),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<_Reason>(
+                value: item.reason,
+                isExpanded: true,
+                hint: const Row(
+                  children: [
+                    Icon(Icons.chevron_right_rounded,
+                        color: _textSecondary, size: 18),
+                    SizedBox(width: 6),
+                    Text('Select reason',
+                        style: TextStyle(
+                            color: _textSecondary, fontSize: 13)),
+                  ],
+                ),
+                icon: const Icon(Icons.keyboard_arrow_down_rounded,
+                    color: _textSecondary),
+                items: _reasons.map((r) {
+                  final color = r.direction < 0 ? _red : _green;
+                  return DropdownMenuItem<_Reason>(
+                    value: r,
+                    child: Row(
+                      children: [
+                        Icon(r.icon, color: color, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          r.label,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (r) => setState(() => item.reason = r),
+                selectedItemBuilder: (context) => _reasons.map((r) {
+                  final color = r.direction < 0 ? _red : _green;
+                  return Row(
+                    children: [
+                      Icon(r.icon, color: color, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        r.label,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Container(
+      padding: EdgeInsets.only(
+        left: 12,
+        right: 12,
+        top: 12,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
+      ),
+      decoration: BoxDecoration(
+        color: _card,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: _saveDraft,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save Draft'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _amber,
+                side: const BorderSide(color: _amber, width: 1.5),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.send_rounded, size: 18),
+              label: const Text('Submit'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _amber,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Models ────────────────────────────────────────────────
+class _AdjItem {
+  final Product product;
+  final TextEditingController qtyCtrl;
+  int qty;
+  _Reason? reason;
+
+  _AdjItem({
+    required this.product,
+    required this.qtyCtrl,
+    required this.qty,
+  });
+}
+
+class _Reason {
+  final String label;
+  final int direction; // -1 or +1
+  final IconData icon;
+
+  const _Reason(this.label, this.direction, this.icon);
 }

@@ -70,7 +70,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
               subtitle: 'Prepare and review inventory adjustments before submission.',
               count: _preparedCount,
               countColor: const Color(0xFFF59E0B),
-              onTap: () => _open(const AdjustmentPreparedScreen()),
+              onTap: () => _open(AdjustmentPreparedScreen(branch: widget.branch, userName: widget.userName)),
             ),
             const SizedBox(height: 12),
             _buildCard(
