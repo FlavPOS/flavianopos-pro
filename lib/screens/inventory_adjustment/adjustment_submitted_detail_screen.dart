@@ -5,6 +5,7 @@ import 'adjustment_pdf_generator.dart';
 import '../../helpers/database_helper.dart';
 import '../../models/product_model.dart';
 import '../../services/branch_inventory_service.dart';
+import '../../services/device_assignment_service.dart';
 
 class AdjustmentSubmittedDetailScreen extends StatefulWidget {
   final String adjustmentId;
@@ -150,7 +151,15 @@ class _AdjustmentSubmittedDetailScreenState
         approvedByRole: result.userRole,
       );
 
-      // ═══ STEP 2: Update SOH via BranchInventoryService ═══
+      // ═══ STEP 2: Get REAL branch ID (not display name) ═══
+      // This is CRITICAL — Delivery uses branchId from DeviceAssignmentService.
+      // widget.branch is often the display name ("Main Branch"),
+      // but branchInventory expects the branch CODE ("HO001").
+      final assign = await DeviceAssignmentService().read();
+      final realBranchId = (assign['branchId'] ?? widget.branch).toString();
+      debugPrint('[APPROVE] Using branchId: $realBranchId (widget.branch was: ${widget.branch})');
+
+      // ═══ STEP 3: Update SOH via BranchInventoryService ═══
       // Uses the PROVEN pattern from Receive Delivery.
       // Handles: SQLite branch_inventory + Firebase sync + all edge cases.
       int successCount = 0;
@@ -159,14 +168,14 @@ class _AdjustmentSubmittedDetailScreenState
         if (item.direction > 0) {
           // POSITIVE reason → increment stock
           ok = await BranchInventoryService.incrementStock(
-            widget.branch,
+            realBranchId,
             item.productId,
             item.qty,
           );
         } else {
           // NEGATIVE reason → decrement stock
           ok = await BranchInventoryService.decrementStock(
-            widget.branch,
+            realBranchId,
             item.productId,
             item.qty,
           );
@@ -182,7 +191,7 @@ class _AdjustmentSubmittedDetailScreenState
       final db = await DatabaseHelper().database;
       for (final item in _items) {
         final currentSOH = await BranchInventoryService.getStock(
-          widget.branch, item.productId);
+          realBranchId, item.productId);
         final qtyChange = item.qty * item.direction;
         final movementId =
             'MOV-ADJ-${widget.adjustmentId}-${item.itemId ?? _items.indexOf(item)}';
@@ -203,7 +212,7 @@ class _AdjustmentSubmittedDetailScreenState
             'reason_note': item.reasonName,
             'reference_no': widget.adjustmentId,
             'batch_no': '',
-            'branch_code': widget.branch,
+            'branch_code': realBranchId,
             'branch_name': widget.branch,
             'user_pin': _doc?.createdByPin ?? '',
             'user_name': _doc?.createdByName ?? '',
