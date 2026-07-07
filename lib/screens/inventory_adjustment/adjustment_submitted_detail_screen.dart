@@ -309,7 +309,6 @@ class _AdjustmentSubmittedDetailScreenState
           for (final movement in movementsForSync) {
             final movId = movement['movement_id'] as String;
             final branchCode = movement['branch_code'] as String;
-            final productId = movement['product_id'] as String;
             final newSOH = (movement['qty_after'] as num).toInt();
 
             // 1. Write stock movement (BIR ledger)
@@ -319,7 +318,7 @@ class _AdjustmentSubmittedDetailScreenState
 
             // 2. Update branchInventory
             await fb.ref(
-              'companies/$companyCode/branchInventory/$branchCode/$productId'
+              'companies/$companyCode/branchInventory/$branchCode/${movement['sku']}'
             ).update({
               'stockQty': newSOH,
               'lastUpdated': DateTime.now().toIso8601String(),
