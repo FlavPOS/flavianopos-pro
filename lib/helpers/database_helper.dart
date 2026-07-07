@@ -138,7 +138,46 @@ class DatabaseHelper {
       await db.execute('''CREATE TABLE IF NOT EXISTS adjustment_records (id TEXT PRIMARY KEY, itemName TEXT NOT NULL, sku TEXT DEFAULT '', adjustmentType TEXT NOT NULL, quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0, newStock INTEGER DEFAULT 0, reason TEXT DEFAULT '', notes TEXT DEFAULT '', dateTime TEXT NOT NULL, cost REAL DEFAULT 0, retail REAL DEFAULT 0)''');
     } catch (_) {}
 
+    
+    // ═══ ENTERPRISE STOCK MOVEMENTS LEDGER ═══
+    // Unified audit log for ALL SOH changes (Adjustment/Sale/Void/Refund/Delivery)
     try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS stock_movements (
+          movement_id       TEXT PRIMARY KEY,
+          movement_type     TEXT NOT NULL,
+          sku               TEXT NOT NULL,
+          product_id        TEXT DEFAULT '',
+          product_name      TEXT DEFAULT '',
+          barcode           TEXT DEFAULT '',
+          qty_before        REAL NOT NULL DEFAULT 0,
+          qty_change        REAL NOT NULL DEFAULT 0,
+          qty_after         REAL NOT NULL DEFAULT 0,
+          unit_cost         REAL DEFAULT 0,
+          reason_code       TEXT DEFAULT '',
+          reason_note       TEXT DEFAULT '',
+          reference_no      TEXT DEFAULT '',
+          batch_no          TEXT DEFAULT '',
+          branch_code       TEXT NOT NULL,
+          branch_name       TEXT DEFAULT '',
+          user_pin          TEXT DEFAULT '',
+          user_name         TEXT DEFAULT '',
+          approved_by_pin   TEXT DEFAULT '',
+          approved_by_name  TEXT DEFAULT '',
+          local_timestamp   INTEGER NOT NULL,
+          server_timestamp  INTEGER,
+          sync_status       TEXT NOT NULL DEFAULT 'PENDING',
+          z_report_id       TEXT DEFAULT '',
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_mov_sku ON stock_movements(sku, branch_code)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_mov_type ON stock_movements(movement_type, local_timestamp)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_mov_sync ON stock_movements(sync_status)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_mov_zreport ON stock_movements(z_report_id)"); } catch (_) {}
+try {
       await db.execute('''CREATE TABLE IF NOT EXISTS exchanges (id TEXT PRIMARY KEY, exchangeNumber TEXT UNIQUE, originalTxnId TEXT, exchangeDate TEXT, returnedItemName TEXT, returnedItemSku TEXT, returnedQty INTEGER DEFAULT 0, returnedPrice REAL DEFAULT 0, newItemName TEXT, newItemSku TEXT, newQty INTEGER DEFAULT 0, newPrice REAL DEFAULT 0, priceDifference REAL DEFAULT 0, amountPaid REAL DEFAULT 0, reason TEXT DEFAULT '', processedBy TEXT DEFAULT '', approvedBy TEXT DEFAULT '', branch TEXT DEFAULT '', status TEXT DEFAULT 'Completed', dateCreated TEXT)''');
     } catch (_) {}
 

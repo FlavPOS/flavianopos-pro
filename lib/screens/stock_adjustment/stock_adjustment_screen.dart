@@ -245,6 +245,50 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
 
       // Save to SQLite
       await AdjustmentStorage.saveAdjustment(record);
+      // ═══ ENTERPRISE: Write to unified stock_movements ledger ═══
+      // This is the BIR-compliant audit trail for ALL SOH changes
+      try {
+        final movId = 'MOV-ADJ-$branchCode-${DateTime.now().millisecondsSinceEpoch}-${item.product.id}';
+        final qtyChange = item.isAdd ? item.quantity : -item.quantity;
+        final nowMs = DateTime.now().millisecondsSinceEpoch;
+        final nowIso = DateTime.now().toIso8601String();
+
+        final movement = {
+          'movement_id'      : movId,
+          'movement_type'    : 'ADJUSTMENT',
+          'sku'              : item.product.sku,
+          'product_id'       : item.product.id,
+          'product_name'     : item.product.name,
+          'barcode'          : item.product.barcode,
+          'qty_before'       : currentBranchStock.toDouble(),
+          'qty_change'       : qtyChange.toDouble(),
+          'qty_after'        : newBranchStock.toDouble(),
+          'unit_cost'        : item.product.costPrice,
+          'reason_code'      : item.selectedReason,
+          'reason_note'      : item.notesController.text,
+          'reference_no'     : record.id,
+          'batch_no'         : '',
+          'branch_code'      : branchCode,
+          'branch_name'      : branchName,
+          'user_pin'         : currentUser.pin,
+          'user_name'        : widget.userName,
+          'approved_by_pin'  : '',
+          'approved_by_name' : '',
+          'local_timestamp'  : nowMs,
+          'sync_status'      : 'PENDING',
+          'z_report_id'      : '',
+          'created_at'       : nowIso,
+          'updated_at'       : nowIso,
+        };
+
+        final db = await DatabaseHelper().database;
+        await db.insert('stock_movements', movement);
+        debugPrint('[MOV] Ledger written: $movId (${qtyChange > 0 ? "+" : ""}$qtyChange)');
+      } catch (e) {
+        debugPrint('[MOV] Ledger write FAILED (non-fatal): $e');
+      }
+      // ═══ END stock_movements block ═══
+
 
       // ═══ ENTERPRISE: Update BRANCH INVENTORY (not just product!) ═══
       // This ensures Cashiering sees the new stock immediately
