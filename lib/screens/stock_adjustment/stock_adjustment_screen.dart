@@ -134,8 +134,8 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
         _showSnackBar('Please enter valid qty for ${item.product.name}', color: Colors.red);
         return;
       }
-      if (!item.isAdd && item.quantity > item.product.stockQty) {
-        _showSnackBar('Cannot deduct more than current stock (${item.product.stockQty}) for ${item.product.name}', color: Colors.red);
+      if (!item.isAdd && item.quantity > item.currentStock) {
+        _showSnackBar('Cannot deduct more than current stock (${item.currentStock}) for ${item.product.name}', color: Colors.red);
         return;
       }
     }
@@ -363,7 +363,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                       leading: Icon(item.isAdd ? Icons.add_circle : Icons.remove_circle,
                         color: item.isAdd ? Colors.green : Colors.red, size: 20),
                       title: Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: Text('${item.product.stockQty} → ${item.newStock}  |  ${item.selectedReason}',
+                      subtitle: Text('${item.currentStock} → ${item.newStock}  |  ${item.selectedReason}',
                         style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                       trailing: Text('${item.isAdd ? "+" : "-"}${item.quantity}',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14,
@@ -742,9 +742,20 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
         _showSnackBar('${product.name} is already in the list', color: Colors.orange[700]);
         return;
       }
-      final item = AdjustmentItem(product: product);
+      // 🆕 Load ACTUAL branch-specific stock (not product.stockQty which is master)
+      final assign = await DeviceAssignmentService().read();
+      String bCode = (assign['branchId'] ?? '').toString();
+      final role = (assign['role'] ?? '').toString().toLowerCase();
+      final isHO = bCode.isEmpty || bCode.toUpperCase() == 'HEADOFFICE' ||
+                   role == 'admin' || role == 'headoffice' || role == 'companyadmin';
+      if (isHO) {
+        if (Branch.allBranches.isEmpty) await Branch.loadFromDB();
+        bCode = Branch.getHeadOffice()?.id ?? 'HO001';
+      }
+      final branchStock = await BranchInventoryService.getStock(bCode, product.id);
+      final item = AdjustmentItem(product: product, currentStock: branchStock);
+      if (!mounted) return;
       setState(() => _items.add(item));
-
     }
   }
 
@@ -816,7 +827,7 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
                       child: Row(children: [
                         Text('Stock:', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                         const SizedBox(width: 6),
-                        Text('${item.product.stockQty}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                        Text('${item.currentStock}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: Icon(Icons.arrow_forward, size: 16, color: accentColor),

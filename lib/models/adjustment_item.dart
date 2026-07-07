@@ -3,19 +3,20 @@ import 'product_model.dart';
 
 class AdjustmentItem {
   final Product product;
+  int currentStock; // 🆕 Branch-specific SOH (source of truth)
   final TextEditingController qtyController = TextEditingController();
   final TextEditingController notesController = TextEditingController();
   String selectedReason = '';
   int quantity = 0;
   bool isAdd = true;
 
-  AdjustmentItem({required this.product});
+  AdjustmentItem({required this.product, this.currentStock = 0});
 
   bool get hasReason => selectedReason.isNotEmpty;
 
   int get newStock {
-    if (isAdd) return product.stockQty + quantity;
-    return (product.stockQty - quantity).clamp(0, 999999);
+    if (isAdd) return currentStock + quantity;
+    return (currentStock - quantity).clamp(0, 999999);
   }
 
   Product get updatedProduct => Product(
