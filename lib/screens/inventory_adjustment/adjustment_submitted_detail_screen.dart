@@ -3,6 +3,7 @@ import 'adjustment_v3_model.dart';
 import 'approver_pin_dialog_v3.dart';
 import 'adjustment_pdf_generator.dart';
 import '../../helpers/database_helper.dart';
+import '../../models/product_model.dart';
 import '../../helpers/sync_bridge.dart';
 import '../../services/firebase_realtime_service.dart';
 import '../../services/device_assignment_service.dart';
@@ -139,18 +140,33 @@ class _AdjustmentSubmittedDetailScreenState
 
         // 2. FOR EACH ITEM: Update SOH + Write ledger
         for (final item in _items) {
-          // Read current SOH from branch_inventory
+          // Read current SOH — fallback to products.stockQty if branch_inventory empty
           final invRows = await txn.query(
             'branch_inventory',
             where: 'branchId = ? AND productId = ?',
             whereArgs: [widget.branch, item.productId],
           );
-          final currentSOH = invRows.isEmpty
-              ? 0
-              : ((invRows.first['stockQty'] as num?) ?? 0).toInt();
+          int currentSOH;
+          if (invRows.isNotEmpty) {
+            currentSOH = ((invRows.first['stockQty'] as num?) ?? 0).toInt();
+          } else {
+            // Fallback: read from products table (global master)
+            final prodRows = await txn.query(
+              'products',
+              where: 'id = ?',
+              whereArgs: [item.productId],
+              limit: 1,
+            );
+            currentSOH = prodRows.isEmpty
+                ? 0
+                : ((prodRows.first['stockQty'] as num?) ?? 0).toInt();
+          }
 
           final qtyChange = item.qty * item.direction; // signed
           final newSOH = (currentSOH + qtyChange).clamp(0, 999999);
+          if (currentSOH + qtyChange < 0) {
+            debugPrint('[APPROVE] WARNING: Would go negative for ${item.sku}: $currentSOH + $qtyChange = ${currentSOH + qtyChange}, clamped to 0');
+          }
 
           // Update or insert branch_inventory
           if (invRows.isEmpty) {
@@ -176,6 +192,13 @@ class _AdjustmentSubmittedDetailScreenState
             }, where: 'branchId = ? AND productId = ?',
                 whereArgs: [widget.branch, item.productId]);
           }
+
+          // Also update products.stockQty (global master) for Inventory module
+          try {
+            await txn.update('products', {
+              'stockQty': newSOH,
+            }, where: 'id = ?', whereArgs: [item.productId]);
+          } catch (_) {}
 
           // 3. Write to stock_movements (BIR ledger)
           final movementId =
@@ -270,6 +293,11 @@ class _AdjustmentSubmittedDetailScreenState
 
       // Reload with APPROVED status (so PDF shows stamp)
       await _load();
+
+      // Refresh Product cache so Inventory module shows new SOH
+      try {
+        await Product.loadFromDB();
+      } catch (_) {}
       if (!mounted) return;
 
       _showSnack(
