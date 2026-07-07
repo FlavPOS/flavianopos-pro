@@ -325,6 +325,18 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
     );
   }
 
+  // Calculate cost impact per item: qty × unitCost × direction
+  double _itemCostImpact(_AdjItem item) {
+    final direction = item.reason?.direction ?? 0;
+    return item.qty * item.product.costPrice * direction;
+  }
+
+  String _formatCost(double amount) {
+    final sign = amount >= 0 ? '+' : '-';
+    final abs = amount.abs();
+    return '$sign₱${abs.toStringAsFixed(2)}';
+  }
+
   Widget _buildItemCard(_AdjItem item) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -372,7 +384,9 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                 child: TextField(
                   controller: item.qtyCtrl,
                   onChanged: (v) {
-                    item.qty = int.tryParse(v) ?? 0;
+                    setState(() {
+                      item.qty = int.tryParse(v) ?? 0;
+                    });
                   },
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
@@ -492,6 +506,31 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
               ),
             ),
           ),
+          // ── COST IMPACT ROW ──
+          if (item.reason != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Cost Impact',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  _formatCost(_itemCostImpact(item)),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _itemCostImpact(item) < 0 ? _red : _green,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
