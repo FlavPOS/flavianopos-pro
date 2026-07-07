@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../inventory/inventory_screen.dart';
+import 'adjustment_reason_v3_model.dart';
 
 /// Prepared Adjustment — create/edit list of adjustments before submission.
 class AdjustmentPreparedScreen extends StatefulWidget {
@@ -32,22 +33,25 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   final List<_AdjItem> _items = [];
   String _searchQuery = '';
 
-  // ─── Reason codes with direction ────────────────────────
-  static const List<_Reason> _reasons = [
-    // Negative (Red)
-    _Reason('Cycle Count Shortage', -1, Icons.warning_amber_rounded),
-    _Reason('Damaged Item',         -1, Icons.broken_image_rounded),
-    _Reason('Expired Item',         -1, Icons.schedule_rounded),
-    _Reason('Theft / Loss',         -1, Icons.error_rounded),
-    _Reason('Supplier Return',      -1, Icons.undo_rounded),
-    _Reason('Stock Write-Off',      -1, Icons.delete_rounded),
-    // Positive (Green)
-    _Reason('Cycle Count Overage',  1, Icons.add_task_rounded),
-    _Reason('Found Stock',          1, Icons.search_rounded),
-    _Reason('Inventory Correction', 1, Icons.edit_rounded),
-    _Reason('Warehouse Recovery',   1, Icons.warehouse_rounded),
-    _Reason('Supplier Replacement', 1, Icons.refresh_rounded),
-  ];
+  // Reasons loaded from DB
+  List<AdjustmentReasonV3> _dbReasons = [];
+  bool _loadingReasons = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReasons();
+  }
+
+  Future<void> _loadReasons() async {
+    await AdjustmentReasonV3Dao.seedDefaults();
+    final list = await AdjustmentReasonV3Dao.getAll(activeOnly: true);
+    if (!mounted) return;
+    setState(() {
+      _dbReasons = list;
+      _loadingReasons = false;
+    });
+  }
 
   @override
   void dispose() {
@@ -126,7 +130,6 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       _showSnack('Add at least one item', color: _red);
       return;
     }
-    // Validate all items have reason
     for (final item in _items) {
       if (item.reason == null) {
         _showSnack('Select reason for ${item.product.name}', color: _red);
@@ -137,7 +140,7 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
         return;
       }
     }
-    // TODO: Submit for approval (change status to SUBMITTED)
+    // TODO: Submit for approval
     _showSnack('Submitted for approval (${_items.length} items)', color: _green);
   }
 
@@ -162,47 +165,48 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchCtrl,
-                onChanged: (q) => setState(() => _searchQuery = q),
-                decoration: InputDecoration(
-                  hintText: 'Search SKU or Product',
-                  hintStyle: const TextStyle(color: _textSecondary),
-                  prefixIcon: const Icon(Icons.search_rounded,
-                      color: _textSecondary, size: 22),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      body: _loadingReasons
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildSearchBar(),
+                Expanded(
+                  child: _items.isEmpty ? _buildEmpty() : _buildList(),
                 ),
-              ),
+              ],
             ),
-          ),
-
-          // Item list
-          Expanded(
-            child: _items.isEmpty
-                ? _buildEmpty()
-                : _buildList(),
-          ),
-        ],
-      ),
       bottomNavigationBar: _items.isEmpty ? null : _buildBottomBar(),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (q) => setState(() => _searchQuery = q),
+          decoration: const InputDecoration(
+            hintText: 'Search SKU or Product',
+            hintStyle: TextStyle(color: _textSecondary),
+            prefixIcon: Icon(Icons.search_rounded,
+                color: _textSecondary, size: 22),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+      ),
     );
   }
 
@@ -289,7 +293,6 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: SKU + Name + Qty + Delete
           Row(
             children: [
               Expanded(
@@ -314,7 +317,6 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Qty
               SizedBox(
                 width: 80,
                 child: TextField(
@@ -354,7 +356,6 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          // Row 2: Reason dropdown
           Container(
             decoration: BoxDecoration(
               color: _bg,
@@ -363,7 +364,7 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: DropdownButtonHideUnderline(
-              child: DropdownButton<_Reason>(
+              child: DropdownButton<AdjustmentReasonV3>(
                 value: item.reason,
                 isExpanded: true,
                 hint: const Row(
@@ -378,20 +379,22 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                 ),
                 icon: const Icon(Icons.keyboard_arrow_down_rounded,
                     color: _textSecondary),
-                items: _reasons.map((r) {
-                  final color = r.direction < 0 ? _red : _green;
-                  return DropdownMenuItem<_Reason>(
+                items: _dbReasons.map((r) {
+                  return DropdownMenuItem<AdjustmentReasonV3>(
                     value: r,
                     child: Row(
                       children: [
-                        Icon(r.icon, color: color, size: 16),
+                        Icon(r.icon, color: r.color, size: 16),
                         const SizedBox(width: 8),
-                        Text(
-                          r.label,
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        Expanded(
+                          child: Text(
+                            r.reasonName,
+                            style: TextStyle(
+                              color: r.color,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -399,18 +402,20 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                   );
                 }).toList(),
                 onChanged: (r) => setState(() => item.reason = r),
-                selectedItemBuilder: (context) => _reasons.map((r) {
-                  final color = r.direction < 0 ? _red : _green;
+                selectedItemBuilder: (context) => _dbReasons.map((r) {
                   return Row(
                     children: [
-                      Icon(r.icon, color: color, size: 16),
+                      Icon(r.icon, color: r.color, size: 16),
                       const SizedBox(width: 8),
-                      Text(
-                        r.label,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Text(
+                          r.reasonName,
+                          style: TextStyle(
+                            color: r.color,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -486,24 +491,16 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   }
 }
 
-// ─── Models ────────────────────────────────────────────────
+// ─── Item Model (in-memory) ──────────────────────────────
 class _AdjItem {
   final Product product;
   final TextEditingController qtyCtrl;
   int qty;
-  _Reason? reason;
+  AdjustmentReasonV3? reason;
 
   _AdjItem({
     required this.product,
     required this.qtyCtrl,
     required this.qty,
   });
-}
-
-class _Reason {
-  final String label;
-  final int direction; // -1 or +1
-  final IconData icon;
-
-  const _Reason(this.label, this.direction, this.icon);
 }

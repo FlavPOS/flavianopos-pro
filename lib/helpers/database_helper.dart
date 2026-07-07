@@ -141,6 +141,24 @@ class DatabaseHelper {
     
     // ═══ ENTERPRISE STOCK MOVEMENTS LEDGER ═══
     // Unified audit log for ALL SOH changes (Adjustment/Sale/Void/Refund/Delivery)
+
+    // ═══ ADJUSTMENT REASONS V3 (auto direction from name) ═══
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS adjustment_reasons_v3 (
+          reason_code   TEXT PRIMARY KEY,
+          reason_name   TEXT NOT NULL,
+          direction     INTEGER NOT NULL DEFAULT -1,
+          icon_name     TEXT DEFAULT 'warning_amber_rounded',
+          is_active     INTEGER NOT NULL DEFAULT 1,
+          sort_order    INTEGER NOT NULL DEFAULT 0,
+          created_at    TEXT NOT NULL,
+          updated_at    TEXT NOT NULL
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_reasons_v3_active ON adjustment_reasons_v3(is_active, sort_order)"); } catch (_) {}
+
     try {
       await db.execute("""
         CREATE TABLE IF NOT EXISTS stock_movements (

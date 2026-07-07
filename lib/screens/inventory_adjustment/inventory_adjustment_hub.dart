@@ -4,6 +4,7 @@ import 'adjustment_draft_screen.dart';
 import 'adjustment_submitted_screen.dart';
 import 'adjustment_approved_screen.dart';
 import 'adjustment_rejected_screen.dart';
+import 'adjustment_reason_settings_v3.dart';
 
 /// Main Hub for Inventory Adjustment module.
 /// Shows 5 workflow cards: Prepared, Draft, Submitted, Approved, Rejected.
@@ -52,6 +53,16 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded),
+            tooltip: 'Reason Codes Settings',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AdjustmentReasonSettingsV3(),
+              ),
+            ).then((_) => setState(() {})),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => setState(() {}),
@@ -196,7 +207,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            '\$count',
+                            '$count',
                             style: const TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
