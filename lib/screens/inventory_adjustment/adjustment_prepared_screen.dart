@@ -325,6 +325,15 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
     );
   }
 
+  // Grand totals for summary strip
+  int get _totalQty {
+    return _items.fold<int>(0, (sum, i) => sum + i.qty);
+  }
+
+  double get _totalCostImpact {
+    return _items.fold<double>(0.0, (sum, i) => sum + _itemCostImpact(i));
+  }
+
   // Calculate cost impact per item: qty × unitCost × direction
   double _itemCostImpact(_AdjItem item) {
     final direction = item.reason?.direction ?? 0;
@@ -536,31 +545,119 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
     );
   }
 
-  Widget _buildBottomBar() {
+  Widget _buildSummaryStrip() {
+    final total = _totalCostImpact;
+    final costColor = total == 0
+        ? _textPrimary
+        : (total < 0 ? _red : _green);
+    final sign = total >= 0 ? '+' : '-';
+    final costLabel = total == 0
+        ? '₱0.00'
+        : '$sign₱${total.abs().toStringAsFixed(2)}';
+
     return Container(
-      padding: EdgeInsets.only(
-        left: 12,
-        right: 12,
-        top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 12,
-      ),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: const BoxDecoration(
         color: _card,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
+        border: Border(top: BorderSide(color: _divider)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildSummaryStat(
+            icon: Icons.shopping_bag_outlined,
+            iconColor: _amber,
+            label: 'Items',
+            value: '${_items.length}',
+            valueColor: _textPrimary,
+          ),
+          _dividerV(),
+          _buildSummaryStat(
+            icon: Icons.add_rounded,
+            iconColor: _amber,
+            label: 'Qty',
+            value: '$_totalQty pcs',
+            valueColor: _textPrimary,
+          ),
+          _dividerV(),
+          _buildSummaryStat(
+            icon: Icons.sell_outlined,
+            iconColor: _amber,
+            label: 'Cost',
+            value: costLabel,
+            valueColor: costColor,
           ),
         ],
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _saveDraft,
-              icon: const Icon(Icons.save_outlined),
-              label: const Text('Save Draft'),
+    );
+  }
+
+  Widget _dividerV() {
+    return Container(
+      width: 1,
+      height: 32,
+      color: _divider,
+    );
+  }
+
+  Widget _buildSummaryStat({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    required Color valueColor,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 11,
+                color: _textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: valueColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSummaryStrip(),
+        Container(
+          padding: EdgeInsets.only(
+            left: 12,
+            right: 12,
+            top: 12,
+            bottom: MediaQuery.of(context).padding.bottom + 12,
+          ),
+          decoration: const BoxDecoration(color: _card),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saveDraft,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save Draft'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _amber,
                 side: const BorderSide(color: _amber, width: 1.5),
@@ -594,6 +691,8 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
           ),
         ],
       ),
+        ),
+      ],
     );
   }
 }
