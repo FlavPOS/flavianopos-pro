@@ -6,6 +6,8 @@ import '../../helpers/database_helper.dart';
 import '../../models/product_model.dart';
 import '../../services/branch_inventory_service.dart';
 import '../../services/device_assignment_service.dart';
+import '../../services/firebase_realtime_service.dart';
+import '../../services/firebase_config_service.dart';
 
 class AdjustmentSubmittedDetailScreen extends StatefulWidget {
   final String adjustmentId;
@@ -185,6 +187,84 @@ class _AdjustmentSubmittedDetailScreenState
         } else {
           debugPrint('[APPROVE] SOH update failed for ${item.sku}');
         }
+      }
+
+      // ═══ STEP 2B: Write adjustment DOCUMENT to Firebase ═══
+      // Matches Delivery pattern: companies/{code}/branchAdjustments/{branch}/{docId}
+      // So HQ + all devices can see the approved adjustment record.
+      try {
+        if (!FirebaseRealtimeService.instance.isInitialized) {
+          final cfg = await FirebaseConfigService().load();
+          if (cfg != null) {
+            await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+          }
+        }
+        final fb = FirebaseRealtimeService.instance.db;
+        final companyCode = (assign['companyCode'] ?? '').toString();
+
+        if (fb != null && companyCode.isNotEmpty && _doc != null) {
+          // Build items array
+          final itemsPayload = _items.map((i) => {
+            'productId': i.productId,
+            'sku': i.sku,
+            'productName': i.productName,
+            'category': i.category,
+            'qty': i.qty,
+            'reasonCode': i.reasonCode,
+            'reasonName': i.reasonName,
+            'direction': i.direction,
+            'unitCost': i.unitCost,
+            'notes': i.notes,
+          }).toList();
+
+          // Compute totals
+          int totalPositive = 0;
+          int totalNegative = 0;
+          double totalCost = 0;
+          for (final i in _items) {
+            if (i.direction > 0) {
+              totalPositive += i.qty;
+            } else {
+              totalNegative += i.qty;
+            }
+            totalCost += i.qty * i.unitCost * i.direction;
+          }
+
+          // Document payload (matches Delivery structure)
+          final docPayload = {
+            'adjustmentId': widget.adjustmentId,
+            'docNumber': _doc!.docNumber,
+            'branchId': realBranchId,
+            'branchName': _doc!.branchName,
+            'status': 'APPROVED',
+            'preparedBy': _doc!.createdByName,
+            'preparedById': _doc!.createdById,
+            'preparedDate': _doc!.createdAt,
+            'submittedBy': _doc!.submittedBy,
+            'submittedDate': _doc!.submittedAt,
+            'approvedBy': result.userName,
+            'approvedByPin': result.userPin,
+            'approvedByRole': result.userRole,
+            'approvedDate': now,
+            'totalItems': _items.length,
+            'totalPositive': totalPositive,
+            'totalNegative': totalNegative,
+            'totalCost': totalCost,
+            'notes': _doc!.notes,
+            'items': itemsPayload,
+            'syncStatus': 'PENDING',
+            'lastEditedDate': now,
+          };
+
+          // Write to Firebase: companies/{code}/branchAdjustments/{branch}/{docId}
+          await fb.ref(
+            'companies/$companyCode/branchAdjustments/$realBranchId/${widget.adjustmentId}'
+          ).set(docPayload);
+
+          debugPrint('[APPROVE] Adjustment doc synced to Firebase: $realBranchId/${widget.adjustmentId}');
+        }
+      } catch (e) {
+        debugPrint('[APPROVE] Adjustment doc sync failed (non-fatal): $e');
       }
 
       // ═══ STEP 3: Write stock_movements ledger (BIR audit) ═══
