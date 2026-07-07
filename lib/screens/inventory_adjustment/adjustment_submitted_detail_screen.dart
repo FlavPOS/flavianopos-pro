@@ -4,6 +4,9 @@ import 'approver_pin_dialog_v3.dart';
 import 'adjustment_pdf_generator.dart';
 import '../../helpers/database_helper.dart';
 import '../../helpers/sync_bridge.dart';
+import '../../services/firebase_realtime_service.dart';
+import '../../services/device_assignment_service.dart';
+import '../../services/firebase_config_service.dart';
 
 class AdjustmentSubmittedDetailScreen extends StatefulWidget {
   final String adjustmentId;
@@ -212,15 +215,54 @@ class _AdjustmentSubmittedDetailScreenState
       });
 
       // ════════════════════════════════════════════════════
-      // Firebase sync (non-blocking, via existing SyncBridge)
+      // Firebase sync — direct write (bypasses Solo mode guard)
       // ════════════════════════════════════════════════════
-      for (final movement in movementsForSync) {
-        try {
-          await SyncBridge.enqueueMovement(movement, op: 'create');
-        } catch (e) {
-          // Non-fatal: SQLite already committed; sync will retry
-          debugPrint('[APPROVE] Firebase enqueue failed: $e');
+      try {
+        // Ensure Firebase is initialized
+        if (!FirebaseRealtimeService.instance.isInitialized) {
+          final cfg = await FirebaseConfigService().load();
+          if (cfg != null) {
+            await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+          }
         }
+        final fb = FirebaseRealtimeService.instance.db;
+        final assign = await DeviceAssignmentService().read();
+        final companyCode = (assign['companyCode'] ?? '').toString();
+
+        if (fb != null && companyCode.isNotEmpty) {
+          for (final movement in movementsForSync) {
+            final movId = movement['movement_id'] as String;
+            final branchCode = movement['branch_code'] as String;
+            final productId = movement['product_id'] as String;
+            final newSOH = (movement['qty_after'] as num).toInt();
+
+            // 1. Write stock movement (BIR ledger)
+            await fb.ref(
+              'companies/$companyCode/stockMovements/$movId'
+            ).set(movement);
+
+            // 2. Update branchInventory
+            await fb.ref(
+              'companies/$companyCode/branchInventory/$branchCode/$productId'
+            ).update({
+              'stockQty': newSOH,
+              'lastUpdated': DateTime.now().toIso8601String(),
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+          }
+          debugPrint('[APPROVE] Firebase synced ${movementsForSync.length} movements');
+        } else {
+          debugPrint('[APPROVE] Firebase skipped: db=NULL or companyCode empty');
+        }
+
+        // Backup: also enqueue via SyncBridge (in case Multi-Store mode later)
+        for (final movement in movementsForSync) {
+          try {
+            await SyncBridge.enqueueMovement(movement, op: 'create');
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('[APPROVE] Firebase sync failed: $e');
       }
 
       if (!mounted) return;
