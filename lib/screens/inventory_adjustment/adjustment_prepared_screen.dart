@@ -342,8 +342,18 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
 
   String _formatCost(double amount) {
     final sign = amount >= 0 ? '+' : '-';
-    final abs = amount.abs();
-    return '$sign₱${abs.toStringAsFixed(2)}';
+    return '$sign${_thousands(amount.abs())}';
+  }
+
+  String _thousands(double v) {
+    final parts = v.toStringAsFixed(2).split('.');
+    final intPart = parts[0];
+    final buf = StringBuffer();
+    for (var i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) buf.write(',');
+      buf.write(intPart[i]);
+    }
+    return '${buf.toString()}.${parts[1]}';
   }
 
   Widget _buildItemCard(_AdjItem item) {
@@ -552,8 +562,8 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
         : (total < 0 ? _red : _green);
     final sign = total >= 0 ? '+' : '-';
     final costLabel = total == 0
-        ? '₱0.00'
-        : '$sign₱${total.abs().toStringAsFixed(2)}';
+        ? '0.00'
+        : '$sign${_thousands(total.abs())}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
