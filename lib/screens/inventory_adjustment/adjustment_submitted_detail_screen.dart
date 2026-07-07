@@ -4,10 +4,7 @@ import 'approver_pin_dialog_v3.dart';
 import 'adjustment_pdf_generator.dart';
 import '../../helpers/database_helper.dart';
 import '../../models/product_model.dart';
-import '../../helpers/sync_bridge.dart';
-import '../../services/firebase_realtime_service.dart';
-import '../../services/device_assignment_service.dart';
-import '../../services/firebase_config_service.dart';
+import '../../services/branch_inventory_service.dart';
 
 class AdjustmentSubmittedDetailScreen extends StatefulWidget {
   final String adjustmentId;
@@ -38,6 +35,7 @@ class _AdjustmentSubmittedDetailScreenState
   static const _divider = Color(0xFFE5E7EB);
 
   AdjustmentV3? _doc;
+  bool _approveInProgress = false;
   List<AdjustmentV3Item> _items = [];
   bool _loading = true;
 
@@ -86,6 +84,27 @@ class _AdjustmentSubmittedDetailScreenState
 
   // ─── APPROVE — Full SOH wire ────────────────────────────
   Future<void> _approve() async {
+    // ═══ GUARD 1: Prevent double execution ═══
+    if (_approveInProgress) {
+      debugPrint('[APPROVE] Already in progress');
+      return;
+    }
+
+    // ═══ GUARD 2: Prevent re-approving ═══
+    if (_doc?.status == 'APPROVED') {
+      _showSnack('Already approved', color: _green);
+      return;
+    }
+
+    // ═══ GUARD 3: Fresh reload ═══
+    await _load();
+    if (!mounted) return;
+    if (_doc?.status != 'SUBMITTED') {
+      _showSnack('Only SUBMITTED docs can be approved', color: _red);
+      return;
+    }
+
+    // ═══ PIN Dialog ═══
     final result = await ApproverPinDialog.show(
       context: context,
       title: 'Approve Adjustment',
@@ -95,7 +114,9 @@ class _AdjustmentSubmittedDetailScreenState
     );
     if (result == null || !mounted) return;
 
-    // Show progress dialog while applying SOH changes
+    _approveInProgress = true;
+
+    // ═══ Progress dialog ═══
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -119,154 +140,64 @@ class _AdjustmentSubmittedDetailScreenState
     try {
       final now = DateTime.now().toIso8601String();
       final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+      // ═══ STEP 1: Update adjustment status ONLY (small transaction) ═══
+      await AdjustmentV3Dao.updateStatus(
+        adjustmentId: widget.adjustmentId,
+        newStatus: AdjustmentStatus.approved,
+        approvedBy: result.userName,
+        approvedByPin: result.userPin,
+        approvedByRole: result.userRole,
+      );
+
+      // ═══ STEP 2: Update SOH via BranchInventoryService ═══
+      // Uses the PROVEN pattern from Receive Delivery.
+      // Handles: SQLite branch_inventory + Firebase sync + all edge cases.
+      int successCount = 0;
+      for (final item in _items) {
+        bool ok;
+        if (item.direction > 0) {
+          // POSITIVE reason → increment stock
+          ok = await BranchInventoryService.incrementStock(
+            widget.branch,
+            item.productId,
+            item.qty,
+          );
+        } else {
+          // NEGATIVE reason → decrement stock
+          ok = await BranchInventoryService.decrementStock(
+            widget.branch,
+            item.productId,
+            item.qty,
+          );
+        }
+        if (ok) {
+          successCount++;
+        } else {
+          debugPrint('[APPROVE] SOH update failed for ${item.sku}');
+        }
+      }
+
+      // ═══ STEP 3: Write stock_movements ledger (BIR audit) ═══
       final db = await DatabaseHelper().database;
+      for (final item in _items) {
+        final currentSOH = await BranchInventoryService.getStock(
+          widget.branch, item.productId);
+        final qtyChange = item.qty * item.direction;
+        final movementId =
+            'MOV-ADJ-${widget.adjustmentId}-${item.itemId ?? _items.indexOf(item)}';
 
-      // Collect movements for Firebase sync AFTER SQLite commits
-      final List<Map<String, dynamic>> movementsForSync = [];
-
-      // ════════════════════════════════════════════════════
-      // ATOMIC SQLite Transaction: SOH + Ledger + Status
-      // ════════════════════════════════════════════════════
-      await db.transaction((txn) async {
-        // 1. Update adjustment header to APPROVED
-        await txn.update('adjustments_v3', {
-          'status': 'APPROVED',
-          'approved_at': now,
-          'approved_by': result.userName,
-          'approved_by_pin': result.userPin,
-          'approved_by_role': result.userRole,
-          'updated_at': now,
-        }, where: 'adjustment_id = ?', whereArgs: [widget.adjustmentId]);
-
-        // 2. FOR EACH ITEM: Update SOH + Write ledger
-        for (final item in _items) {
-          // Read current SOH — try branch_inventory first, then products
-          // Match by ID OR SKU (bulletproof for imported products with different IDs)
-          int currentSOH = 0;
-
-          // Try 1: branch_inventory JOIN products by SKU (most reliable)
-          var invRows = <Map<String, Object?>>[];
-          if (item.sku.isNotEmpty) {
-            invRows = await txn.rawQuery('''
-              SELECT bi.* FROM branch_inventory bi
-              INNER JOIN products p ON bi.productId = p.id
-              WHERE bi.branchId = ? AND p.sku = ?
-              LIMIT 1
-            ''', [widget.branch, item.sku]);
-          }
-
-          // Try 2: branch_inventory by direct productId
-          if (invRows.isEmpty) {
-            invRows = await txn.query(
-              'branch_inventory',
-              where: 'branchId = ? AND productId = ?',
-              whereArgs: [widget.branch, item.productId],
-            );
-          }
-
-          if (invRows.isNotEmpty) {
-            currentSOH = ((invRows.first['stockQty'] as num?) ?? 0).toInt();
-          } else {
-            // Try 3: products by id
-            var prodRows = await txn.query(
-              'products',
-              where: 'id = ?',
-              whereArgs: [item.productId],
-              limit: 1,
-            );
-
-            // Try 4: products by SKU (bulletproof — SKU is business ID)
-            if (prodRows.isEmpty && item.sku.isNotEmpty) {
-              prodRows = await txn.query(
-                'products',
-                where: 'sku = ?',
-                whereArgs: [item.sku],
-                limit: 1,
-              );
-            }
-
-            currentSOH = prodRows.isEmpty
-                ? 0
-                : ((prodRows.first['stockQty'] as num?) ?? 0).toInt();
-          }
-
-          debugPrint('[APPROVE] SOH read: ${item.sku}/${item.productId} = $currentSOH');
-
-          final qtyChange = item.qty * item.direction; // signed
-          final newSOH = (currentSOH + qtyChange).clamp(0, 999999);
-          if (currentSOH + qtyChange < 0) {
-            debugPrint('[APPROVE] WARNING: Would go negative for ${item.sku}: $currentSOH + $qtyChange = ${currentSOH + qtyChange}, clamped to 0');
-          }
-
-          // Update or insert branch_inventory
-          // Get REAL productId from products.sku (bulletproof)
-          String realProductId = item.productId;
-          if (item.sku.isNotEmpty) {
-            final pRows = await txn.query(
-              'products',
-              columns: ['id'],
-              where: 'sku = ?',
-              whereArgs: [item.sku],
-              limit: 1,
-            );
-            if (pRows.isNotEmpty) {
-              realProductId = (pRows.first['id'] as String?) ?? item.productId;
-            }
-          }
-
-          if (invRows.isEmpty) {
-            await txn.insert('branch_inventory', {
-              'branchId': widget.branch,
-              'productId': realProductId,
-              'stockQty': newSOH,
-              'reservedQty': 0,
-              'inTransitInQty': 0,
-              'inTransitOutQty': 0,
-              'reorderLevel': 5,
-              'lastUpdated': now,
-              'updatedAt': now,
-              'deviceId': '',
-              'isDeleted': 0,
-              'isMigrated': 0,
-            });
-          } else {
-            final existingProductId = (invRows.first['productId'] as String?) ?? realProductId;
-            await txn.update('branch_inventory', {
-              'stockQty': newSOH,
-              'lastUpdated': now,
-              'updatedAt': now,
-            }, where: 'branchId = ? AND productId = ?',
-                whereArgs: [widget.branch, existingProductId]);
-          }
-
-          // ⚠️ CAUTION: products.stockQty update disabled.
-          // SKU has NO UNIQUE constraint — Excel imports create duplicates
-          // and 'WHERE sku=X' would update ALL matching rows.
-          // Piattos went from 245 → 635 because of this.
-          //
-          // Safe approach: only update by exact ID match (no SKU fallback).
-          try {
-            await txn.update('products', {
-              'stockQty': newSOH,
-            }, where: 'id = ?', whereArgs: [realProductId]);
-            // NOTE: If ID doesn't match, we DON'T fallback to SKU.
-            // Refresh will pull correct value from Firebase.
-          } catch (_) {}
-
-          // 3. Write to stock_movements (BIR ledger)
-          final movementId =
-              'MOV-ADJ-${widget.adjustmentId}-${item.itemId ?? _items.indexOf(item)}';
-
-          final movement = {
+        try {
+          await db.insert('stock_movements', {
             'movement_id': movementId,
             'movement_type': 'ADJUSTMENT',
             'sku': item.sku,
             'product_id': item.productId,
             'product_name': item.productName,
             'barcode': '',
-            'qty_before': currentSOH.toDouble(),
+            'qty_before': (currentSOH - qtyChange).toDouble(),
             'qty_change': qtyChange.toDouble(),
-            'qty_after': newSOH.toDouble(),
+            'qty_after': currentSOH.toDouble(),
             'unit_cost': item.unitCost,
             'reason_code': item.reasonCode,
             'reason_note': item.reasonName,
@@ -283,89 +214,38 @@ class _AdjustmentSubmittedDetailScreenState
             'z_report_id': '',
             'created_at': now,
             'updated_at': now,
-          };
-
-          await txn.insert('stock_movements', movement);
-          movementsForSync.add(movement);
+          });
+        } catch (e) {
+          debugPrint('[APPROVE] Ledger insert failed: $e');
         }
-      });
-
-      // ════════════════════════════════════════════════════
-      // Firebase sync — direct write (bypasses Solo mode guard)
-      // ════════════════════════════════════════════════════
-      try {
-        // Ensure Firebase is initialized
-        if (!FirebaseRealtimeService.instance.isInitialized) {
-          final cfg = await FirebaseConfigService().load();
-          if (cfg != null) {
-            await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
-          }
-        }
-        final fb = FirebaseRealtimeService.instance.db;
-        final assign = await DeviceAssignmentService().read();
-        final companyCode = (assign['companyCode'] ?? '').toString();
-
-        if (fb != null && companyCode.isNotEmpty) {
-          for (final movement in movementsForSync) {
-            final movId = movement['movement_id'] as String;
-            final branchCode = movement['branch_code'] as String;
-            final newSOH = (movement['qty_after'] as num).toInt();
-
-            // 1. Write stock movement (BIR ledger)
-            await fb.ref(
-              'companies/$companyCode/stockMovements/$branchCode/$movId'
-            ).set(movement);
-
-            // 2. Update branchInventory
-            await fb.ref(
-              'companies/$companyCode/branchInventory/$branchCode/${movement['sku']}'
-            ).update({
-              'stockQty': newSOH,
-              'lastUpdated': DateTime.now().toIso8601String(),
-              'updatedAt': DateTime.now().toIso8601String(),
-            });
-          }
-          debugPrint('[APPROVE] Firebase synced ${movementsForSync.length} movements');
-        } else {
-          debugPrint('[APPROVE] Firebase skipped: db=NULL or companyCode empty');
-        }
-
-        // Backup: also enqueue via SyncBridge (in case Multi-Store mode later)
-        for (final movement in movementsForSync) {
-          try {
-            await SyncBridge.enqueueMovement(movement, op: 'create');
-          } catch (_) {}
-        }
-      } catch (e) {
-        debugPrint('[APPROVE] Firebase sync failed: $e');
       }
 
       if (!mounted) return;
-      Navigator.pop(context); // Close progress dialog
+      Navigator.pop(context); // Close progress
 
-      // Reload with APPROVED status (so PDF shows stamp)
+      // Reload with APPROVED status
       await _load();
+      if (!mounted) return;
 
-      // Refresh Product cache so Inventory module shows new SOH
+      // Refresh Product cache
       try {
         await Product.loadFromDB();
       } catch (_) {}
-      if (!mounted) return;
 
       _showSnack(
-        'Approved — ${_items.length} item(s) applied to inventory',
+        'Approved — $successCount item(s) applied to inventory',
         color: _green,
       );
 
-      // Show print options
       await _showPrintOptions(approverName: result.userName);
       if (!mounted) return;
-
       Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) Navigator.pop(context); // Close progress dialog if still open
+      if (mounted) Navigator.pop(context);
       if (!mounted) return;
       _showSnack('Approve failed: $e', color: _red);
+    } finally {
+      _approveInProgress = false;
     }
   }
 
