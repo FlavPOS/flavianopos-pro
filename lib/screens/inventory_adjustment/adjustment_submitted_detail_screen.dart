@@ -86,6 +86,67 @@ class _AdjustmentSubmittedDetailScreenState
   }
 
   // ─── APPROVE — Full SOH wire ────────────────────────────
+  // ═══ Sync one movement to Firebase (BIR audit) ═══
+  // Same pattern as branchAdjustments — writes per-branch.
+  Future<void> _syncMovementToFirebase({
+    required String movementId,
+    required String realBranchId,
+    required AdjustmentV3Item item,
+    required int currentSOH,
+    required int qtyChange,
+    required int nowMs,
+    required String now,
+    required Map<String, dynamic> assign,
+    required ApproverPinResult result,
+  }) async {
+    try {
+      if (!FirebaseRealtimeService.instance.isInitialized) return;
+      final fb = FirebaseRealtimeService.instance.db;
+      final companyCode = (assign['companyCode'] ?? '').toString();
+
+      if (fb == null || companyCode.isEmpty) {
+        debugPrint('[APPROVE] Firebase movement skipped: no fb or companyCode');
+        return;
+      }
+
+      final movementForFb = {
+        'movement_id': movementId,
+        'movement_type': 'ADJUSTMENT',
+        'sku': item.sku,
+        'product_id': item.productId,
+        'product_name': item.productName,
+        'barcode': '',
+        'qty_before': (currentSOH - qtyChange).toDouble(),
+        'qty_change': qtyChange.toDouble(),
+        'qty_after': currentSOH.toDouble(),
+        'unit_cost': item.unitCost,
+        'reason_code': item.reasonCode,
+        'reason_note': item.reasonName,
+        'reference_no': widget.adjustmentId,
+        'batch_no': '',
+        'branch_code': realBranchId,
+        'branch_name': _doc?.branchName ?? '',
+        'user_pin': _doc?.createdByPin ?? '',
+        'user_name': _doc?.createdByName ?? '',
+        'approved_by_pin': result.userPin,
+        'approved_by_name': result.userName,
+        'local_timestamp': nowMs,
+        'sync_status': 'SYNCED',
+        'z_report_id': '',
+        'created_at': now,
+        'updated_at': now,
+      };
+
+      await fb.ref(
+        'companies/$companyCode/stockMovements/$realBranchId/$movementId'
+      ).set(movementForFb);
+
+      debugPrint('[APPROVE] Movement synced: $realBranchId/$movementId');
+    } catch (e) {
+      debugPrint('[APPROVE] Firebase movement sync failed (non-fatal): $e');
+    }
+  }
+
   Future<void> _approve() async {
     // ═══ GUARD 1: Prevent double execution ═══
     if (_approveInProgress) {
@@ -307,6 +368,19 @@ class _AdjustmentSubmittedDetailScreenState
         } catch (e) {
           debugPrint('[APPROVE] Ledger insert failed: $e');
         }
+
+        // ═══ Sync to Firebase stockMovements (BIR audit) ═══
+        await _syncMovementToFirebase(
+          movementId: movementId,
+          realBranchId: realBranchId,
+          item: item,
+          currentSOH: currentSOH,
+          qtyChange: qtyChange,
+          nowMs: nowMs,
+          now: now,
+          assign: assign,
+          result: result,
+        );
       }
 
       if (!mounted) return;
