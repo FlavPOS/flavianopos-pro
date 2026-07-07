@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'adjustment_v3_model.dart';
 import 'approver_pin_dialog_v3.dart';
 import 'adjustment_pdf_generator.dart';
+import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
 
 class AdjustmentSubmittedDetailScreen extends StatefulWidget {
   final String adjustmentId;
@@ -78,7 +80,7 @@ class _AdjustmentSubmittedDetailScreenState
     );
   }
 
-  // ─── APPROVE ────────────────────────────────────────────
+  // ─── APPROVE — Full SOH wire ────────────────────────────
   Future<void> _approve() async {
     final result = await ApproverPinDialog.show(
       context: context,
@@ -89,27 +91,158 @@ class _AdjustmentSubmittedDetailScreenState
     );
     if (result == null || !mounted) return;
 
-    try {
-      // Update status in DB
-      await AdjustmentV3Dao.updateStatus(
-        adjustmentId: widget.adjustmentId,
-        newStatus: AdjustmentStatus.approved,
-        approvedBy: result.userName,
-        approvedByPin: result.userPin,
-        approvedByRole: result.userRole,
-      );
-      if (!mounted) return;
+    // Show progress dialog while applying SOH changes
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: _green),
+                SizedBox(height: 12),
+                Text('Applying to inventory...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
 
-      // Reload with fresh approved status for PDF stamp
+    try {
+      final now = DateTime.now().toIso8601String();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final db = await DatabaseHelper().database;
+
+      // Collect movements for Firebase sync AFTER SQLite commits
+      final List<Map<String, dynamic>> movementsForSync = [];
+
+      // ════════════════════════════════════════════════════
+      // ATOMIC SQLite Transaction: SOH + Ledger + Status
+      // ════════════════════════════════════════════════════
+      await db.transaction((txn) async {
+        // 1. Update adjustment header to APPROVED
+        await txn.update('adjustments_v3', {
+          'status': 'APPROVED',
+          'approved_at': now,
+          'approved_by': result.userName,
+          'approved_by_pin': result.userPin,
+          'approved_by_role': result.userRole,
+          'updated_at': now,
+        }, where: 'adjustment_id = ?', whereArgs: [widget.adjustmentId]);
+
+        // 2. FOR EACH ITEM: Update SOH + Write ledger
+        for (final item in _items) {
+          // Read current SOH from branch_inventory
+          final invRows = await txn.query(
+            'branch_inventory',
+            where: 'branchId = ? AND productId = ?',
+            whereArgs: [widget.branch, item.productId],
+          );
+          final currentSOH = invRows.isEmpty
+              ? 0
+              : ((invRows.first['stockQty'] as num?) ?? 0).toInt();
+
+          final qtyChange = item.qty * item.direction; // signed
+          final newSOH = (currentSOH + qtyChange).clamp(0, 999999);
+
+          // Update or insert branch_inventory
+          if (invRows.isEmpty) {
+            await txn.insert('branch_inventory', {
+              'branchId': widget.branch,
+              'productId': item.productId,
+              'stockQty': newSOH,
+              'reservedQty': 0,
+              'inTransitInQty': 0,
+              'inTransitOutQty': 0,
+              'reorderLevel': 5,
+              'lastUpdated': now,
+              'updatedAt': now,
+              'deviceId': '',
+              'isDeleted': 0,
+              'isMigrated': 0,
+            });
+          } else {
+            await txn.update('branch_inventory', {
+              'stockQty': newSOH,
+              'lastUpdated': now,
+              'updatedAt': now,
+            }, where: 'branchId = ? AND productId = ?',
+                whereArgs: [widget.branch, item.productId]);
+          }
+
+          // 3. Write to stock_movements (BIR ledger)
+          final movementId =
+              'MOV-ADJ-${widget.adjustmentId}-${item.itemId ?? _items.indexOf(item)}';
+
+          final movement = {
+            'movement_id': movementId,
+            'movement_type': 'ADJUSTMENT',
+            'sku': item.sku,
+            'product_id': item.productId,
+            'product_name': item.productName,
+            'barcode': '',
+            'qty_before': currentSOH.toDouble(),
+            'qty_change': qtyChange.toDouble(),
+            'qty_after': newSOH.toDouble(),
+            'unit_cost': item.unitCost,
+            'reason_code': item.reasonCode,
+            'reason_note': item.reasonName,
+            'reference_no': widget.adjustmentId,
+            'batch_no': '',
+            'branch_code': widget.branch,
+            'branch_name': widget.branch,
+            'user_pin': _doc?.createdByPin ?? '',
+            'user_name': _doc?.createdByName ?? '',
+            'approved_by_pin': result.userPin,
+            'approved_by_name': result.userName,
+            'local_timestamp': nowMs,
+            'sync_status': 'PENDING',
+            'z_report_id': '',
+            'created_at': now,
+            'updated_at': now,
+          };
+
+          await txn.insert('stock_movements', movement);
+          movementsForSync.add(movement);
+        }
+      });
+
+      // ════════════════════════════════════════════════════
+      // Firebase sync (non-blocking, via existing SyncBridge)
+      // ════════════════════════════════════════════════════
+      for (final movement in movementsForSync) {
+        try {
+          await SyncBridge.enqueueMovement(movement, op: 'create');
+        } catch (e) {
+          // Non-fatal: SQLite already committed; sync will retry
+          debugPrint('[APPROVE] Firebase enqueue failed: $e');
+        }
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close progress dialog
+
+      // Reload with APPROVED status (so PDF shows stamp)
       await _load();
       if (!mounted) return;
 
-      // Show print options bottom sheet
+      _showSnack(
+        'Approved — ${_items.length} item(s) applied to inventory',
+        color: _green,
+      );
+
+      // Show print options
       await _showPrintOptions(approverName: result.userName);
       if (!mounted) return;
 
       Navigator.pop(context, true);
     } catch (e) {
+      if (mounted) Navigator.pop(context); // Close progress dialog if still open
+      if (!mounted) return;
       _showSnack('Approve failed: $e', color: _red);
     }
   }
