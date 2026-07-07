@@ -136,21 +136,28 @@ class AdjustmentReasonV3Dao {
     final db = await DatabaseHelper().database;
     final result = await db.rawQuery('SELECT COUNT(*) as c FROM $_table');
     final count = (result.first['c'] as num?)?.toInt() ?? 0;
-    if (count > 0) return;
+    // Auto-migrate: if any old single-digit codes exist, purge and reseed with 2-digit codes
+    if (count > 0) {
+      final hasOldCodes = await db.rawQuery(
+        "SELECT COUNT(*) as c FROM $_table WHERE LENGTH(reason_code) < 2"
+      );
+      final oldCount = (hasOldCodes.first['c'] as num?)?.toInt() ?? 0;
+      if (oldCount == 0) return;
+      // Purge old codes and reseed
+      await db.delete(_table);
+    }
 
     final now = DateTime.now().toIso8601String();
     final defaults = [
-      {'code': '1',  'name': 'Cycle Count (-)',            'icon': 'warning_amber_rounded'},
-      {'code': '2',  'name': 'Damaged Item (-)',           'icon': 'broken_image_rounded'},
-      {'code': '3',  'name': 'Expired Item (-)',           'icon': 'schedule_rounded'},
-      {'code': '4',  'name': 'Theft or Loss (-)',          'icon': 'error_rounded'},
-      {'code': '5',  'name': 'Supplier Return (-)',        'icon': 'undo_rounded'},
-      {'code': '6',  'name': 'Stock Write-Off (-)',        'icon': 'delete_rounded'},
-      {'code': '7',  'name': 'Cycle Count (+)',            'icon': 'add_task_rounded'},
-      {'code': '8',  'name': 'Found Stock (+)',            'icon': 'search_rounded'},
-      {'code': '9',  'name': 'Inventory Correction (+)',   'icon': 'edit_rounded'},
-      {'code': '10', 'name': 'Warehouse Recovery (+)',     'icon': 'warehouse_rounded'},
-      {'code': '11', 'name': 'Supplier Replacement (+)',   'icon': 'refresh_rounded'},
+      {'code': '01', 'name': 'Cycle Count (-)'},
+      {'code': '02', 'name': 'Damaged Item (-)'},
+      {'code': '03', 'name': 'Expired Item (-)'},
+      {'code': '04', 'name': 'Theft or Loss (-)'},
+      {'code': '05', 'name': 'Supplier Return (-)'},
+      {'code': '06', 'name': 'Stock Write-Off (-)'},
+      {'code': '07', 'name': 'Cycle Count (+)'},
+      {'code': '08', 'name': 'Found Stock (+)'},
+      {'code': '09', 'name': 'Inventory Correction (+)'},
     ];
 
     for (var i = 0; i < defaults.length; i++) {
@@ -160,7 +167,7 @@ class AdjustmentReasonV3Dao {
         'reason_code': d['code'],
         'reason_name': name,
         'direction': AdjustmentReasonV3.detectDirection(name),
-        'icon_name': d['icon'],
+        'icon_name': '',
         'is_active': 1,
         'sort_order': i + 1,
         'created_at': now,

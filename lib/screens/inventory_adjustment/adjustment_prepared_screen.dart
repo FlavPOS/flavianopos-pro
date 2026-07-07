@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../inventory/inventory_screen.dart';
 import 'adjustment_reason_v3_model.dart';
+import 'adjustment_v3_model.dart';
 
 /// Prepared Adjustment — create/edit list of adjustments before submission.
 class AdjustmentPreparedScreen extends StatefulWidget {
@@ -121,8 +122,57 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       _showSnack('Add at least one item', color: _red);
       return;
     }
-    // TODO: Save to SQLite as draft
-    _showSnack('Draft saved (${_items.length} items)', color: _amber);
+    try {
+      final adjustmentId = AdjustmentV3Dao.generateId(branchCode: widget.branch);
+      final now = DateTime.now().toIso8601String();
+      final positives = _items.where((i) => i.reason?.isPositive == true).length;
+      final negatives = _items.where((i) => i.reason?.isNegative == true).length;
+
+      final header = AdjustmentV3(
+        adjustmentId: adjustmentId,
+        docNumber: 'DRAFT-${DateTime.now().millisecondsSinceEpoch}',
+        status: AdjustmentStatus.draft,
+        branchCode: widget.branch,
+        branchName: widget.branch,
+        createdByName: widget.userName,
+        totalItems: _items.length,
+        totalPositive: positives,
+        totalNegative: negatives,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final items = _items.map((i) {
+        return AdjustmentV3Item(
+          adjustmentId: adjustmentId,
+          productId: i.product.id,
+          sku: i.product.sku,
+          productName: i.product.name,
+          category: i.product.category,
+          qty: i.qty,
+          reasonCode: i.reason?.reasonCode ?? '',
+          reasonName: i.reason?.reasonName ?? '',
+          direction: i.reason?.direction ?? -1,
+          unitCost: i.product.costPrice,
+          createdAt: now,
+        );
+      }).toList();
+
+      await AdjustmentV3Dao.save(header: header, items: items);
+      if (!mounted) return;
+      _showSnack('Draft saved (${_items.length} items)', color: _amber);
+      setState(() {
+        for (final item in _items) {
+          item.qtyCtrl.dispose();
+        }
+        _items.clear();
+      });
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      _showSnack('Save failed: $e', color: _red);
+    }
   }
 
   Future<void> _submit() async {
@@ -384,15 +434,24 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                     value: r,
                     child: Row(
                       children: [
-                        Icon(r.icon, color: r.color, size: 16),
-                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 28,
+                          child: Text(
+                            r.reasonCode,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ),
                         Expanded(
                           child: Text(
                             r.reasonName,
                             style: TextStyle(
                               color: r.color,
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -405,15 +464,24 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
                 selectedItemBuilder: (context) => _dbReasons.map((r) {
                   return Row(
                     children: [
-                      Icon(r.icon, color: r.color, size: 16),
-                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 28,
+                        child: Text(
+                          r.reasonCode,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ),
                       Expanded(
                         child: Text(
                           r.reasonName,
                           style: TextStyle(
                             color: r.color,
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),

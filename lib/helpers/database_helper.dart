@@ -142,6 +142,63 @@ class DatabaseHelper {
     // ═══ ENTERPRISE STOCK MOVEMENTS LEDGER ═══
     // Unified audit log for ALL SOH changes (Adjustment/Sale/Void/Refund/Delivery)
 
+        // ═══ ADJUSTMENTS V3 HEADER (workflow) ═══
+    // Stores adjustment documents with status: DRAFT/SUBMITTED/APPROVED/REJECTED
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS adjustments_v3 (
+          adjustment_id     TEXT PRIMARY KEY,
+          doc_number        TEXT,
+          status            TEXT NOT NULL DEFAULT 'DRAFT',
+          branch_code       TEXT NOT NULL,
+          branch_name       TEXT DEFAULT '',
+          created_by_name   TEXT DEFAULT '',
+          created_by_pin    TEXT DEFAULT '',
+          created_by_id     TEXT DEFAULT '',
+          device_id         TEXT DEFAULT '',
+          total_items       INTEGER NOT NULL DEFAULT 0,
+          total_positive    INTEGER NOT NULL DEFAULT 0,
+          total_negative    INTEGER NOT NULL DEFAULT 0,
+          notes             TEXT DEFAULT '',
+          submitted_at      TEXT DEFAULT '',
+          approved_at       TEXT DEFAULT '',
+          approved_by       TEXT DEFAULT '',
+          rejected_at       TEXT DEFAULT '',
+          rejected_by       TEXT DEFAULT '',
+          rejection_reason  TEXT DEFAULT '',
+          sync_status       TEXT DEFAULT 'PENDING',
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_adj_v3_status ON adjustments_v3(status, branch_code)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_adj_v3_created ON adjustments_v3(created_at DESC)"); } catch (_) {}
+
+    // ═══ ADJUSTMENTS V3 LINE ITEMS ═══
+    // Each row = one product in the adjustment document
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS adjustment_v3_items (
+          item_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          adjustment_id     TEXT NOT NULL,
+          product_id        TEXT NOT NULL,
+          sku               TEXT NOT NULL,
+          product_name      TEXT NOT NULL,
+          category          TEXT DEFAULT '',
+          qty               INTEGER NOT NULL DEFAULT 0,
+          reason_code       TEXT NOT NULL,
+          reason_name       TEXT NOT NULL,
+          direction         INTEGER NOT NULL DEFAULT -1,
+          unit_cost         REAL DEFAULT 0,
+          notes             TEXT DEFAULT '',
+          created_at        TEXT NOT NULL,
+          FOREIGN KEY (adjustment_id) REFERENCES adjustments_v3(adjustment_id) ON DELETE CASCADE
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_adj_v3_items_doc ON adjustment_v3_items(adjustment_id)"); } catch (_) {}
+
     // ═══ ADJUSTMENT REASONS V3 (auto direction from name) ═══
     try {
       await db.execute("""

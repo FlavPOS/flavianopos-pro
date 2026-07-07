@@ -5,6 +5,7 @@ import 'adjustment_submitted_screen.dart';
 import 'adjustment_approved_screen.dart';
 import 'adjustment_rejected_screen.dart';
 import 'adjustment_reason_settings_v3.dart';
+import 'adjustment_v3_model.dart';
 
 /// Main Hub for Inventory Adjustment module.
 /// Shows 5 workflow cards: Prepared, Draft, Submitted, Approved, Rejected.
@@ -23,12 +24,35 @@ class InventoryAdjustmentHub extends StatefulWidget {
 }
 
 class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
-  // Counts (to be wired to real data later)
   int _preparedCount = 0;
   int _draftCount = 0;
   int _submittedCount = 0;
   int _approvedCount = 0;
   int _rejectedCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCounts();
+  }
+
+  Future<void> _loadCounts() async {
+    final draft = await AdjustmentV3Dao.countByStatus(
+        AdjustmentStatus.draft, branchCode: widget.branch);
+    final submitted = await AdjustmentV3Dao.countByStatus(
+        AdjustmentStatus.submitted, branchCode: widget.branch);
+    final approved = await AdjustmentV3Dao.countByStatus(
+        AdjustmentStatus.approved, branchCode: widget.branch);
+    final rejected = await AdjustmentV3Dao.countByStatus(
+        AdjustmentStatus.rejected, branchCode: widget.branch);
+    if (!mounted) return;
+    setState(() {
+      _draftCount = draft;
+      _submittedCount = submitted;
+      _approvedCount = approved;
+      _rejectedCount = rejected;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,7 +116,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
               subtitle: 'Save adjustments as draft and continue later.',
               count: _draftCount,
               countColor: const Color(0xFF8B5CF6),
-              onTap: () => _open(const AdjustmentDraftScreen()),
+              onTap: () => _open(AdjustmentDraftScreen(branch: widget.branch, userName: widget.userName)),
             ),
             const SizedBox(height: 12),
             _buildCard(
@@ -137,7 +161,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => screen),
-    ).then((_) => setState(() {}));
+    ).then((_) => _loadCounts());
   }
 
   Widget _buildCard({
