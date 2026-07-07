@@ -353,4 +353,18 @@ class AdjustmentPdfGenerator {
     );
     await Printing.layoutPdf(onLayout: (_) async => bytes);
   }
+
+  static Future<void> downloadPdf({
+    required AdjustmentV3 header,
+    required List<AdjustmentV3Item> items,
+    String companyName = 'FLAV POS',
+  }) async {
+    final bytes = await generate(
+      header: header,
+      items: items,
+      companyName: companyName,
+    );
+    final filename = 'ADJ-${header.docNumber.isEmpty ? header.adjustmentId : header.docNumber}.pdf';
+    await Printing.sharePdf(bytes: bytes, filename: filename);
+  }
 }

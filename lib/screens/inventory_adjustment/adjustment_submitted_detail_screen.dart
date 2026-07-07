@@ -90,6 +90,7 @@ class _AdjustmentSubmittedDetailScreenState
     if (result == null || !mounted) return;
 
     try {
+      // Update status in DB
       await AdjustmentV3Dao.updateStatus(
         adjustmentId: widget.adjustmentId,
         newStatus: AdjustmentStatus.approved,
@@ -98,12 +99,198 @@ class _AdjustmentSubmittedDetailScreenState
         approvedByRole: result.userRole,
       );
       if (!mounted) return;
-      _showSnack('Approved by ${result.userName}', color: _green);
-      await Future.delayed(const Duration(milliseconds: 400));
+
+      // Reload with fresh approved status for PDF stamp
+      await _load();
       if (!mounted) return;
+
+      // Show print options bottom sheet
+      await _showPrintOptions(approverName: result.userName);
+      if (!mounted) return;
+
       Navigator.pop(context, true);
     } catch (e) {
       _showSnack('Approve failed: $e', color: _red);
+    }
+  }
+
+  // ─── PRINT OPTIONS DIALOG ────────────────────────────────
+  Future<void> _showPrintOptions({required String approverName}) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Success header
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: _green.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check_circle_rounded,
+                    color: _green, size: 40),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Approved Successfully!',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: _textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Approved by: $approverName',
+                style: const TextStyle(
+                    fontSize: 12, color: _textSecondary),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: _divider),
+              const SizedBox(height: 12),
+              const Text(
+                'What would you like to do?',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: _textSecondary,
+                    fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 16),
+
+              // Preview
+              _buildPrintOption(
+                icon: Icons.picture_as_pdf_rounded,
+                label: 'Preview PDF',
+                subtitle: 'View before printing',
+                color: _blue,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _printPdf();
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Print
+              _buildPrintOption(
+                icon: Icons.print_rounded,
+                label: 'Print',
+                subtitle: 'Send to printer',
+                color: _green,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _printPdf();
+                },
+              ),
+              const SizedBox(height: 10),
+
+              // Download
+              _buildPrintOption(
+                icon: Icons.download_rounded,
+                label: 'Download PDF',
+                subtitle: 'Save to device',
+                color: Colors.deepPurple,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _downloadPdf();
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Later
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Later',
+                      style: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrintOption({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: color)),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 11, color: _textSecondary)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: color, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadPdf() async {
+    if (_doc == null) return;
+    try {
+      await AdjustmentPdfGenerator.downloadPdf(
+        header: _doc!,
+        items: _items,
+      );
+      if (!mounted) return;
+      _showSnack('PDF downloaded', color: _green);
+    } catch (e) {
+      _showSnack('Download failed: $e', color: _red);
     }
   }
 
