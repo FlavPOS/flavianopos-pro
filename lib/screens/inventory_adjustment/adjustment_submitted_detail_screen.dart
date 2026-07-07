@@ -239,18 +239,18 @@ class _AdjustmentSubmittedDetailScreenState
                 whereArgs: [widget.branch, existingProductId]);
           }
 
-          // Also update products.stockQty by ID or SKU (bulletproof)
+          // ⚠️ CAUTION: products.stockQty update disabled.
+          // SKU has NO UNIQUE constraint — Excel imports create duplicates
+          // and 'WHERE sku=X' would update ALL matching rows.
+          // Piattos went from 245 → 635 because of this.
+          //
+          // Safe approach: only update by exact ID match (no SKU fallback).
           try {
-            final updated = await txn.update('products', {
+            await txn.update('products', {
               'stockQty': newSOH,
-            }, where: 'id = ?', whereArgs: [item.productId]);
-
-            // If ID didn't match, try SKU
-            if (updated == 0 && item.sku.isNotEmpty) {
-              await txn.update('products', {
-                'stockQty': newSOH,
-              }, where: 'sku = ?', whereArgs: [item.sku]);
-            }
+            }, where: 'id = ?', whereArgs: [realProductId]);
+            // NOTE: If ID doesn't match, we DON'T fallback to SKU.
+            // Refresh will pull correct value from Firebase.
           } catch (_) {}
 
           // 3. Write to stock_movements (BIR ledger)
