@@ -138,7 +138,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
               subtitle: 'View all inventory adjustments that have been approved.',
               count: _approvedCount,
               countColor: const Color(0xFF22C55E),
-              onTap: () => _open(const AdjustmentApprovedScreen()),
+              onTap: () => _open(AdjustmentApprovedScreen(branch: widget.branch, userName: widget.userName)),
             ),
             const SizedBox(height: 12),
             _buildCard(
@@ -149,7 +149,7 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
               subtitle: 'View all inventory adjustments that have been rejected.',
               count: _rejectedCount,
               countColor: const Color(0xFFEF4444),
-              onTap: () => _open(const AdjustmentRejectedScreen()),
+              onTap: () => _open(AdjustmentRejectedScreen(branch: widget.branch, userName: widget.userName)),
             ),
           ],
         ),
