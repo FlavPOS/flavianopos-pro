@@ -3,6 +3,7 @@ import '../../models/product_model.dart';
 import '../inventory/inventory_screen.dart';
 import 'adjustment_reason_v3_model.dart';
 import 'adjustment_v3_model.dart';
+import 'approver_pin_dialog_v3.dart';
 
 /// Prepared Adjustment — create/edit list of adjustments before submission.
 class AdjustmentPreparedScreen extends StatefulWidget {
@@ -230,6 +231,7 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   }
 
   Future<void> _submit() async {
+    // ── Validation ──
     if (_items.isEmpty) {
       _showSnack('Add at least one item', color: _red);
       return;
@@ -244,8 +246,109 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
         return;
       }
     }
-    // TODO: Submit for approval
-    _showSnack('Submitted for approval (${_items.length} items)', color: _green);
+
+    // ── Confirmation dialog ──
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Icon(Icons.send_rounded, color: _amber),
+            const SizedBox(width: 8),
+            const Text('Submit for Approval?'),
+          ],
+        ),
+        content: Text(
+          'Submit ${_items.length} item(s) for manager approval. This cannot be edited once submitted.',
+          style: const TextStyle(fontSize: 13, color: _textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _amber,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    // ── Manager PIN required to submit ──
+    final pin = await ApproverPinDialog.show(
+      context: context,
+      title: 'Submit for Approval',
+      headerColor: _amber,
+      subtitle: 'PIN required to submit',
+      allowedRoles: const ['Supervisor', 'Manager', 'Admin'],
+    );
+    if (pin == null || !mounted) return;
+
+    // ── Save to SQLite with SUBMITTED status ──
+    try {
+      final adjustmentId = _existingDraftId ??
+          AdjustmentV3Dao.generateId(branchCode: widget.branch);
+      final now = DateTime.now().toIso8601String();
+      final positives = _items.where((i) => i.reason?.isPositive == true).length;
+      final negatives = _items.where((i) => i.reason?.isNegative == true).length;
+
+      final header = AdjustmentV3(
+        adjustmentId: adjustmentId,
+        docNumber: _existingDraftId ?? 'ADJ-${DateTime.now().millisecondsSinceEpoch}',
+        status: AdjustmentStatus.submitted,
+        branchCode: widget.branch,
+        branchName: widget.branch,
+        createdByName: widget.userName,
+        submittedBy: pin.userName,
+        totalItems: _items.length,
+        totalPositive: positives,
+        totalNegative: negatives,
+        submittedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      final items = _items.map((i) {
+        return AdjustmentV3Item(
+          adjustmentId: adjustmentId,
+          productId: i.product.id,
+          sku: i.product.sku,
+          productName: i.product.name,
+          category: i.product.category,
+          qty: i.qty,
+          reasonCode: i.reason?.reasonCode ?? '',
+          reasonName: i.reason?.reasonName ?? '',
+          direction: i.reason?.direction ?? -1,
+          unitCost: i.product.costPrice,
+          createdAt: now,
+        );
+      }).toList();
+
+      await AdjustmentV3Dao.save(header: header, items: items);
+      if (!mounted) return;
+
+      _showSnack('Submitted for approval (${_items.length} items)',
+          color: _green);
+      setState(() {
+        for (final item in _items) {
+          item.qtyCtrl.dispose();
+        }
+        _items.clear();
+      });
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      _showSnack('Submit failed: $e', color: _red);
+    }
   }
 
   // ─── BUILD ──────────────────────────────────────────────
