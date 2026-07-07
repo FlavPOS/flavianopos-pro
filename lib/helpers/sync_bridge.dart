@@ -1158,6 +1158,34 @@ class SyncBridge {
 
 
   // ═══════════════════ STOCK ADJUSTMENTS (per-branch multi-device sync) ═══════════════════
+
+  // ═══════════════════════ STOCK MOVEMENT (Unified Ledger) ═══════════════════════
+  static Future<void> enqueueMovement(Map<String, dynamic> movement, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchCode = (movement['branch_code'] ?? '').toString();
+    final movId = (movement['movement_id'] ?? '').toString();
+
+    if (companyCode.isEmpty || branchCode.isEmpty || movId.isEmpty) {
+      if (kDebugMode) debugPrint('[MOV-SYNC] Skip - missing companyCode/branchCode/movId');
+      return;
+    }
+
+    await _queue.enqueue(
+      entityType: 'stock_movement',
+      entityId: movId,
+      operation: op,
+      firebasePath: 'companies/$companyCode/branches/$branchCode/stock_movements/$movId',
+      payload: movement,
+      companyId: companyCode,
+      branchId: branchCode,
+      deviceId: ctx['deviceId']!,
+      priority: 4,
+    );
+    if (kDebugMode) debugPrint('[MOV-SYNC] Enqueued $movId to $branchCode');
+  }
+
   static Future<void> enqueueAdjustment(AdjustmentRecord adj, {required String op}) async {
     if (!await _isMultiple()) return;
     final ctx = await _context();

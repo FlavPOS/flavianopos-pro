@@ -283,6 +283,12 @@ class _StockAdjustmentScreenState extends State<StockAdjustmentScreen> {
 
         final db = await DatabaseHelper().database;
         await db.insert('stock_movements', movement);
+        // ═══ ENQUEUE FOR FIREBASE SYNC ═══
+        try {
+          await SyncBridge.enqueueMovement(movement, op: 'create');
+        } catch (e) {
+          debugPrint('[MOV] Firebase enqueue FAILED (non-fatal): $e');
+        }
         debugPrint('[MOV] Ledger written: $movId (${qtyChange > 0 ? "+" : ""}$qtyChange)');
       } catch (e) {
         debugPrint('[MOV] Ledger write FAILED (non-fatal): $e');
