@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:pdf/pdf.dart' as pdf_pkg;
+import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart' as xl;
 import 'package:printing/printing.dart';
 import 'transfer_v3_model.dart';
@@ -187,6 +189,22 @@ class _TransferListScreenState extends State<TransferListScreen> {
                           ],
                         ),
                       ),
+                      // Print + PDF for ALL statuses (enterprise standard)
+                      IconButton(
+                        icon: const Icon(Icons.print_rounded, color: Colors.white),
+                        tooltip: 'Reprint IST',
+                        onPressed: () async {
+                          await _printPdf(doc, items);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
+                        tooltip: 'Export PDF',
+                        onPressed: () async {
+                          await _downloadPdf(doc, items);
+                        },
+                      ),
+                      // Edit for drafts
                       if (widget.status == TransferStatus.draft)
                         IconButton(
                           icon: const Icon(Icons.edit_rounded, color: Colors.white),
@@ -657,6 +675,215 @@ class _TransferListScreenState extends State<TransferListScreen> {
           backgroundColor: _red,
           behavior: SnackBarBehavior.floating,
         ),
+      );
+    }
+  }
+
+
+  // ═══ PDF Generator + Print/Download ═══
+  Future<Uint8List> _generatePdf(TransferV3 doc, List<TransferV3Item> items) async {
+    final pdf = pw.Document();
+    final totalQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
+    final totalRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+    final now = DateTime.now();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: pdf_pkg.PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6),
+                  border: pw.Border.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('FLAV POS',
+                            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 3),
+                        pw.Text('INTER-STORE TRANSFER',
+                            style: const pw.TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(doc.docNumber.isEmpty ? doc.transferId : doc.docNumber,
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Status: PHOLD_STATUS',
+                            style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: pdf_pkg.PdfColor.fromInt(0xFFF59E0B))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 8),
+
+              // Branches
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('FROM (ISSUING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('${doc.issuingBranchId} - ${doc.issuingBranchName}', style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('TO (RECEIVING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('${doc.receivingBranchId} - ${doc.receivingBranchName}', style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 8),
+
+              // Items table
+              pw.Table(
+                border: pw.TableBorder.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(80),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FixedColumnWidth(60),
+                  3: const pw.FixedColumnWidth(80),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                    children: [
+                      _pdfHCell('SKU'), _pdfHCell('Product'), _pdfHCell('Qty'), _pdfHCell('Retail'),
+                    ],
+                  ),
+                  ...items.map((i) {
+                    final retail = i.issuedQty * i.unitCost;
+                    return pw.TableRow(children: [
+                      _pdfCell(i.sku),
+                      _pdfCell(i.productName),
+                      _pdfCellR(i.issuedQty.toString()),
+                      _pdfCellR(retail.toStringAsFixed(2)),
+                    ]);
+                  }),
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                    children: [
+                      _pdfCell(''),
+                      _pdfCell('TOTAL'),
+                      _pdfCellR(totalQty.toString()),
+                      _pdfCellR(totalRetail.toStringAsFixed(2)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Spacer(),
+
+              // Signatures
+              pw.Row(
+                children: [
+                  pw.Expanded(child: _pdfSigBlock('PREPARED BY', doc.preparedBy)),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(child: _pdfSigBlock('APPROVED BY', doc.approvedBy, role: doc.approvedByRole)),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(child: _pdfSigBlock('RECEIVED BY', doc.receivedBy)),
+                ],
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text('Generated: ${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}', style: const pw.TextStyle(fontSize: 8)),
+            ],
+          );
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static pw.Widget _pdfHCell(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 5),
+    alignment: pw.Alignment.center,
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+  );
+
+  static pw.Widget _pdfCell(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 5),
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 9)),
+  );
+
+  static pw.Widget _pdfCellR(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 5),
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 9)),
+  );
+
+  static pw.Widget _pdfSigBlock(String label, String name, {String role = ''}) => pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Container(
+        height: 20,
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
+        ),
+      ),
+      pw.SizedBox(height: 2),
+      pw.Text(label, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+      pw.Text(name.isEmpty ? '_________________' : name, style: const pw.TextStyle(fontSize: 9)),
+      if (role.isNotEmpty)
+        pw.Text('($role)', style: const pw.TextStyle(fontSize: 8)),
+    ],
+  );
+
+  Future<void> _printPdf(TransferV3 doc, List<TransferV3Item> items) async {
+    try {
+      final bytes = await _generatePdf(doc, items);
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Print failed: $e'), backgroundColor: _red),
+      );
+    }
+  }
+
+  Future<void> _downloadPdf(TransferV3 doc, List<TransferV3Item> items) async {
+    try {
+      final bytes = await _generatePdf(doc, items);
+      final docNum = doc.docNumber.isEmpty ? doc.transferId : doc.docNumber;
+      await Printing.sharePdf(bytes: bytes, filename: 'IST-$docNum.pdf');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('PDF downloaded'), backgroundColor: widget.themeColor),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e'), backgroundColor: _red),
       );
     }
   }
