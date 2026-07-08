@@ -725,150 +725,248 @@ class _TransferSubmittedDetailScreenState
 
   // ═══ PDF GENERATOR (A4 Landscape) ═══
   Future<Uint8List> _generatePdf() async {
-    final doc = pw.Document();
-    final now = DateTime.now();
+    final pdf = pw.Document();
+    final totalQty = _items.fold<int>(0, (s, i) => s + i.issuedQty);
+    final totalRetail = _items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
 
-    doc.addPage(
-      pw.Page(
-        pageFormat: pdf_pkg.PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(24),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              pw.Container(
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6),
-                  border: pw.Border.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+    final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
+    const itemsPerPage = 20;
+    final totalPages = (_items.length / itemsPerPage).ceil().clamp(1, 999);
+
+    pw.Widget buildCopy({
+      required String copyLabel,
+      required List<TransferV3Item> pageItems,
+      required int currentPage,
+      required int totalPagesCount,
+    }) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          // Title Row
+          pw.Container(
+            padding: const pw.EdgeInsets.only(bottom: 6),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 1.5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('FLAV POS',
-                            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                        pw.SizedBox(height: 3),
-                        pw.Text('INTER-STORE TRANSFER',
-                            style: const pw.TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(_doc!.docNumber.isEmpty ? _doc!.transferId : _doc!.docNumber,
-                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('Status: FLOATING (In-Transit)',
-                            style: pw.TextStyle(
-                                fontSize: 11,
-                                fontWeight: pw.FontWeight.bold,
-                                color: pdf_pkg.PdfColor.fromInt(0xFFF59E0B))),
-                      ],
-                    ),
+                    pw.Text('Stock Transfer',
+                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(width: 8),
+                    pw.Text('· ' + (_doc?.status ?? ''),
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-              ),
-              pw.SizedBox(height: 8),
+                pw.Text(copyLabel,
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 8),
 
-              // Branch info
-              pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(8),
-                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text('FROM (ISSUING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                          pw.Text('${_doc!.issuingBranchId} - ${_doc!.issuingBranchName}',
-                              style: const pw.TextStyle(fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ),
-                  pw.SizedBox(width: 8),
-                  pw.Expanded(
-                    child: pw.Container(
-                      padding: const pw.EdgeInsets.all(8),
-                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text('TO (RECEIVING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                          pw.Text('${_doc!.receivingBranchId} - ${_doc!.receivingBranchName}',
-                              style: const pw.TextStyle(fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 8),
-
-              // Items table
-              pw.Table(
-                border: pw.TableBorder.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(80),
-                  1: const pw.FlexColumnWidth(3),
-                  2: const pw.FixedColumnWidth(60),
-                  3: const pw.FixedColumnWidth(80),
-                },
-                children: [
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
-                    children: [
-                      _hCell('SKU'), _hCell('Product'), _hCell('Qty'), _hCell('Retail'),
-                    ],
-                  ),
-                  ..._items.map((i) {
-                    final retail = i.issuedQty * i.unitCost;
-                    return pw.TableRow(children: [
-                      _cell(i.sku),
-                      _cell(i.productName),
-                      _cellR(i.issuedQty.toString()),
-                      _cellR(retail.toStringAsFixed(2)),
-                    ]);
-                  }),
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
-                    children: [
-                      _cell(''),
-                      _cell('TOTAL'),
-                      _cellR(_totalQty.toString()),
-                      _cellR(_totalRetail.toStringAsFixed(2)),
-                    ],
-                  ),
-                ],
-              ),
-              pw.Spacer(),
-
-              // Signature blocks
-              pw.Row(
-                children: [
-                  pw.Expanded(child: _sigBlock('PREPARED BY', _doc!.preparedBy)),
-                  pw.SizedBox(width: 12),
-                  pw.Expanded(child: _sigBlock('APPROVED BY', _doc!.approvedBy, role: _doc!.approvedByRole)),
-                  pw.SizedBox(width: 12),
-                  pw.Expanded(child: _sigBlock('RECEIVED BY', '')),
-                ],
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                'Generated: ${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}',
-                style: const pw.TextStyle(fontSize: 8),
-              ),
+          // Info Table
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(90),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(90),
+              3: const pw.FlexColumnWidth(3),
+            },
+            children: [
+              pw.TableRow(children: [
+                _sd4Info('From Branch', bold: true),
+                _sd4Info((_doc?.issuingBranchId ?? '') + ' (' + (_doc?.issuingBranchName ?? '') + ')'),
+                _sd4Info('Date Created', bold: true),
+                _sd4Info(_sd4Date(_doc?.createdAt ?? '')),
+              ]),
+              pw.TableRow(children: [
+                _sd4Info('To Branch', bold: true),
+                _sd4Info((_doc?.receivingBranchId ?? '') + ' (' + (_doc?.receivingBranchName ?? '') + ')'),
+                _sd4Info('IST No.', bold: true),
+                _sd4Info((_doc?.docNumber.isEmpty ?? true) ? (_doc?.transferId ?? '') : (_doc?.docNumber ?? '')),
+              ]),
             ],
-          );
-        },
-      ),
-    );
+          ),
+          pw.SizedBox(height: 6),
 
-    return doc.save();
+          // Items Table
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(70),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(55),
+              3: const pw.FixedColumnWidth(75),
+              4: const pw.FixedColumnWidth(85),
+            },
+            children: [
+              pw.TableRow(children: [
+                _sd4H('SKU'),
+                _sd4H('Product Name'),
+                _sd4H('Qty'),
+                _sd4H('Unit Retail'),
+                _sd4H('Retail Value'),
+              ]),
+              ...pageItems.map((item) {
+                final retail = item.issuedQty * item.unitCost;
+                return pw.TableRow(children: [
+                  _sd4C(item.sku),
+                  _sd4C(item.productName),
+                  _sd4CR(item.issuedQty.toString()),
+                  _sd4CR(item.unitCost.toStringAsFixed(2)),
+                  _sd4CR(retail.toStringAsFixed(2)),
+                ]);
+              }),
+              if (currentPage == totalPagesCount)
+                pw.TableRow(children: [
+                  _sd4C(''),
+                  _sd4C('Grand Total', bold: true),
+                  _sd4CR(totalQty.toString(), bold: true),
+                  _sd4C(''),
+                  _sd4CR(totalRetail.toStringAsFixed(2), bold: true),
+                ]),
+              for (int i = 0; i < 6; i++)
+                pw.TableRow(children: [
+                  _sd4Empty(),
+                  _sd4Empty(),
+                  _sd4Empty(),
+                  _sd4Empty(),
+                  _sd4Empty(),
+                ]),
+            ],
+          ),
+
+          if (currentPage != totalPagesCount) ...[
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Text('— Continued on next page —',
+                  style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+            ),
+          ],
+
+          if (currentPage == totalPagesCount) ...[
+            pw.Spacer(),
+            pw.Row(
+              children: [
+                pw.Expanded(child: _sd4Sig('Prepared By:', _doc?.preparedBy ?? '')),
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: _sd4Sig('Approved By:', _doc?.approvedBy ?? '')),
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: _sd4Sig('Received By:', _doc?.receivedBy ?? '')),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
+                    child: pw.Text('Date Received',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      );
+    }
+
+    for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
+      final startIdx = (pageNum - 1) * itemsPerPage;
+      final endIdx = (startIdx + itemsPerPage).clamp(0, _items.length);
+      final pageItems = _items.sublist(startIdx, endIdx);
+
+      pdf.addPage(pw.Page(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => buildCopy(
+          copyLabel: 'ISSUING STORE COPY',
+          pageItems: pageItems,
+          currentPage: pageNum,
+          totalPagesCount: totalPages,
+        ),
+      ));
+
+      pdf.addPage(pw.Page(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => buildCopy(
+          copyLabel: 'RECEIVING STORE COPY',
+          pageItems: pageItems,
+          currentPage: pageNum,
+          totalPagesCount: totalPages,
+        ),
+      ));
+    }
+
+    return pdf.save();
+  }
+
+  static pw.Widget _sd4Info(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _sd4H(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+    alignment: pw.Alignment.center,
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+  );
+
+  static pw.Widget _sd4C(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _sd4CR(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _sd4Empty() => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: pw.Text(' ', style: const pw.TextStyle(fontSize: 10)),
+  );
+
+  static pw.Widget _sd4Sig(String label, String name) => pw.Container(
+    padding: const pw.EdgeInsets.only(top: 4),
+    decoration: const pw.BoxDecoration(
+      border: pw.Border(top: pw.BorderSide(width: 0.6)),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 2),
+        pw.Text(name.isEmpty ? '________________' : name,
+            style: const pw.TextStyle(fontSize: 10)),
+      ],
+    ),
+  );
+
+  static String _sd4Date(String iso) {
+    if (iso.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(iso);
+      return '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+    } catch (_) {
+      return iso;
+    }
   }
 
   static pw.Widget _hCell(String text) => pw.Container(
