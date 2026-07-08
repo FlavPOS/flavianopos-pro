@@ -1,0 +1,545 @@
+import 'package:flutter/material.dart';
+import '../../services/branch_inventory_service.dart';
+import '../../services/device_assignment_service.dart';
+import '../../services/firebase_realtime_service.dart';
+import '../../services/firebase_config_service.dart';
+import '../../helpers/database_helper.dart';
+import '../inventory_adjustment/approver_pin_dialog_v3.dart';
+import 'transfer_v3_model.dart';
+
+/// Submitted Transfer Detail — Approve/Reject actions
+class TransferSubmittedDetailScreen extends StatefulWidget {
+  final String transferId;
+  final String branch;
+  final String userName;
+
+  const TransferSubmittedDetailScreen({
+    super.key,
+    required this.transferId,
+    required this.branch,
+    required this.userName,
+  });
+
+  @override
+  State<TransferSubmittedDetailScreen> createState() =>
+      _TransferSubmittedDetailScreenState();
+}
+
+class _TransferSubmittedDetailScreenState
+    extends State<TransferSubmittedDetailScreen> {
+  static const _blue = Color(0xFF3B82F6);
+  static const _green = Color(0xFF22C55E);
+  static const _red = Color(0xFFEF4444);
+  static const _bg = Color(0xFFF5F6FA);
+  static const _card = Color(0xFFFFFFFF);
+  static const _textSecondary = Color(0xFF6B7280);
+  static const _divider = Color(0xFFE5E7EB);
+
+  TransferV3? _doc;
+  List<TransferV3Item> _items = [];
+  bool _loading = true;
+  bool _actionInProgress = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final d = await TransferV3Dao.getById(widget.transferId);
+    final it = await TransferV3Dao.getItems(widget.transferId);
+    if (!mounted) return;
+    setState(() {
+      _doc = d;
+      _items = it;
+      _loading = false;
+    });
+  }
+
+  int get _totalQty => _items.fold(0, (s, i) => s + i.issuedQty);
+
+  void _showSnack(String msg, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color ?? _blue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ─── APPROVE + DISPATCH ─────────────────────────────────
+  Future<void> _approveAndDispatch() async {
+    if (_actionInProgress) return;
+    if (_doc == null) return;
+    if (_doc!.status != TransferStatus.submitted) {
+      _showSnack('Only submitted transfers can be approved', color: _red);
+      return;
+    }
+
+    final result = await ApproverPinDialog.show(
+      context: context,
+      title: 'Approve & Dispatch',
+      headerColor: _green,
+      subtitle: 'Stock will be deducted from source (In-Transit)',
+      allowedRoles: const ['Supervisor', 'Manager', 'Admin'],
+    );
+    if (result == null || !mounted) return;
+
+    _actionInProgress = true;
+
+    // Progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: _green),
+                SizedBox(height: 12),
+                Text('Dispatching to destination...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final now = DateTime.now().toIso8601String();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final assign = await DeviceAssignmentService().read();
+      final companyCode = (assign['companyCode'] ?? '').toString();
+      final realBranchId = (assign['branchId'] ?? '').toString();
+
+      // ═══ STEP 1: Update status to FLOATING ═══
+      await TransferV3Dao.updateStatus(
+        transferId: widget.transferId,
+        newStatus: TransferStatus.floating,
+        extraFields: {
+          'approved_by': result.userName,
+          'approved_by_pin': result.userPin,
+          'approved_by_role': result.userRole,
+          'approved_date': now,
+          'dispatched_by': result.userName,
+          'dispatched_date': now,
+          'total_floating_qty': _totalQty,
+        },
+      );
+
+      // ═══ STEP 2: Deduct source SOH via BranchInventoryService ═══
+      int successCount = 0;
+      for (final item in _items) {
+        final ok = await BranchInventoryService.decrementStock(
+          realBranchId,
+          item.productId,
+          item.issuedQty,
+        );
+        if (ok) successCount++;
+      }
+
+      // ═══ STEP 3: Write stock_movements ledger (TRANSFER_OUT) ═══
+      final db = await DatabaseHelper().database;
+      for (final item in _items) {
+        final currentSOH = await BranchInventoryService.getStock(
+            realBranchId, item.productId);
+        final movementId =
+            'MOV-TRO-${widget.transferId}-${item.itemId ?? _items.indexOf(item)}';
+
+        try {
+          await db.insert('stock_movements', {
+            'movement_id': movementId,
+            'movement_type': 'TRANSFER_OUT',
+            'sku': item.sku,
+            'product_id': item.productId,
+            'product_name': item.productName,
+            'barcode': '',
+            'qty_before': (currentSOH + item.issuedQty).toDouble(),
+            'qty_change': -item.issuedQty.toDouble(),
+            'qty_after': currentSOH.toDouble(),
+            'unit_cost': item.unitCost,
+            'reason_code': 'TRANSFER',
+            'reason_note': 'To ${_doc!.receivingBranchId} (${_doc!.receivingBranchName})',
+            'reference_no': widget.transferId,
+            'batch_no': '',
+            'branch_code': realBranchId,
+            'branch_name': _doc!.issuingBranchName,
+            'user_pin': _doc!.preparedById,
+            'user_name': _doc!.preparedBy,
+            'approved_by_pin': result.userPin,
+            'approved_by_name': result.userName,
+            'local_timestamp': nowMs,
+            'sync_status': 'SYNCED',
+            'z_report_id': '',
+            'created_at': now,
+            'updated_at': now,
+          });
+
+          // Also sync to Firebase stockMovements
+          try {
+            if (FirebaseRealtimeService.instance.isInitialized) {
+              final fb = FirebaseRealtimeService.instance.db;
+              if (fb != null && companyCode.isNotEmpty) {
+                await fb.ref(
+                  'companies/$companyCode/stockMovements/$realBranchId/$movementId'
+                ).set({
+                  'movement_id': movementId,
+                  'movement_type': 'TRANSFER_OUT',
+                  'sku': item.sku,
+                  'product_id': item.productId,
+                  'product_name': item.productName,
+                  'qty_before': (currentSOH + item.issuedQty).toDouble(),
+                  'qty_change': -item.issuedQty.toDouble(),
+                  'qty_after': currentSOH.toDouble(),
+                  'reference_no': widget.transferId,
+                  'branch_code': realBranchId,
+                  'approved_by_name': result.userName,
+                  'created_at': now,
+                });
+              }
+            }
+          } catch (_) {}
+        } catch (e) {
+          debugPrint('[TRANSFER-APPROVE] Ledger insert failed: $e');
+        }
+      }
+
+      // ═══ STEP 4: Write full transfer document to Firebase ═══
+      try {
+        if (!FirebaseRealtimeService.instance.isInitialized) {
+          final cfg = await FirebaseConfigService().load();
+          if (cfg != null) {
+            await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+          }
+        }
+        final fb = FirebaseRealtimeService.instance.db;
+
+        if (fb != null && companyCode.isNotEmpty) {
+          final itemsPayload = _items.map((i) => {
+            'productId': i.productId,
+            'sku': i.sku,
+            'productName': i.productName,
+            'issuedQty': i.issuedQty,
+            'unitCost': i.unitCost,
+          }).toList();
+
+          final docPayload = {
+            'transferId': widget.transferId,
+            'docNumber': _doc!.docNumber,
+            'status': 'FLOATING',
+            'issuingBranchId': _doc!.issuingBranchId,
+            'issuingBranchName': _doc!.issuingBranchName,
+            'receivingBranchId': _doc!.receivingBranchId,
+            'receivingBranchName': _doc!.receivingBranchName,
+            'preparedBy': _doc!.preparedBy,
+            'preparedDate': _doc!.preparedDate,
+            'submittedBy': _doc!.submittedBy,
+            'submittedDate': _doc!.submittedDate,
+            'approvedBy': result.userName,
+            'approvedByPin': result.userPin,
+            'approvedByRole': result.userRole,
+            'approvedDate': now,
+            'dispatchedDate': now,
+            'totalItems': _items.length,
+            'totalIssuedQty': _totalQty,
+            'totalFloatingQty': _totalQty,
+            'items': itemsPayload,
+            'notes': _doc!.notes,
+            'updatedAt': now,
+          };
+
+          // Index for outbound branch (source)
+          await fb.ref(
+            'companies/$companyCode/interStoreTransfers/${widget.transferId}'
+          ).set(docPayload);
+
+          // Index for inbound branch (destination)
+          await fb.ref(
+            'companies/$companyCode/inboundTransfers/${_doc!.receivingBranchId}/${widget.transferId}'
+          ).set(docPayload);
+
+          debugPrint('[TRANSFER-APPROVE] Firebase docs written');
+        }
+      } catch (e) {
+        debugPrint('[TRANSFER-APPROVE] Firebase sync failed: $e');
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context); // Close progress
+
+      await _load();
+      if (!mounted) return;
+
+      _showSnack(
+        'Dispatched — $successCount item(s) in-transit to ${_doc?.receivingBranchName}',
+        color: _green,
+      );
+
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (!mounted) return;
+      _showSnack('Approve failed: $e', color: _red);
+    } finally {
+      _actionInProgress = false;
+    }
+  }
+
+  // ─── REJECT ─────────────────────────────────────────────
+  Future<void> _reject() async {
+    if (_actionInProgress) return;
+    if (_doc == null) return;
+
+    final reasonCtrl = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_rounded, color: _red),
+            SizedBox(width: 8),
+            Text('Reject Transfer'),
+          ],
+        ),
+        content: TextField(
+          controller: reasonCtrl,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Rejection Reason',
+            hintText: 'Why is this being rejected?',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _red, foregroundColor: Colors.white),
+            onPressed: () {
+              if (reasonCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final pin = await ApproverPinDialog.show(
+      context: context,
+      title: 'Reject Transfer',
+      headerColor: _red,
+      subtitle: 'PIN required to confirm rejection',
+      allowedRoles: const ['Supervisor', 'Manager', 'Admin'],
+    );
+    if (pin == null || !mounted) return;
+
+    _actionInProgress = true;
+    try {
+      await TransferV3Dao.updateStatus(
+        transferId: widget.transferId,
+        newStatus: TransferStatus.rejected,
+        extraFields: {
+          'rejected_by': pin.userName,
+          'rejected_date': DateTime.now().toIso8601String(),
+          'rejection_reason': reasonCtrl.text.trim(),
+        },
+      );
+      if (!mounted) return;
+      _showSnack('Transfer rejected', color: _red);
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      _showSnack('Reject failed: $e', color: _red);
+    } finally {
+      _actionInProgress = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _blue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Submitted Transfer',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+            if (_doc != null)
+              Text(
+                _doc!.docNumber.isEmpty ? _doc!.transferId : _doc!.docNumber,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w400),
+              ),
+          ],
+        ),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildStatusBanner(),
+                Expanded(child: _buildList()),
+              ],
+            ),
+      bottomNavigationBar: _items.isEmpty || _loading ? null : _buildBottomBar(),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    return Container(
+      color: _blue.withValues(alpha: 0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.access_time_rounded, color: _blue, size: 18),
+              const SizedBox(width: 8),
+              const Text('AWAITING APPROVAL',
+                  style: TextStyle(
+                      color: _blue, fontWeight: FontWeight.bold, fontSize: 12)),
+            ],
+          ),
+          if (_doc != null) ...[
+            const SizedBox(height: 6),
+            Text('From: ${_doc!.issuingBranchId} (${_doc!.issuingBranchName})',
+                style: const TextStyle(color: _textSecondary, fontSize: 11)),
+            Text('To: ${_doc!.receivingBranchId} (${_doc!.receivingBranchName})',
+                style: const TextStyle(color: _textSecondary, fontSize: 11)),
+            Text('Prepared by: ${_doc!.preparedBy}',
+                style: const TextStyle(color: _textSecondary, fontSize: 11)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList() {
+    if (_items.isEmpty) return const Center(child: Text('No items'));
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      itemCount: _items.length,
+      itemBuilder: (context, index) {
+        final item = _items[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.productName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    Text('SKU: ${item.sku}',
+                        style: const TextStyle(
+                            color: _textSecondary, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _blue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('${item.issuedQty}',
+                        style: const TextStyle(
+                            color: _blue, fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                  const Text('pcs',
+                      style: TextStyle(color: _textSecondary, fontSize: 10)),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: EdgeInsets.only(
+          left: 12,
+          right: 12,
+          top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+        ),
+        decoration: BoxDecoration(
+          color: _card,
+          border: Border(top: BorderSide(color: _divider)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _actionInProgress ? null : _reject,
+                icon: const Icon(Icons.close_rounded),
+                label: const Text('Reject'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _red,
+                  side: const BorderSide(color: _red, width: 1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _actionInProgress ? null : _approveAndDispatch,
+                icon: const Icon(Icons.local_shipping_rounded, size: 18),
+                label: const Text('Approve & Dispatch'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _green,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

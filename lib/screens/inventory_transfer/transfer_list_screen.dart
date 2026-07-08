@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_prepared_screen.dart';
+import 'transfer_submitted_detail_screen.dart';
 
 /// Outbound Draft/Submitted List Screen — reusable for both
 class TransferListScreen extends StatefulWidget {
@@ -57,9 +58,23 @@ class _TransferListScreenState extends State<TransferListScreen> {
   }
 
   Future<void> _openDetail(TransferV3 doc) async {
-    // Both Draft and Submitted → show items bottom sheet
-    // Draft users can tap 'Edit' inside popup to reopen in Prepared
-    _showDetailsSheet(doc);
+    if (widget.status == TransferStatus.submitted) {
+      // Submitted → open full detail screen with Approve/Reject actions
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TransferSubmittedDetailScreen(
+            transferId: doc.transferId,
+            branch: widget.branch,
+            userName: widget.userName,
+          ),
+        ),
+      );
+      _load();
+    } else {
+      // Draft → popup with edit button
+      _showDetailsSheet(doc);
+    }
   }
 
   Future<void> _editDraft(TransferV3 doc) async {
@@ -183,19 +198,6 @@ class _TransferListScreenState extends State<TransferListScreen> {
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: widget.themeColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text('${item.issuedQty}',
-                                  style: TextStyle(
-                                      color: widget.themeColor,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,6 +212,28 @@ class _TransferListScreenState extends State<TransferListScreen> {
                                           color: _textSecondary, fontSize: 11)),
                                 ],
                               ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: widget.themeColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text('${item.issuedQty}',
+                                      style: TextStyle(
+                                          color: widget.themeColor,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                                const SizedBox(height: 2),
+                                Text('pcs',
+                                    style: const TextStyle(
+                                        color: _textSecondary, fontSize: 10)),
+                              ],
                             ),
                           ],
                         ),

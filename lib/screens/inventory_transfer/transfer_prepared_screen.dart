@@ -135,6 +135,7 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
 
   int get _totalQty => _items.fold(0, (sum, i) => sum + i.qty);
   double get _totalCost => _items.fold(0.0, (sum, i) => sum + (i.qty * i.product.costPrice));
+  double get _totalRetail => _items.fold(0.0, (sum, i) => sum + (i.qty * i.product.sellingPrice));
 
   List<_TrItem> get _filteredItems {
     if (_searchQuery.isEmpty) return _items;
@@ -786,7 +787,7 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
           Container(width: 1, height: 24, color: _divider),
           _stat(Icons.add_rounded, 'Qty', '$_totalQty pcs'),
           Container(width: 1, height: 24, color: _divider),
-          _stat(Icons.sell_outlined, 'Cost', _totalCost.toStringAsFixed(2)),
+          _stat(Icons.sell_outlined, 'Retail', _totalRetail.toStringAsFixed(2)),
         ],
       ),
     );
