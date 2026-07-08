@@ -41,6 +41,28 @@ class _TransferListScreenState extends State<TransferListScreen> {
 
   List<TransferV3> _transfers = [];
   bool _loading = true;
+  
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<TransferV3> get _filteredTransfers {
+    if (_searchQuery.isEmpty) return _transfers;
+    final q = _searchQuery.toLowerCase();
+    return _transfers.where((doc) {
+      return doc.transferId.toLowerCase().contains(q) ||
+          doc.docNumber.toLowerCase().contains(q) ||
+          doc.status.toLowerCase().contains(q) ||
+          doc.receivingBranchId.toLowerCase().contains(q) ||
+          doc.receivingBranchName.toLowerCase().contains(q) ||
+          doc.issuingBranchId.toLowerCase().contains(q);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -354,13 +376,21 @@ class _TransferListScreenState extends State<TransferListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _transfers.isEmpty
-              ? _buildEmpty()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: _transfers.length,
-                  itemBuilder: (context, index) => _buildCard(_transfers[index]),
+          : Column(
+              children: [
+                _buildSearchBar(),
+                Expanded(
+                  child: _filteredTransfers.isEmpty
+                      ? _buildEmpty()
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _filteredTransfers.length,
+                          itemBuilder: (context, index) =>
+                              _buildCard(_filteredTransfers[index]),
+                        ),
                 ),
+              ],
+            ),
     );
   }
 
@@ -886,5 +916,46 @@ class _TransferListScreenState extends State<TransferListScreen> {
         SnackBar(content: Text('Download failed: $e'), backgroundColor: _red),
       );
     }
+  }
+
+
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      color: _bg,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (q) => setState(() => _searchQuery = q),
+          decoration: InputDecoration(
+            hintText: 'Search IST No., branch, or status...',
+            hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
+            prefixIcon: const Icon(Icons.search_rounded, color: _textSecondary, size: 22),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20, color: _textSecondary),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _searchQuery = '');
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+        ),
+      ),
+    );
   }
 }
