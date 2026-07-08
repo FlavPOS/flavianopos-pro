@@ -57,23 +57,23 @@ class _TransferListScreenState extends State<TransferListScreen> {
   }
 
   Future<void> _openDetail(TransferV3 doc) async {
-    if (widget.status == TransferStatus.draft) {
-      // Draft → reopen in Prepared for editing
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TransferPreparedScreen(
-            branch: widget.branch,
-            userName: widget.userName,
-            draftId: doc.transferId,
-          ),
+    // Both Draft and Submitted → show items bottom sheet
+    // Draft users can tap 'Edit' inside popup to reopen in Prepared
+    _showDetailsSheet(doc);
+  }
+
+  Future<void> _editDraft(TransferV3 doc) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TransferPreparedScreen(
+          branch: widget.branch,
+          userName: widget.userName,
+          draftId: doc.transferId,
         ),
-      );
-      _load();
-    } else {
-      // Submitted → show details bottom sheet
-      _showDetailsSheet(doc);
-    }
+      ),
+    );
+    _load();
   }
 
   Future<void> _deleteDoc(TransferV3 doc) async {
@@ -150,6 +150,15 @@ class _TransferListScreenState extends State<TransferListScreen> {
                           ],
                         ),
                       ),
+                      if (widget.status == TransferStatus.draft)
+                        IconButton(
+                          icon: const Icon(Icons.edit_rounded, color: Colors.white),
+                          tooltip: 'Continue Editing',
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _editDraft(doc);
+                          },
+                        ),
                       IconButton(
                         icon: const Icon(Icons.close_rounded, color: Colors.white),
                         onPressed: () => Navigator.pop(ctx),
@@ -258,7 +267,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
             child: Icon(Icons.inbox_rounded, size: 64, color: widget.themeColor),
           ),
           const SizedBox(height: 12),
-          Text('No PHOLDTITLE yet',
+          Text('No ${widget.title.toLowerCase()} yet',
               style: const TextStyle(
                   fontSize: 18, fontWeight: FontWeight.bold, color: _textPrimary)),
         ],
