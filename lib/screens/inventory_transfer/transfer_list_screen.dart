@@ -613,11 +613,9 @@ class _TransferListScreenState extends State<TransferListScreen> {
     }
 
     try {
+      // Create Excel — use default Sheet1 to avoid conflicts
       final excel = xl.Excel.createExcel();
-      final sheetName = widget.title;
-      final sheet = excel[sheetName];
-      excel.setDefaultSheet(sheetName);
-      excel.delete('Sheet1');
+      final sheet = excel['Sheet1'];
 
       final headers = [
         'Date', 'IST No.', 'From Branch', 'To Branch',
@@ -625,14 +623,13 @@ class _TransferListScreenState extends State<TransferListScreen> {
         'Prepared By', 'Approved By', 'Status',
       ];
 
+      // Write header row with styling
       for (var i = 0; i < headers.length; i++) {
         final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
         cell.value = xl.TextCellValue(headers[i]);
         cell.cellStyle = xl.CellStyle(
           bold: true,
-          backgroundColorHex: xl.ExcelColor.fromHexString(
-            widget.themeColor.toARGB32().toRadixString(16).substring(2, 8).toUpperCase(),
-          ),
+          backgroundColorHex: xl.ExcelColor.fromHexString('#3B82F6'),
           fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
           horizontalAlign: xl.HorizontalAlign.Center,
         );
