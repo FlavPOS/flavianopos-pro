@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'transfer_v3_model.dart';
+import 'inbound_receive_screen.dart';
 
 class InboundPendingScreen extends StatefulWidget {
   final String branch;
@@ -35,6 +36,7 @@ class _InboundPendingScreenState extends State<InboundPendingScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // Load transfers TO this branch (inbound direction)
     final list = await TransferV3Dao.getByStatuses(
       [TransferStatus.floating, TransferStatus.partiallyReceived],
       widget.branchId,
@@ -120,14 +122,16 @@ class _InboundPendingScreenState extends State<InboundPendingScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          // TODO: Open receive detail screen (Phase 6.5)
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Receive detail coming in next update!'),
-              backgroundColor: _amber,
-              behavior: SnackBarBehavior.floating,
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => InboundReceiveScreen(
+                transferId: doc.transferId,
+                branch: widget.branch,
+                userName: widget.userName,
+              ),
             ),
-          );
+          ).then((_) => _load());
         },
         child: Padding(
           padding: const EdgeInsets.all(14),
