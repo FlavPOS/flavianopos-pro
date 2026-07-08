@@ -367,6 +367,16 @@ class _TransferListScreenState extends State<TransferListScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.print_rounded),
+            tooltip: 'Print All',
+            onPressed: _printAllList,
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            tooltip: 'Export PDF (All)',
+            onPressed: _downloadAllListPdf,
+          ),
+          IconButton(
             icon: const Icon(Icons.table_view_rounded),
             tooltip: 'Export to Excel',
             onPressed: _exportExcel,
@@ -954,5 +964,158 @@ class _TransferListScreenState extends State<TransferListScreen> {
         ),
       ),
     );
+  }
+
+  Future<Uint8List> _generateAllPdf() async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    final allData = <Map<String, dynamic>>[];
+    int grandItems = 0;
+    int grandQty = 0;
+    double grandRetail = 0;
+
+    for (final doc in _transfers) {
+      final items = await TransferV3Dao.getItems(doc.transferId);
+      final docQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
+      final docRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+      grandItems += items.length;
+      grandQty += docQty;
+      grandRetail += docRetail;
+      allData.add({'doc': doc, 'items': items, 'qty': docQty, 'retail': docRetail});
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: pdf_pkg.PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) => [
+          pw.Container(
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6),
+              border: pw.Border.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('FLAV POS', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 3),
+                    pw.Text('${widget.title.toUpperCase()} REPORT', style: const pw.TextStyle(fontSize: 12)),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('${_transfers.length} Documents', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    pw.Text('Generated: ${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}',
+                        style: const pw.TextStyle(fontSize: 9)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Container(
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                pw.Text('Total Docs: ${_transfers.length}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Items: $grandItems', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Qty: $grandQty pcs', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Retail: ${grandRetail.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+              ],
+            ),
+          ),
+          pw.SizedBox(height: 8),
+          pw.Table(
+            border: pw.TableBorder.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(90),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(2),
+              3: const pw.FixedColumnWidth(40),
+              4: const pw.FixedColumnWidth(50),
+              5: const pw.FixedColumnWidth(70),
+              6: const pw.FixedColumnWidth(70),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                children: [
+                  _pdfHCell('IST No.'),
+                  _pdfHCell('From'),
+                  _pdfHCell('To'),
+                  _pdfHCell('Items'),
+                  _pdfHCell('Qty'),
+                  _pdfHCell('Retail'),
+                  _pdfHCell('Status'),
+                ],
+              ),
+              ...allData.map((row) {
+                final d = row['doc'] as TransferV3;
+                return pw.TableRow(children: [
+                  _pdfCell(d.docNumber.isEmpty ? d.transferId : d.docNumber),
+                  _pdfCell('${d.issuingBranchId} ${d.issuingBranchName}'),
+                  _pdfCell('${d.receivingBranchId} ${d.receivingBranchName}'),
+                  _pdfCellR((row['items'] as List).length.toString()),
+                  _pdfCellR((row['qty'] as int).toString()),
+                  _pdfCellR((row['retail'] as double).toStringAsFixed(2)),
+                  _pdfCell(d.status),
+                ]);
+              }),
+            ],
+          ),
+        ],
+      ),
+    );
+    return pdf.save();
+  }
+
+  Future<void> _printAllList() async {
+    if (_transfers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No records to print'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    try {
+      final bytes = await _generateAllPdf();
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Print failed: $e'), backgroundColor: _red),
+      );
+    }
+  }
+
+  Future<void> _downloadAllListPdf() async {
+    if (_transfers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No records to export'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+    try {
+      final bytes = await _generateAllPdf();
+      final now = DateTime.now();
+      final filename = '${widget.title.replaceAll(" ", "_")}_Report_${now.year}${now.month.toString().padLeft(2, "0")}${now.day.toString().padLeft(2, "0")}.pdf';
+      await Printing.sharePdf(bytes: bytes, filename: filename);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF downloaded: $filename'), backgroundColor: widget.themeColor),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Download failed: $e'), backgroundColor: _red),
+      );
+    }
   }
 }
