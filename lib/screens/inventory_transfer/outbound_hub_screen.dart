@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_prepared_screen.dart';
+import 'transfer_list_screen.dart';
 
 class OutboundHubScreen extends StatefulWidget {
   final String branch;
@@ -134,7 +135,19 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
                     title: 'Draft',
                     subtitle: 'Saved but not yet submitted',
                     count: _draftCount,
-                    onTap: () => _showComingSoon('Draft list'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferListScreen(
+                          branch: widget.branch,
+                          userName: widget.userName,
+                          branchId: _branchId,
+                          status: TransferStatus.draft,
+                          title: 'Draft Transfers',
+                          themeColor: _purple,
+                        ),
+                      ),
+                    ).then((_) => _load()),
                   ),
                   const SizedBox(height: 12),
                   _buildCard(
@@ -143,7 +156,19 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
                     title: 'Submitted',
                     subtitle: 'Awaiting manager approval',
                     count: _submittedCount,
-                    onTap: () => _showComingSoon('Submitted list'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferListScreen(
+                          branch: widget.branch,
+                          userName: widget.userName,
+                          branchId: _branchId,
+                          status: TransferStatus.submitted,
+                          title: 'Submitted Transfers',
+                          themeColor: _blue,
+                        ),
+                      ),
+                    ).then((_) => _load()),
                   ),
                   const SizedBox(height: 12),
                   _buildCard(
