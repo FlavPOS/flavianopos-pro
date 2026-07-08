@@ -790,141 +790,256 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
   Future<Uint8List> _generateReceivePdf() async {
     final pdf = pw.Document();
-    final now = DateTime.now();
+    final totalIssued = _items.fold<int>(0, (s, i) => s + i.item.issuedQty);
+    final totalReceived = _items.fold<int>(0, (s, i) => s + i.receivedQty);
+    final totalShort = totalIssued - totalReceived;
+    final totalRetail = _items.fold<double>(0.0, (s, i) => s + (i.receivedQty * i.item.unitCost));
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: pdf_pkg.PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(24),
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            pw.Container(
-              padding: const pw.EdgeInsets.all(12),
-              decoration: pw.BoxDecoration(
-                color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6),
-                border: pw.Border.all(width: 0.5),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('FLAV POS', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                      pw.SizedBox(height: 3),
-                      pw.Text('RECEIVE RECEIPT', style: const pw.TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(_doc!.docNumber.isEmpty ? _doc!.transferId : _doc!.docNumber,
-                          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Status: ${_hasVariance ? "PARTIALLY RECEIVED" : "RECEIVED"}',
-                          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
+    final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
+    const itemsPerPage = 20;
+    final totalPages = (_items.length / itemsPerPage).ceil().clamp(1, 999);
+
+    pw.Widget buildCopy({
+      required String copyLabel,
+      required List<_ReceiveItem> pageItems,
+      required int currentPage,
+      required int totalPagesCount,
+    }) {
+      final status = _hasVariance ? 'PARTIALLY RECEIVED' : 'RECEIVED';
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          // Title Row
+          pw.Container(
+            padding: const pw.EdgeInsets.only(bottom: 6),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 1.5)),
             ),
-            pw.SizedBox(height: 8),
-            pw.Row(
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('FROM', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('${_doc!.issuingBranchId} - ${_doc!.issuingBranchName}',
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 8),
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(8),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('TO', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('${_doc!.receivingBranchId} - ${_doc!.receivingBranchName}',
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 8),
-            pw.Table(
-              border: pw.TableBorder.all(width: 0.5),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(80),
-                1: const pw.FlexColumnWidth(3),
-                2: const pw.FixedColumnWidth(60),
-                3: const pw.FixedColumnWidth(60),
-                4: const pw.FixedColumnWidth(60),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    _rcvH('SKU'),
-                    _rcvH('Product'),
-                    _rcvH('Issued'),
-                    _rcvH('Received'),
-                    _rcvH('Short'),
+                    pw.Text('Stock Transfer',
+                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(width: 8),
+                    pw.Text('· ' + status,
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-                ..._items.map((ri) {
-                  final sh = ri.item.issuedQty - ri.receivedQty;
-                  return pw.TableRow(children: [
-                    _rcvC(ri.item.sku),
-                    _rcvC(ri.item.productName),
-                    _rcvCR(ri.item.issuedQty.toString()),
-                    _rcvCR(ri.receivedQty.toString()),
-                    _rcvCR(sh > 0 ? sh.toString() : '-'),
-                  ]);
-                }),
-                pw.TableRow(
-                  decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
-                  children: [
-                    _rcvC(''),
-                    _rcvC('TOTAL'),
-                    _rcvCR(_totalIssued.toString()),
-                    _rcvCR(_totalReceived.toString()),
-                    _rcvCR(_totalShort > 0 ? _totalShort.toString() : '-'),
-                  ],
-                ),
+                pw.Text(copyLabel,
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)),
               ],
             ),
+          ),
+          pw.SizedBox(height: 8),
+
+          // Info Table
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(90),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(90),
+              3: const pw.FlexColumnWidth(3),
+            },
+            children: [
+              pw.TableRow(children: [
+                _rc4Info('From Branch', bold: true),
+                _rc4Info((_doc?.issuingBranchId ?? '') + ' (' + (_doc?.issuingBranchName ?? '') + ')'),
+                _rc4Info('Received Date', bold: true),
+                _rc4Info(_rc4Date(_doc?.receivedDate ?? DateTime.now().toIso8601String())),
+              ]),
+              pw.TableRow(children: [
+                _rc4Info('To Branch', bold: true),
+                _rc4Info((_doc?.receivingBranchId ?? '') + ' (' + (_doc?.receivingBranchName ?? '') + ')'),
+                _rc4Info('IST No.', bold: true),
+                _rc4Info((_doc?.docNumber.isEmpty ?? true) ? (_doc?.transferId ?? '') : (_doc?.docNumber ?? '')),
+              ]),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+
+          // Items Table with Received columns
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(70),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(55),
+              3: const pw.FixedColumnWidth(65),
+              4: const pw.FixedColumnWidth(55),
+              5: const pw.FixedColumnWidth(85),
+            },
+            children: [
+              pw.TableRow(children: [
+                _rc4H('SKU'),
+                _rc4H('Product Name'),
+                _rc4H('Issued'),
+                _rc4H('Received'),
+                _rc4H('Short'),
+                _rc4H('Retail Value'),
+              ]),
+              ...pageItems.map((ri) {
+                final sh = ri.item.issuedQty - ri.receivedQty;
+                final retail = ri.receivedQty * ri.item.unitCost;
+                return pw.TableRow(children: [
+                  _rc4C(ri.item.sku),
+                  _rc4C(ri.item.productName),
+                  _rc4CR(ri.item.issuedQty.toString()),
+                  _rc4CR(ri.receivedQty.toString()),
+                  _rc4CR(sh > 0 ? sh.toString() : '-'),
+                  _rc4CR(retail.toStringAsFixed(2)),
+                ]);
+              }),
+              if (currentPage == totalPagesCount)
+                pw.TableRow(children: [
+                  _rc4C(''),
+                  _rc4C('Grand Total', bold: true),
+                  _rc4CR(totalIssued.toString(), bold: true),
+                  _rc4CR(totalReceived.toString(), bold: true),
+                  _rc4CR(totalShort > 0 ? totalShort.toString() : '-', bold: true),
+                  _rc4CR(totalRetail.toStringAsFixed(2), bold: true),
+                ]),
+              for (int i = 0; i < 6; i++)
+                pw.TableRow(children: [
+                  _rc4Empty(),
+                  _rc4Empty(),
+                  _rc4Empty(),
+                  _rc4Empty(),
+                  _rc4Empty(),
+                  _rc4Empty(),
+                ]),
+            ],
+          ),
+
+          if (currentPage != totalPagesCount) ...[
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Text('— Continued on next page —',
+                  style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+            ),
+          ],
+
+          if (currentPage == totalPagesCount) ...[
             pw.Spacer(),
             pw.Row(
               children: [
-                pw.Expanded(child: _rcvSig('DISPATCHED BY', _doc!.approvedBy)),
+                pw.Expanded(child: _rc4Sig('Dispatched By:', _doc?.approvedBy ?? '')),
                 pw.SizedBox(width: 12),
-                pw.Expanded(child: _rcvSig('RECEIVED BY', _doc!.receivedBy)),
+                pw.Expanded(child: _rc4Sig('Received By:', _doc?.receivedBy ?? '')),
                 pw.SizedBox(width: 12),
-                pw.Expanded(child: _rcvSig('VERIFIED BY', '')),
+                pw.Expanded(child: _rc4Sig('Verified By:', '')),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
+                    child: pw.Text('Date Received',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center),
+                  ),
+                ),
               ],
             ),
-            pw.SizedBox(height: 6),
-            pw.Text(
-              'Generated: ${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}',
-              style: const pw.TextStyle(fontSize: 8),
-            ),
           ],
+        ],
+      );
+    }
+
+    for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
+      final startIdx = (pageNum - 1) * itemsPerPage;
+      final endIdx = (startIdx + itemsPerPage).clamp(0, _items.length);
+      final pageItems = _items.sublist(startIdx, endIdx);
+
+      pdf.addPage(pw.Page(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => buildCopy(
+          copyLabel: 'ISSUING STORE COPY',
+          pageItems: pageItems,
+          currentPage: pageNum,
+          totalPagesCount: totalPages,
         ),
-      ),
-    );
+      ));
+
+      pdf.addPage(pw.Page(
+        pageFormat: pageFormat,
+        margin: const pw.EdgeInsets.all(20),
+        build: (context) => buildCopy(
+          copyLabel: 'RECEIVING STORE COPY',
+          pageItems: pageItems,
+          currentPage: pageNum,
+          totalPagesCount: totalPages,
+        ),
+      ));
+    }
+
     return pdf.save();
+  }
+
+  static pw.Widget _rc4Info(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _rc4H(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+    alignment: pw.Alignment.center,
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+  );
+
+  static pw.Widget _rc4C(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _rc4CR(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _rc4Empty() => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: pw.Text(' ', style: const pw.TextStyle(fontSize: 10)),
+  );
+
+  static pw.Widget _rc4Sig(String label, String name) => pw.Container(
+    padding: const pw.EdgeInsets.only(top: 4),
+    decoration: const pw.BoxDecoration(
+      border: pw.Border(top: pw.BorderSide(width: 0.6)),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 2),
+        pw.Text(name.isEmpty ? '________________' : name,
+            style: const pw.TextStyle(fontSize: 10)),
+      ],
+    ),
+  );
+
+  static String _rc4Date(String iso) {
+    if (iso.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(iso);
+      return '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+    } catch (_) {
+      return iso;
+    }
   }
 
   static pw.Widget _rcvH(String text) => pw.Container(
