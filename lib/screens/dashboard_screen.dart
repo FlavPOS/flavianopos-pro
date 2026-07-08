@@ -18,9 +18,9 @@ import 'inventory/inventory_screen.dart';
 import 'reports/z_report_screen.dart';
 import 'reports/sales_history_screen.dart';
 import 'reports/discount_monitoring_screen.dart';
-import 'stock_adjustment/stock_adjustment_screen.dart';
 import 'inventory_adjustment/inventory_adjustment_hub.dart';
 import 'stock_transfer/stock_transfer_screen.dart';
+import 'inventory_transfer/stock_transfer_hub.dart';
 import '../models/product_model.dart';
 import '../models/transaction_model.dart';
 import 'customers/customers_screen.dart';
@@ -212,9 +212,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => StockTransferScreen(
-              currentUser: widget.userName,
-              currentBranch: widget.branch,
+            builder: (_) => StockTransferHub(
+              branch: widget.branch,
+              userName: widget.userName,
             ),
           ),
         ).then((_) => setState(() {}));

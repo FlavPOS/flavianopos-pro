@@ -148,6 +148,97 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE adjustments_v3 ADD COLUMN approved_by_pin TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE adjustments_v3 ADD COLUMN approved_by_role TEXT DEFAULT ''"); } catch (_) {}
 
+        // ═══ INTER-STORE TRANSFERS V3 (SAP-grade) ═══
+    // Enterprise pattern: DRAFT → SUBMITTED → APPROVED → FLOATING → RECEIVED → CLOSED
+    // Deducts source on FLOATING (dispatched), adds destination on RECEIVED
+    // Handles: full receipt, partial receipt, variance, post-back
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS interstore_transfers_v3 (
+          transfer_id           TEXT PRIMARY KEY,
+          doc_number            TEXT,
+          status                TEXT NOT NULL DEFAULT 'DRAFT',
+          
+          issuing_branch_id     TEXT NOT NULL,
+          issuing_branch_name   TEXT DEFAULT '',
+          receiving_branch_id   TEXT NOT NULL,
+          receiving_branch_name TEXT DEFAULT '',
+          
+          prepared_by           TEXT DEFAULT '',
+          prepared_by_id        TEXT DEFAULT '',
+          prepared_date         TEXT NOT NULL,
+          
+          submitted_by          TEXT DEFAULT '',
+          submitted_date        TEXT DEFAULT '',
+          
+          approved_by           TEXT DEFAULT '',
+          approved_by_pin       TEXT DEFAULT '',
+          approved_by_role      TEXT DEFAULT '',
+          approved_date         TEXT DEFAULT '',
+          
+          dispatched_by         TEXT DEFAULT '',
+          dispatched_date       TEXT DEFAULT '',
+          
+          received_by           TEXT DEFAULT '',
+          received_by_pin       TEXT DEFAULT '',
+          received_date         TEXT DEFAULT '',
+          
+          variance_approved_by  TEXT DEFAULT '',
+          variance_approved_date TEXT DEFAULT '',
+          
+          rejected_by           TEXT DEFAULT '',
+          rejected_date         TEXT DEFAULT '',
+          rejection_reason      TEXT DEFAULT '',
+          
+          closed_date           TEXT DEFAULT '',
+          
+          total_items           INTEGER NOT NULL DEFAULT 0,
+          total_issued_qty      INTEGER NOT NULL DEFAULT 0,
+          total_received_qty    INTEGER NOT NULL DEFAULT 0,
+          total_floating_qty    INTEGER NOT NULL DEFAULT 0,
+          total_short_qty       INTEGER NOT NULL DEFAULT 0,
+          total_cost            REAL NOT NULL DEFAULT 0,
+          
+          notes                 TEXT DEFAULT '',
+          variance_notes        TEXT DEFAULT '',
+          
+          sync_status           TEXT DEFAULT 'PENDING',
+          created_at            TEXT NOT NULL,
+          updated_at            TEXT NOT NULL
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_ist_v3_status ON interstore_transfers_v3(status, issuing_branch_id, receiving_branch_id)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_ist_v3_out ON interstore_transfers_v3(issuing_branch_id, status)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_ist_v3_in ON interstore_transfers_v3(receiving_branch_id, status)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_ist_v3_created ON interstore_transfers_v3(created_at DESC)"); } catch (_) {}
+
+    // ═══ IST LINE ITEMS (per-item quantities + variance) ═══
+    try {
+      await db.execute("""
+        CREATE TABLE IF NOT EXISTS interstore_transfer_items_v3 (
+          item_id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          transfer_id       TEXT NOT NULL,
+          product_id        TEXT NOT NULL,
+          sku               TEXT NOT NULL,
+          product_name      TEXT NOT NULL,
+          category          TEXT DEFAULT '',
+          
+          issued_qty        INTEGER NOT NULL DEFAULT 0,
+          received_qty      INTEGER NOT NULL DEFAULT 0,
+          short_qty         INTEGER NOT NULL DEFAULT 0,
+          variance_reason   TEXT DEFAULT '',
+          
+          unit_cost         REAL DEFAULT 0,
+          notes             TEXT DEFAULT '',
+          created_at        TEXT NOT NULL,
+          
+          FOREIGN KEY (transfer_id) REFERENCES interstore_transfers_v3(transfer_id) ON DELETE CASCADE
+        )
+      """);
+    } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_ist_items_doc ON interstore_transfer_items_v3(transfer_id)"); } catch (_) {}
+
     // ═══ ADJUSTMENTS V3 HEADER (workflow) ═══
     // Stores adjustment documents with status: DRAFT/SUBMITTED/APPROVED/REJECTED
     try {
