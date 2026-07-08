@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../services/branch_inventory_service.dart';
 import '../../services/device_assignment_service.dart';
@@ -5,6 +6,9 @@ import '../../services/firebase_realtime_service.dart';
 import '../../services/firebase_config_service.dart';
 import '../../helpers/database_helper.dart';
 import '../inventory_adjustment/approver_pin_dialog_v3.dart';
+import 'package:pdf/pdf.dart' as pdf_pkg;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'transfer_v3_model.dart';
 
 /// Submitted Transfer Detail — Approve/Reject actions
@@ -59,6 +63,7 @@ class _TransferSubmittedDetailScreenState
   }
 
   int get _totalQty => _items.fold(0, (s, i) => s + i.issuedQty);
+  double get _totalRetail => _items.fold(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
 
   void _showSnack(String msg, {Color? color}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -281,7 +286,8 @@ class _TransferSubmittedDetailScreenState
         color: _green,
       );
 
-      await Future.delayed(const Duration(milliseconds: 800));
+      // Show print options popup
+      await _showPrintOptions();
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -496,18 +502,21 @@ class _TransferSubmittedDetailScreenState
   Widget _buildBottomBar() {
     return SafeArea(
       top: false,
-      child: Container(
-        padding: EdgeInsets.only(
-          left: 12,
-          right: 12,
-          top: 12,
-          bottom: MediaQuery.of(context).padding.bottom + 12,
-        ),
-        decoration: BoxDecoration(
-          color: _card,
-          border: Border(top: BorderSide(color: _divider)),
-        ),
-        child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSummaryStrip(),
+          Container(
+            padding: EdgeInsets.only(
+              left: 12,
+              right: 12,
+              top: 12,
+              bottom: MediaQuery.of(context).padding.bottom + 12,
+            ),
+            decoration: BoxDecoration(
+              color: _card,
+            ),
+            child: Row(
           children: [
             Expanded(
               child: OutlinedButton.icon(
@@ -539,7 +548,382 @@ class _TransferSubmittedDetailScreenState
             ),
           ],
         ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _buildSummaryStrip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: _card,
+        border: Border(top: BorderSide(color: _divider)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _summaryStat(Icons.shopping_bag_outlined, 'Items', '${_items.length}'),
+          Container(width: 1, height: 26, color: _divider),
+          _summaryStat(Icons.add_rounded, 'Qty', '$_totalQty pcs'),
+          Container(width: 1, height: 26, color: _divider),
+          _summaryStat(Icons.sell_outlined, 'Retail', _totalRetail.toStringAsFixed(2)),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryStat(IconData icon, String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: _blue),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 11, color: _textSecondary)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  // ═══ PRINT OPTIONS POPUP ═══
+  Future<void> _showPrintOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: _green.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.local_shipping_rounded, color: _green, size: 40),
+              ),
+              const SizedBox(height: 12),
+              const Text('Dispatched Successfully!',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text('To: ${_doc?.receivingBranchName ?? ""}',
+                  style: const TextStyle(fontSize: 12, color: _textSecondary)),
+              const SizedBox(height: 20),
+              const Divider(color: _divider),
+              const SizedBox(height: 12),
+              const Text('Print Transfer Slip?',
+                  style: TextStyle(fontSize: 13, color: _textSecondary, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 16),
+              _buildPrintOption(
+                icon: Icons.picture_as_pdf_rounded,
+                label: 'Preview PDF',
+                subtitle: 'View before printing',
+                color: _blue,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _printPdf();
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildPrintOption(
+                icon: Icons.print_rounded,
+                label: 'Print',
+                subtitle: 'Send to printer',
+                color: _green,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _printPdf();
+                },
+              ),
+              const SizedBox(height: 10),
+              _buildPrintOption(
+                icon: Icons.download_rounded,
+                label: 'Download PDF',
+                subtitle: 'Save to device',
+                color: Colors.deepPurple,
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _downloadPdf();
+                },
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Later',
+                      style: TextStyle(color: _textSecondary, fontSize: 14, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrintOption({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+                    Text(subtitle, style: const TextStyle(fontSize: 11, color: _textSecondary)),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: color, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ═══ PDF GENERATOR (A4 Landscape) ═══
+  Future<Uint8List> _generatePdf() async {
+    final doc = pw.Document();
+    final now = DateTime.now();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: pdf_pkg.PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6),
+                  border: pw.Border.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('FLAV POS',
+                            style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 3),
+                        pw.Text('INTER-STORE TRANSFER',
+                            style: const pw.TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(_doc!.docNumber.isEmpty ? _doc!.transferId : _doc!.docNumber,
+                            style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Status: FLOATING (In-Transit)',
+                            style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: pdf_pkg.PdfColor.fromInt(0xFFF59E0B))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 8),
+
+              // Branch info
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('FROM (ISSUING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('${_doc!.issuingBranchId} - ${_doc!.issuingBranchName}',
+                              style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(width: 8),
+                  pw.Expanded(
+                    child: pw.Container(
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.3)),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text('TO (RECEIVING)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('${_doc!.receivingBranchId} - ${_doc!.receivingBranchName}',
+                              style: const pw.TextStyle(fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 8),
+
+              // Items table
+              pw.Table(
+                border: pw.TableBorder.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(80),
+                  1: const pw.FlexColumnWidth(3),
+                  2: const pw.FixedColumnWidth(60),
+                  3: const pw.FixedColumnWidth(80),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                    children: [
+                      _hCell('SKU'), _hCell('Product'), _hCell('Qty'), _hCell('Retail'),
+                    ],
+                  ),
+                  ..._items.map((i) {
+                    final retail = i.issuedQty * i.unitCost;
+                    return pw.TableRow(children: [
+                      _cell(i.sku),
+                      _cell(i.productName),
+                      _cellR(i.issuedQty.toString()),
+                      _cellR(retail.toStringAsFixed(2)),
+                    ]);
+                  }),
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
+                    children: [
+                      _cell(''),
+                      _cell('TOTAL'),
+                      _cellR(_totalQty.toString()),
+                      _cellR(_totalRetail.toStringAsFixed(2)),
+                    ],
+                  ),
+                ],
+              ),
+              pw.Spacer(),
+
+              // Signature blocks
+              pw.Row(
+                children: [
+                  pw.Expanded(child: _sigBlock('PREPARED BY', _doc!.preparedBy)),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(child: _sigBlock('APPROVED BY', _doc!.approvedBy, role: _doc!.approvedByRole)),
+                  pw.SizedBox(width: 12),
+                  pw.Expanded(child: _sigBlock('RECEIVED BY', '')),
+                ],
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text(
+                'Generated: ${now.year}-${now.month.toString().padLeft(2, "0")}-${now.day.toString().padLeft(2, "0")} ${now.hour.toString().padLeft(2, "0")}:${now.minute.toString().padLeft(2, "0")}',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    return doc.save();
+  }
+
+  static pw.Widget _hCell(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 5),
+    alignment: pw.Alignment.center,
+    child: pw.Text(text, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+  );
+
+  static pw.Widget _cell(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 5),
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 9)),
+  );
+
+  static pw.Widget _cellR(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 5),
+    alignment: pw.Alignment.centerRight,
+    child: pw.Text(text, style: const pw.TextStyle(fontSize: 9)),
+  );
+
+  static pw.Widget _sigBlock(String label, String name, {String role = ''}) => pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Container(
+        height: 20,
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(bottom: pw.BorderSide(width: 0.5)),
+        ),
+      ),
+      pw.SizedBox(height: 2),
+      pw.Text(label, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+      pw.Text(name.isEmpty ? '_________________' : name,
+          style: const pw.TextStyle(fontSize: 9)),
+      if (role.isNotEmpty)
+        pw.Text('($role)', style: const pw.TextStyle(fontSize: 8)),
+    ],
+  );
+
+  Future<void> _printPdf() async {
+    try {
+      final bytes = await _generatePdf();
+      await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (e) {
+      _showSnack('Print failed: $e', color: _red);
+    }
+  }
+
+  Future<void> _downloadPdf() async {
+    try {
+      final bytes = await _generatePdf();
+      final docNum = _doc!.docNumber.isEmpty ? _doc!.transferId : _doc!.docNumber;
+      await Printing.sharePdf(bytes: bytes, filename: 'IST-$docNum.pdf');
+      _showSnack('PDF downloaded', color: _green);
+    } catch (e) {
+      _showSnack('Download failed: $e', color: _red);
+    }
+  }
+
 }
