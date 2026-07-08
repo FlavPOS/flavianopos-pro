@@ -301,6 +301,20 @@ class SyncManager {
           .onChildAdded.listen((event) => _onAdjustmentBranchUpdate(event, companyCode)));
       _rtListeners.add(fbDb.ref('companies/$companyCode/branchAdjustments')
           .onChildChanged.listen((event) => _onAdjustmentBranchUpdate(event, companyCode)));
+
+      // ═══ RECEIVED DELIVERY (all 3 statuses) ═══
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchReceivedDelivery')
+          .onChildAdded.listen((event) => _onDeliveryUpdate(event, companyCode, 'Approved')));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchReceivedDelivery')
+          .onChildChanged.listen((event) => _onDeliveryUpdate(event, companyCode, 'Approved')));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchSubmittedDelivery')
+          .onChildAdded.listen((event) => _onDeliveryUpdate(event, companyCode, 'Submitted')));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchSubmittedDelivery')
+          .onChildChanged.listen((event) => _onDeliveryUpdate(event, companyCode, 'Submitted')));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchRejectedDelivery')
+          .onChildAdded.listen((event) => _onDeliveryUpdate(event, companyCode, 'Rejected')));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchRejectedDelivery')
+          .onChildChanged.listen((event) => _onDeliveryUpdate(event, companyCode, 'Rejected')));
     }
   }
 
@@ -1068,6 +1082,92 @@ class SyncManager {
     }
   }
 
+
+  // ═══ DELIVERY SYNC HANDLER ═══
+  Future<void> _onDeliveryUpdate(
+    DatabaseEvent event,
+    String companyCode,
+    String status,
+  ) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final branchId = (event.snapshot.key ?? '').toString();
+      if (branchId.isEmpty) return;
+
+      for (final entry in val.entries) {
+        final deliveryId = entry.key.toString();
+        final delivData = entry.value;
+        if (delivData is! Map) continue;
+        final m = delivData.map((k, v) => MapEntry(k.toString(), v));
+
+        // Sync loop prevention
+        final incomingDeviceId = (m['deviceId'] ?? '').toString();
+        final myDeviceId = await DeviceIdService().getOrCreate();
+        if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) {
+          continue;
+        }
+
+        final db = await DatabaseHelper().database;
+
+        try {
+          await db.insert('delivery_records', {
+            'id': deliveryId,
+            'refNumber': (m['refNumber'] ?? '').toString(),
+            'supplier': (m['supplier'] ?? '').toString(),
+            'driverName': (m['driverName'] ?? '').toString(),
+            'plateNumber': (m['plateNumber'] ?? '').toString(),
+            'receivedBy': (m['receivedBy'] ?? '').toString(),
+            'notes': (m['notes'] ?? '').toString(),
+            'dateReceived': (m['dateReceived'] ?? m['date'] ?? '').toString(),
+            'status': status,
+            'branchId': branchId,
+            'branchName': (m['branchName'] ?? '').toString(),
+            'totalItems': (m['totalItems'] as num?)?.toInt() ?? 0,
+            'totalCost': (m['totalCost'] as num?)?.toDouble() ?? 0,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        } catch (e) {
+          if (kDebugMode) debugPrint('[SYNC-DELIV] Insert error: $e');
+        }
+
+        // Sync line items
+        final items = m['items'];
+        if (items is List) {
+          try {
+            await db.delete('delivery_items',
+                where: 'deliveryId = ?', whereArgs: [deliveryId]);
+            for (final item in items) {
+              if (item is Map) {
+                final im = item.map((k, v) => MapEntry(k.toString(), v));
+                await db.insert('delivery_items', {
+                  'deliveryId': deliveryId,
+                  'productId': (im['productId'] ?? '').toString(),
+                  'sku': (im['sku'] ?? '').toString(),
+                  'itemName': (im['itemName'] ?? im['productName'] ?? '').toString(),
+                  'quantity': (im['quantity'] as num?)?.toInt() ?? 0,
+                  'unitCost': (im['unitCost'] as num?)?.toDouble() ?? 0,
+                  'totalCost': (im['totalCost'] as num?)?.toDouble() ?? 0,
+                  'batchNumber': (im['batchNumber'] ?? '').toString(),
+                  'mfgDate': (im['mfgDate'] ?? '').toString(),
+                  'expDate': (im['expDate'] ?? '').toString(),
+                });
+              }
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint('[SYNC-DELIV] Items error: $e');
+          }
+        }
+
+        if (kDebugMode) {
+          debugPrint('[SYNC-DELIV] $deliveryId synced ($status)');
+        }
+      }
+
+      _showSnackBar?.call('📦 Delivery synced from another device');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SYNC-DELIV] Error: $e');
+    }
+  }
 }
 class SyncStatusInfo {
   final bool online;
