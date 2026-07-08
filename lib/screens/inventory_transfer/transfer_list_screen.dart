@@ -1,4 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:excel/excel.dart' as xl;
+import 'package:printing/printing.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_prepared_screen.dart';
 import 'transfer_submitted_detail_screen.dart';
@@ -265,11 +268,53 @@ class _TransferListScreenState extends State<TransferListScreen> {
                     },
                   ),
                 ),
+                _buildPopupSummary(items),
               ],
             );
           },
         );
       },
+    );
+  }
+
+  Widget _buildPopupSummary(List<TransferV3Item> items) {
+    final totalQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
+    final totalRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: _card,
+        border: Border(top: BorderSide(color: _divider)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _popupStat(Icons.shopping_bag_outlined, 'Items', '${items.length}'),
+          Container(width: 1, height: 26, color: _divider),
+          _popupStat(Icons.add_rounded, 'Qty', '$totalQty pcs'),
+          Container(width: 1, height: 26, color: _divider),
+          _popupStat(Icons.sell_outlined, 'Retail', totalRetail.toStringAsFixed(2)),
+        ],
+      ),
+    );
+  }
+
+  Widget _popupStat(IconData icon, String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: widget.themeColor),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 11, color: _textSecondary)),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
@@ -286,6 +331,11 @@ class _TransferListScreenState extends State<TransferListScreen> {
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.table_view_rounded),
+            tooltip: 'Export to Excel',
+            onPressed: _exportExcel,
+          ),
           IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _load),
         ],
       ),
@@ -505,5 +555,114 @@ class _TransferListScreenState extends State<TransferListScreen> {
         ),
       ),
     );
+  }
+
+
+  Future<void> _exportExcel() async {
+    if (_transfers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No records to export'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final excel = xl.Excel.createExcel();
+      final sheetName = widget.title;
+      final sheet = excel[sheetName];
+      excel.setDefaultSheet(sheetName);
+      excel.delete('Sheet1');
+
+      final headers = [
+        'Date', 'IST No.', 'From Branch', 'To Branch',
+        'SKU', 'Product Name', 'Qty', 'Retail Value',
+        'Prepared By', 'Approved By', 'Status',
+      ];
+
+      for (var i = 0; i < headers.length; i++) {
+        final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = xl.TextCellValue(headers[i]);
+        cell.cellStyle = xl.CellStyle(
+          bold: true,
+          backgroundColorHex: xl.ExcelColor.fromHexString(
+            widget.themeColor.toARGB32().toRadixString(16).substring(2, 8).toUpperCase(),
+          ),
+          fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+          horizontalAlign: xl.HorizontalAlign.Center,
+        );
+      }
+
+      int rowIndex = 1;
+      for (final doc in _transfers) {
+        final items = await TransferV3Dao.getItems(doc.transferId);
+        String date = doc.createdAt;
+        try {
+          final dt = DateTime.parse(doc.createdAt);
+          date = '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+        } catch (_) {}
+
+        final ref = doc.docNumber.isEmpty ? doc.transferId : doc.docNumber;
+        final approvedBy = doc.approvedByRole.isNotEmpty
+            ? '${doc.approvedBy} (${doc.approvedByRole})'
+            : doc.approvedBy;
+
+        for (final item in items) {
+          final retail = item.issuedQty * item.unitCost;
+          final row = [
+            date, ref,
+            '${doc.issuingBranchId} (${doc.issuingBranchName})',
+            '${doc.receivingBranchId} (${doc.receivingBranchName})',
+            item.sku, item.productName,
+            item.issuedQty.toString(),
+            retail.toStringAsFixed(2),
+            doc.preparedBy,
+            approvedBy.isEmpty ? '—' : approvedBy,
+            doc.status,
+          ];
+
+          for (var c = 0; c < row.length; c++) {
+            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex))
+                .value = xl.TextCellValue(row[c]);
+          }
+          rowIndex++;
+        }
+      }
+
+      for (var i = 0; i < headers.length; i++) {
+        sheet.setColumnWidth(i, 18);
+      }
+
+      final bytes = excel.save();
+      if (bytes == null) throw 'Failed to encode Excel';
+
+      final now = DateTime.now();
+      final filename = '${widget.title.replaceAll(" ", "_")}_${now.year}${now.month.toString().padLeft(2, "0")}${now.day.toString().padLeft(2, "0")}.xlsx';
+
+      await Printing.sharePdf(
+        bytes: Uint8List.fromList(bytes),
+        filename: filename,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Exported: $filename'),
+          backgroundColor: widget.themeColor,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: _red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
