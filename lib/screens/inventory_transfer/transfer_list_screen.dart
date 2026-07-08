@@ -153,20 +153,15 @@ class _TransferListScreenState extends State<TransferListScreen> {
   Future<void> _showDetailsSheet(TransferV3 doc) async {
     final items = await TransferV3Dao.getItems(doc.transferId);
     if (!mounted) return;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (_, scrollCtrl) {
-            return Column(
+    // Full-screen dialog (better UX than bottom sheet)
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) {
+          return Scaffold(
+            backgroundColor: _bg,
+            body: SafeArea(
+              child: Column(
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -210,7 +205,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
                 ),
                 Expanded(
                   child: ListView.builder(
-                    controller: scrollCtrl,
+                    
                     padding: const EdgeInsets.all(12),
                     itemCount: items.length,
                     itemBuilder: (context, index) {
@@ -270,11 +265,11 @@ class _TransferListScreenState extends State<TransferListScreen> {
                 ),
                 _buildPopupSummary(items),
               ],
-            );
-          },
+            ),
+          ),
         );
       },
-    );
+    ));
   }
 
   Widget _buildPopupSummary(List<TransferV3Item> items) {
