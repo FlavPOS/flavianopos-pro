@@ -291,6 +291,16 @@ class SyncManager {
           .onChildAdded.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
       _rtListeners.add(fbDb.ref('companies/$companyCode/branchInventory/$branchId')
           .onChildChanged.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
+
+      // ═══ INTER-STORE TRANSFERS + BRANCH ADJUSTMENTS ═══
+      _rtListeners.add(fbDb.ref('companies/$companyCode/interStoreTransfers')
+          .onChildAdded.listen((event) => _onTransferUpdate(event, companyCode)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/interStoreTransfers')
+          .onChildChanged.listen((event) => _onTransferUpdate(event, companyCode)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchAdjustments')
+          .onChildAdded.listen((event) => _onAdjustmentBranchUpdate(event, companyCode)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/branchAdjustments')
+          .onChildChanged.listen((event) => _onAdjustmentBranchUpdate(event, companyCode)));
     }
   }
 
@@ -535,7 +545,7 @@ class SyncManager {
       final incomingDeviceId = (m['deviceId'] ?? '').toString();
       final myDeviceId = await DeviceIdService().getOrCreate();
       if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) {
-        if (kDebugMode) debugPrint('[SYNC-SALE] Skip own transaction: \$id');
+        if (kDebugMode) debugPrint('[SYNC-SALE] Skip own transaction: $id');
         return;
       }
 
@@ -545,7 +555,7 @@ class SyncManager {
           where: 'id = ?', whereArgs: [id], limit: 1);
       if (existing.isNotEmpty) {
         // Already have this transaction (maybe from own device write)
-        if (kDebugMode) debugPrint('[SYNC-SALE] Skip existing transaction: \$id');
+        if (kDebugMode) debugPrint('[SYNC-SALE] Skip existing transaction: $id');
         return;
       }
 
@@ -931,8 +941,134 @@ class SyncManager {
       if (kDebugMode) debugPrint('⚠️ Branch Z Report backfill error: $e');
     }
   }
-}
 
+  // ═══ TRANSFER SYNC HANDLER ═══
+  Future<void> _onTransferUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final m = val.map((k, v) => MapEntry(k.toString(), v));
+      final transferId = (event.snapshot.key ?? '').toString();
+      if (transferId.isEmpty) return;
+
+      final incomingDeviceId = (m['deviceId'] ?? '').toString();
+      final myDeviceId = await DeviceIdService().getOrCreate();
+      if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) return;
+
+      final db = await DatabaseHelper().database;
+      await db.insert('interstore_transfers_v3', {
+        'transfer_id': transferId,
+        'doc_number': (m['docNumber'] ?? '').toString(),
+        'status': (m['status'] ?? 'DRAFT').toString(),
+        'issuing_branch_id': (m['issuingBranchId'] ?? '').toString(),
+        'issuing_branch_name': (m['issuingBranchName'] ?? '').toString(),
+        'receiving_branch_id': (m['receivingBranchId'] ?? '').toString(),
+        'receiving_branch_name': (m['receivingBranchName'] ?? '').toString(),
+        'prepared_by': (m['preparedBy'] ?? '').toString(),
+        'prepared_by_id': (m['preparedById'] ?? '').toString(),
+        'prepared_date': (m['preparedDate'] ?? '').toString(),
+        'submitted_by': (m['submittedBy'] ?? '').toString(),
+        'submitted_date': (m['submittedDate'] ?? '').toString(),
+        'approved_by': (m['approvedBy'] ?? '').toString(),
+        'approved_by_pin': (m['approvedByPin'] ?? '').toString(),
+        'approved_by_role': (m['approvedByRole'] ?? '').toString(),
+        'approved_date': (m['approvedDate'] ?? '').toString(),
+        'dispatched_by': (m['dispatchedBy'] ?? '').toString(),
+        'dispatched_date': (m['dispatchedDate'] ?? '').toString(),
+        'received_by': (m['receivedBy'] ?? '').toString(),
+        'received_by_pin': (m['receivedByPin'] ?? '').toString(),
+        'received_date': (m['receivedDate'] ?? '').toString(),
+        'total_items': (m['totalItems'] as num?)?.toInt() ?? 0,
+        'total_issued_qty': (m['totalIssuedQty'] as num?)?.toInt() ?? 0,
+        'total_received_qty': (m['totalReceivedQty'] as num?)?.toInt() ?? 0,
+        'total_floating_qty': (m['totalFloatingQty'] as num?)?.toInt() ?? 0,
+        'total_short_qty': (m['totalShortQty'] as num?)?.toInt() ?? 0,
+        'total_cost': (m['totalCost'] as num?)?.toDouble() ?? 0,
+        'notes': (m['notes'] ?? '').toString(),
+        'sync_status': 'SYNCED',
+        'created_at': (m['createdAt'] ?? m['preparedDate'] ?? '').toString(),
+        'updated_at': (m['updatedAt'] ?? '').toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      final items = m['items'];
+      if (items is List) {
+        await db.delete('interstore_transfer_items_v3',
+            where: 'transfer_id = ?', whereArgs: [transferId]);
+        for (final item in items) {
+          if (item is Map) {
+            final im = item.map((k, v) => MapEntry(k.toString(), v));
+            await db.insert('interstore_transfer_items_v3', {
+              'transfer_id': transferId,
+              'product_id': (im['productId'] ?? '').toString(),
+              'sku': (im['sku'] ?? '').toString(),
+              'product_name': (im['productName'] ?? '').toString(),
+              'category': (im['category'] ?? '').toString(),
+              'issued_qty': (im['issuedQty'] as num?)?.toInt() ?? 0,
+              'received_qty': (im['receivedQty'] as num?)?.toInt() ?? 0,
+              'short_qty': (im['shortQty'] as num?)?.toInt() ?? 0,
+              'unit_cost': (im['unitCost'] as num?)?.toDouble() ?? 0,
+              'created_at': (im['createdAt'] ?? '').toString(),
+            });
+          }
+        }
+      }
+
+      if (kDebugMode) debugPrint('[SYNC-TRANSFER] $transferId synced');
+      _showSnackBar?.call('🔄 Transfer synced from another device');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SYNC-TRANSFER] Error: $e');
+    }
+  }
+
+  // ═══ ADJUSTMENT SYNC HANDLER ═══
+  Future<void> _onAdjustmentBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final branchId = (event.snapshot.key ?? '').toString();
+      if (branchId.isEmpty) return;
+
+      for (final entry in val.entries) {
+        final adjustmentId = entry.key.toString();
+        final adjData = entry.value;
+        if (adjData is! Map) continue;
+        final m = adjData.map((k, v) => MapEntry(k.toString(), v));
+
+        final incomingDeviceId = (m['deviceId'] ?? '').toString();
+        final myDeviceId = await DeviceIdService().getOrCreate();
+        if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) continue;
+
+        final db = await DatabaseHelper().database;
+        await db.insert('adjustments_v3', {
+          'adjustment_id': adjustmentId,
+          'doc_number': (m['docNumber'] ?? '').toString(),
+          'status': (m['status'] ?? 'APPROVED').toString(),
+          'branch_code': branchId,
+          'branch_name': (m['branchName'] ?? '').toString(),
+          'created_by_name': (m['preparedBy'] ?? '').toString(),
+          'submitted_by': (m['submittedBy'] ?? '').toString(),
+          'submitted_at': (m['submittedDate'] ?? '').toString(),
+          'approved_by': (m['approvedBy'] ?? '').toString(),
+          'approved_by_pin': (m['approvedByPin'] ?? '').toString(),
+          'approved_by_role': (m['approvedByRole'] ?? '').toString(),
+          'approved_at': (m['approvedDate'] ?? '').toString(),
+          'total_items': (m['totalItems'] as num?)?.toInt() ?? 0,
+          'notes': (m['notes'] ?? '').toString(),
+          'sync_status': 'SYNCED',
+          'created_at': (m['preparedDate'] ?? '').toString(),
+          'updated_at': (m['lastEditedDate'] ?? '').toString(),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+        if (kDebugMode) debugPrint('[SYNC-ADJ] $adjustmentId synced');
+      }
+
+      _showSnackBar?.call('🔄 Adjustment synced from another device');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SYNC-ADJ] Error: $e');
+    }
+  }
+
+}
 class SyncStatusInfo {
   final bool online;
   final int pendingCount;
