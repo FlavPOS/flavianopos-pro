@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
+import '../../helpers/database_helper.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_prepared_screen.dart';
 import 'transfer_list_screen.dart';
@@ -69,6 +70,23 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
           _branchId, 'outbound');
       final rejected = await TransferV3Dao.countByStatus(
           TransferStatus.rejected, _branchId, 'outbound');
+      // Deep debug
+      try {
+        final db = await DatabaseHelper().database;
+        final all = await db.query('interstore_transfers_v3',
+            orderBy: 'created_at DESC', limit: 20);
+        debugPrint('═══════════════════════════════════════');
+        debugPrint('[HUB-DEBUG] branchId=$_branchId');
+        debugPrint('[HUB-DEBUG] Counts: D=$draft S=$submitted A=$approved F=$floating R=$rejected');
+        debugPrint('[HUB-DEBUG] Total in DB: ${all.length}');
+        for (final row in all) {
+          debugPrint('  id=${row['transfer_id']} status=${row['status']} from=${row['issuing_branch_id']} to=${row['receiving_branch_id']}');
+        }
+        debugPrint('═══════════════════════════════════════');
+      } catch (e) {
+        debugPrint('[HUB-DEBUG] Query failed: $e');
+      }
+
       if (!mounted) return;
       setState(() {
         _draftCount = draft;
