@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
 import 'transfer_v3_model.dart';
-import 'inbound_pending_screen.dart';
 import 'transfer_list_screen.dart';
 
 class InboundHubScreen extends StatefulWidget {

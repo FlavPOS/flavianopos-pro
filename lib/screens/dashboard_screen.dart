@@ -19,7 +19,6 @@ import 'reports/z_report_screen.dart';
 import 'reports/sales_history_screen.dart';
 import 'reports/discount_monitoring_screen.dart';
 import 'inventory_adjustment/inventory_adjustment_hub.dart';
-import 'stock_transfer/stock_transfer_screen.dart';
 import 'inventory_transfer/stock_transfer_hub.dart';
 import '../models/product_model.dart';
 import '../models/transaction_model.dart';
