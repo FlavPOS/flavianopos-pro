@@ -725,17 +725,8 @@ class _TransferListScreenState extends State<TransferListScreen> {
     final totalQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
     final totalRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
 
-    // 14x8.5 inch Landscape (Legal Landscape)
-    // Note: PDF uses points (1 inch = 72 points)
-    final pageFormat = pdf_pkg.PdfPageFormat(
-      14 * pdf_pkg.PdfPageFormat.inch,
-      8.5 * pdf_pkg.PdfPageFormat.inch,
-      marginAll: 20,
-    );
-
-    // Items per page: ~15 items fits comfortably per copy on 14" landscape
-    // Two copies per page = 15 items shown twice
-    const itemsPerPage = 15;
+    final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
+    const itemsPerPage = 20;
     final totalPages = (items.length / itemsPerPage).ceil().clamp(1, 999);
 
     // Build one copy (either ISSUING or RECEIVING)
@@ -746,252 +737,182 @@ class _TransferListScreenState extends State<TransferListScreen> {
       required int currentPage,
       required int totalPagesCount,
     }) {
-      return pw.Container(
-        decoration: pw.BoxDecoration(border: pw.Border.all(width: 1.0)),
-        padding: const pw.EdgeInsets.all(6),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            // Header black bar
-            pw.Container(
-              padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: pw.BoxDecoration(
-                color: pdf_pkg.PdfColor.fromInt(0xFF000000),
-              ),
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('STOCK TRANSFER · ${doc.status}',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        color: pdf_pkg.PdfColor.fromInt(0xFFFFFFFF),
-                      )),
-                  pw.Row(
-                    children: [
-                      pw.Text('Page $currentPage of $totalPagesCount  |  ',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            color: pdf_pkg.PdfColor.fromInt(0xFFFFFFFF),
-                          )),
-                      pw.Text(copyLabel,
-                          style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                            color: pdf_pkg.PdfColor.fromInt(0xFFFFFFFF),
-                          )),
-                    ],
-                  ),
-                ],
-              ),
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          // ═══ TITLE ROW ═══
+          pw.Container(
+            padding: const pw.EdgeInsets.only(bottom: 6),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 1.5)),
             ),
-            pw.SizedBox(height: 4),
-
-            // FROM/TO row
-            pw.Row(
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(5),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('FROM',
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('${doc.issuingBranchId} · ${doc.issuingBranchName}',
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 3),
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(5),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('TO',
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('${doc.receivingBranchId} · ${doc.receivingBranchName}',
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 3),
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(5),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('IST No.',
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(doc.docNumber.isEmpty ? doc.transferId : doc.docNumber,
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-                pw.SizedBox(width: 3),
-                pw.Expanded(
-                  child: pw.Container(
-                    padding: const pw.EdgeInsets.all(5),
-                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.4)),
-                    child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text('DATE CREATED',
-                            style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(_pdfDate(doc.createdAt),
-                            style: const pw.TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 4),
-
-            // Items table
-            pw.Table(
-              border: pw.TableBorder.all(width: 0.4),
-              columnWidths: {
-                0: const pw.FixedColumnWidth(28),
-                1: const pw.FixedColumnWidth(65),
-                2: const pw.FlexColumnWidth(3),
-                3: const pw.FixedColumnWidth(45),
-                4: const pw.FixedColumnWidth(60),
-                5: const pw.FixedColumnWidth(75),
-              },
-              children: [
-                pw.TableRow(
-                  decoration: pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFF000000)),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    _p4H('#', white: true),
-                    _p4H('SKU', white: true),
-                    _p4H('Product Description', white: true),
-                    _p4H('Qty', white: true),
-                    _p4H('Unit @', white: true),
-                    _p4H('Retail Value', white: true),
+                    pw.Text('Stock Transfer',
+                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(width: 8),
+                    pw.Text('· ${doc.status}',
+                        style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                   ],
                 ),
-                ...pageItems.asMap().entries.map((entry) {
-                  final rowIdx = entry.key;
-                  final item = entry.value;
-                  final retail = item.issuedQty * item.unitCost;
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                      color: rowIdx % 2 == 0
-                          ? pdf_pkg.PdfColor.fromInt(0xFFF5F5F5)
-                          : pdf_pkg.PdfColor.fromInt(0xFFFFFFFF),
-                    ),
-                    children: [
-                      _p4C((startIdx + rowIdx + 1).toString()),
-                      _p4C(item.sku, bold: true),
-                      _p4C(item.productName, bold: true),
-                      _p4CR(item.issuedQty.toString()),
-                      _p4CR(item.unitCost.toStringAsFixed(2)),
-                      _p4CR(retail.toStringAsFixed(2), bold: true),
-                    ],
-                  );
-                }),
-                // Only show grand total on LAST page
-                if (currentPage == totalPagesCount)
-                  pw.TableRow(
-                    decoration: pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFE0E0E0)),
-                    children: [
-                      _p4C(''),
-                      _p4C(''),
-                      _p4C('GRAND TOTAL', bold: true),
-                      _p4CR('$totalQty pcs', bold: true),
-                      _p4C(''),
-                      _p4CR(totalRetail.toStringAsFixed(2), bold: true),
-                    ],
-                  ),
+                pw.Text(copyLabel,
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, letterSpacing: 1)),
               ],
             ),
+          ),
+          pw.SizedBox(height: 8),
 
-            // Signature blocks ONLY on last page
-            if (currentPage == totalPagesCount) ...[
-              pw.SizedBox(height: 6),
-              pw.Row(
-                children: [
-                  pw.Expanded(child: _p4Sig('Prepared By', doc.preparedBy)),
-                  pw.SizedBox(width: 3),
-                  pw.Expanded(child: _p4Sig('Approved By', doc.approvedBy, role: doc.approvedByRole)),
-                  pw.SizedBox(width: 3),
-                  pw.Expanded(child: _p4Sig('Received By', doc.receivedBy)),
-                  pw.SizedBox(width: 3),
-                  pw.Expanded(child: _p4Sig('Date Received', _pdfDate(doc.receivedDate))),
-                ],
-              ),
-            ] else ...[
-              pw.SizedBox(height: 4),
-              pw.Container(
-                padding: const pw.EdgeInsets.all(4),
-                decoration: pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF5F5F5)),
-                child: pw.Center(
-                  child: pw.Text(
-                    '— Continued on next page —',
-                    style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic),
+          // ═══ INFO TABLE (From/To/Date/IST) ═══
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(90),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(90),
+              3: const pw.FlexColumnWidth(3),
+            },
+            children: [
+              pw.TableRow(children: [
+                _p4Info('From Branch', bold: true),
+                _p4Info('${doc.issuingBranchId} (${doc.issuingBranchName})'),
+                _p4Info('Date Created', bold: true),
+                _p4Info(_pdfDate(doc.createdAt)),
+              ]),
+              pw.TableRow(children: [
+                _p4Info('To Branch', bold: true),
+                _p4Info('${doc.receivingBranchId} (${doc.receivingBranchName})'),
+                _p4Info('IST No.', bold: true),
+                _p4Info(doc.docNumber.isEmpty ? doc.transferId : doc.docNumber),
+              ]),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+
+          // ═══ ITEMS TABLE ═══
+          pw.Table(
+            border: pw.TableBorder.all(width: 0.5),
+            columnWidths: {
+              0: const pw.FixedColumnWidth(70),
+              1: const pw.FlexColumnWidth(3),
+              2: const pw.FixedColumnWidth(55),
+              3: const pw.FixedColumnWidth(75),
+              4: const pw.FixedColumnWidth(85),
+            },
+            children: [
+              // Header
+              pw.TableRow(children: [
+                _p4H('SKU'),
+                _p4H('Product Name'),
+                _p4H('Qty'),
+                _p4H('Unit Retail'),
+                _p4H('Retail Value'),
+              ]),
+              // Data rows
+              ...pageItems.asMap().entries.map((entry) {
+                final item = entry.value;
+                final retail = item.issuedQty * item.unitCost;
+                return pw.TableRow(children: [
+                  _p4C(item.sku),
+                  _p4C(item.productName),
+                  _p4CR(item.issuedQty.toString()),
+                  _p4CR(item.unitCost.toStringAsFixed(2)),
+                  _p4CR(retail.toStringAsFixed(2)),
+                ]);
+              }),
+              // Grand total (only on last page)
+              if (currentPage == totalPagesCount)
+                pw.TableRow(children: [
+                  _p4C(''),
+                  _p4C('Grand Total', bold: true),
+                  _p4CR(totalQty.toString(), bold: true),
+                  _p4C(''),
+                  _p4CR(totalRetail.toStringAsFixed(2), bold: true),
+                ]),
+              // Empty rows for space (approximately 6 empty rows to fill page)
+              for (int i = 0; i < 6; i++)
+                pw.TableRow(children: [
+                  _p4Empty(),
+                  _p4Empty(),
+                  _p4Empty(),
+                  _p4Empty(),
+                  _p4Empty(),
+                ]),
+            ],
+          ),
+
+          // Continued notice for non-last pages
+          if (currentPage != totalPagesCount) ...[
+            pw.SizedBox(height: 4),
+            pw.Center(
+              child: pw.Text('— Continued on next page —',
+                  style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic)),
+            ),
+          ],
+
+          // ═══ SIGNATURES (only on last page) ═══
+          if (currentPage == totalPagesCount) ...[
+            pw.Spacer(),
+            pw.Row(
+              children: [
+                pw.Expanded(child: _p4Sig('Prepared By:', doc.preparedBy)),
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: _p4Sig('Approved By:', doc.approvedBy)),
+                pw.SizedBox(width: 12),
+                pw.Expanded(child: _p4Sig('Received By:', doc.receivedBy)),
+                pw.SizedBox(width: 12),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
+                    child: pw.Text('Date Received',
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                        textAlign: pw.TextAlign.center),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ],
-        ),
+        ],
       );
     }
 
-    // Generate pages
+    // Generate pages — 1 A4 per copy
     for (int pageNum = 1; pageNum <= totalPages; pageNum++) {
       final startIdx = (pageNum - 1) * itemsPerPage;
       final endIdx = (startIdx + itemsPerPage).clamp(0, items.length);
       final pageItems = items.sublist(startIdx, endIdx);
 
+      // ISSUING COPY
       pdf.addPage(
         pw.Page(
           pageFormat: pageFormat,
-          margin: const pw.EdgeInsets.all(15),
-          build: (context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-            children: [
-              // ISSUING COPY
-              buildCopy(
-                copyLabel: 'ISSUING STORE COPY',
-                pageItems: pageItems,
-                startIdx: startIdx,
-                currentPage: pageNum,
-                totalPagesCount: totalPages,
-              ),
-              pw.SizedBox(height: 3),
-              // Tear line
-              pw.Center(
-                child: pw.Text(
-                  '- - - - - - - - - - - - - - - - - - -  TEAR OR FOLD HERE  - - - - - - - - - - - - - - - - - - -',
-                  style: const pw.TextStyle(fontSize: 8),
-                ),
-              ),
-              pw.SizedBox(height: 3),
-              // RECEIVING COPY
-              buildCopy(
-                copyLabel: 'RECEIVING STORE COPY',
-                pageItems: pageItems,
-                startIdx: startIdx,
-                currentPage: pageNum,
-                totalPagesCount: totalPages,
-              ),
-              pw.Spacer(),
-              pw.Text(
-                'Generated: PHOLD_GEN',
-                style: const pw.TextStyle(fontSize: 7),
-              ),
-            ],
+          margin: const pw.EdgeInsets.all(20),
+          build: (context) => buildCopy(
+            copyLabel: 'ISSUING STORE COPY',
+            pageItems: pageItems,
+            startIdx: startIdx,
+            currentPage: pageNum,
+            totalPagesCount: totalPages,
+          ),
+        ),
+      );
+
+      // RECEIVING COPY
+      pdf.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(20),
+          build: (context) => buildCopy(
+            copyLabel: 'RECEIVING STORE COPY',
+            pageItems: pageItems,
+            startIdx: startIdx,
+            currentPage: pageNum,
+            totalPagesCount: totalPages,
           ),
         ),
       );
@@ -1000,18 +921,25 @@ class _TransferListScreenState extends State<TransferListScreen> {
     return pdf.save();
   }
 
-  static pw.Widget _p4H(String text, {bool white = false}) => pw.Container(
-    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+  static pw.Widget _p4Info(String text, {bool bold = false}) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
+    child: pw.Text(text, style: pw.TextStyle(
+      fontSize: 10,
+      fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+    )),
+  );
+
+  static pw.Widget _p4H(String text) => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 8),
     alignment: pw.Alignment.center,
     child: pw.Text(text, style: pw.TextStyle(
       fontSize: 10,
       fontWeight: pw.FontWeight.bold,
-      color: white ? pdf_pkg.PdfColor.fromInt(0xFFFFFFFF) : pdf_pkg.PdfColor.fromInt(0xFF000000),
     )),
   );
 
   static pw.Widget _p4C(String text, {bool bold = false}) => pw.Container(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
     child: pw.Text(text, style: pw.TextStyle(
       fontSize: 10,
       fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
@@ -1019,7 +947,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
   );
 
   static pw.Widget _p4CR(String text, {bool bold = false}) => pw.Container(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+    padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
     alignment: pw.Alignment.centerRight,
     child: pw.Text(text, style: pw.TextStyle(
       fontSize: 10,
@@ -1027,27 +955,23 @@ class _TransferListScreenState extends State<TransferListScreen> {
     )),
   );
 
-  static pw.Widget _p4Sig(String label, String name, {String role = ''}) => pw.Container(
-    padding: const pw.EdgeInsets.all(5),
-    decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.4)),
+  static pw.Widget _p4Empty() => pw.Container(
+    padding: const pw.EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+    child: pw.Text(' ', style: const pw.TextStyle(fontSize: 10)),
+  );
+
+  static pw.Widget _p4Sig(String label, String name) => pw.Container(
+    padding: const pw.EdgeInsets.only(top: 4),
+    decoration: const pw.BoxDecoration(
+      border: pw.Border(top: pw.BorderSide(width: 0.6)),
+    ),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
-      mainAxisSize: pw.MainAxisSize.min,
       children: [
-        pw.Container(
-          height: 20,
-          decoration: const pw.BoxDecoration(
-            border: pw.Border(bottom: pw.BorderSide(width: 0.4)),
-          ),
-        ),
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
         pw.SizedBox(height: 2),
-        pw.Text(label, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-        pw.Text(
-          name.isEmpty ? '________________' : name,
-          style: const pw.TextStyle(fontSize: 10),
-        ),
-        if (role.isNotEmpty)
-          pw.Text('($role)', style: const pw.TextStyle(fontSize: 8)),
+        pw.Text(name.isEmpty ? '________________' : name,
+            style: const pw.TextStyle(fontSize: 10)),
       ],
     ),
   );
@@ -1061,6 +985,10 @@ class _TransferListScreenState extends State<TransferListScreen> {
       return iso;
     }
   }
+
+
+
+
 
   static pw.Widget _pdfHCell(String text) => pw.Container(
     padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 5),
