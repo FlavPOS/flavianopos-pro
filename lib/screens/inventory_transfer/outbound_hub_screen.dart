@@ -52,8 +52,18 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
           TransferStatus.draft, _branchId, 'outbound');
       final submitted = await TransferV3Dao.countByStatus(
           TransferStatus.submitted, _branchId, 'outbound');
-      final approved = await TransferV3Dao.countByStatus(
-          TransferStatus.approved, _branchId, 'outbound');
+      // Approved list shows ALL transfers that were ever approved
+      // (includes floating, partially_received, received, closed)
+      final approved = await TransferV3Dao.countByStatuses(
+        [
+          TransferStatus.approved,
+          TransferStatus.floating,
+          TransferStatus.partiallyReceived,
+          TransferStatus.received,
+          TransferStatus.closed,
+        ],
+        _branchId, 'outbound',
+      );
       final floating = await TransferV3Dao.countByStatuses(
           [TransferStatus.floating, TransferStatus.partiallyReceived],
           _branchId, 'outbound');
@@ -83,16 +93,6 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
         ),
       ),
     ).then((_) => _load());
-  }
-
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature coming in next phase!'),
-        backgroundColor: _purple,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
@@ -175,18 +175,42 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
                     icon: Icons.check_circle_rounded, iconColor: _cyan,
                     iconBg: const Color(0xFFCFFAFE),
                     title: 'Approved',
-                    subtitle: 'Ready to dispatch',
+                    subtitle: 'All approved transfers (history)',
                     count: _approvedCount,
-                    onTap: () => _showComingSoon('Approved list'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferListScreen(
+                          branch: widget.branch,
+                          userName: widget.userName,
+                          branchId: _branchId,
+                          status: TransferStatus.approved,
+                          title: 'Approved Transfers',
+                          themeColor: _cyan,
+                        ),
+                      ),
+                    ).then((_) => _load()),
                   ),
                   const SizedBox(height: 12),
                   _buildCard(
                     icon: Icons.local_shipping_rounded, iconColor: _amber,
                     iconBg: const Color(0xFFFEF3C7),
                     title: 'In-Transit (Floating)',
-                    subtitle: 'Dispatched, awaiting receipt at destination',
+                    subtitle: 'Live tracking of physical goods on the truck',
                     count: _floatingCount,
-                    onTap: () => _showComingSoon('Floating list'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferListScreen(
+                          branch: widget.branch,
+                          userName: widget.userName,
+                          branchId: _branchId,
+                          status: TransferStatus.floating,
+                          title: 'In-Transit Transfers',
+                          themeColor: _amber,
+                        ),
+                      ),
+                    ).then((_) => _load()),
                   ),
                   const SizedBox(height: 12),
                   _buildCard(
@@ -195,7 +219,19 @@ class _OutboundHubScreenState extends State<OutboundHubScreen> {
                     title: 'Rejected',
                     subtitle: 'Declined by destination',
                     count: _rejectedCount,
-                    onTap: () => _showComingSoon('Rejected list'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransferListScreen(
+                          branch: widget.branch,
+                          userName: widget.userName,
+                          branchId: _branchId,
+                          status: TransferStatus.rejected,
+                          title: 'Rejected Transfers',
+                          themeColor: _red,
+                        ),
+                      ),
+                    ).then((_) => _load()),
                   ),
                 ],
               ),

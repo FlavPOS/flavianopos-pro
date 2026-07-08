@@ -45,11 +45,35 @@ class _TransferListScreenState extends State<TransferListScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await TransferV3Dao.getByStatus(
-      widget.status,
-      widget.branchId,
-      'outbound',
-    );
+    List<TransferV3> list;
+
+    if (widget.status == TransferStatus.approved) {
+      // Approved list shows ALL approved-and-beyond statuses (history)
+      list = await TransferV3Dao.getByStatuses(
+        [
+          TransferStatus.approved,
+          TransferStatus.floating,
+          TransferStatus.partiallyReceived,
+          TransferStatus.received,
+          TransferStatus.closed,
+        ],
+        widget.branchId,
+        'outbound',
+      );
+    } else if (widget.status == TransferStatus.floating) {
+      // In-Transit shows floating + partially received (live tracking)
+      list = await TransferV3Dao.getByStatuses(
+        [TransferStatus.floating, TransferStatus.partiallyReceived],
+        widget.branchId,
+        'outbound',
+      );
+    } else {
+      list = await TransferV3Dao.getByStatus(
+        widget.status,
+        widget.branchId,
+        'outbound',
+      );
+    }
     if (!mounted) return;
     setState(() {
       _transfers = list;
@@ -395,6 +419,8 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   _stat(Icons.inventory_2_outlined, '${doc.totalItems} items', widget.themeColor),
                   const SizedBox(width: 8),
                   _stat(Icons.add_rounded, '${doc.totalIssuedQty} pcs', widget.themeColor),
+                  const Spacer(),
+                  _buildStatusBadge(doc.status),
                 ],
               ),
             ],
@@ -420,6 +446,63 @@ class _TransferListScreenState extends State<TransferListScreen> {
               style: TextStyle(
                   color: color, fontSize: 11, fontWeight: FontWeight.w600)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(String status) {
+    Color color;
+    String label;
+    switch (status) {
+      case 'DRAFT':
+        color = const Color(0xFF8B5CF6);
+        label = 'Draft';
+        break;
+      case 'SUBMITTED':
+        color = const Color(0xFF3B82F6);
+        label = 'Submitted';
+        break;
+      case 'APPROVED':
+        color = const Color(0xFF06B6D4);
+        label = 'Approved';
+        break;
+      case 'FLOATING':
+        color = const Color(0xFFF59E0B);
+        label = 'In-Transit';
+        break;
+      case 'PARTIALLY_RECEIVED':
+        color = const Color(0xFFEAB308);
+        label = 'Partial';
+        break;
+      case 'RECEIVED':
+        color = const Color(0xFF22C55E);
+        label = 'Received';
+        break;
+      case 'CLOSED':
+        color = const Color(0xFF64748B);
+        label = 'Closed';
+        break;
+      case 'REJECTED':
+        color = _red;
+        label = 'Rejected';
+        break;
+      default:
+        color = _textSecondary;
+        label = status;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
