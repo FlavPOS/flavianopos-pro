@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
+import '../../helpers/database_helper.dart';
 import 'adjustment_prepared_screen.dart';
 import 'adjustment_draft_screen.dart';
 import 'adjustment_submitted_screen.dart';
@@ -37,14 +39,36 @@ class _InventoryAdjustmentHubState extends State<InventoryAdjustmentHub> {
   }
 
   Future<void> _loadCounts() async {
+    // Read REAL branchId from DeviceAssignmentService (matches sync data)
+    final assign = await DeviceAssignmentService().read();
+    final branchId = (assign['branchId'] ?? '').toString();
+    
+    debugPrint('[ADJ-HUB] Loading counts for branchId: $branchId');
+    
+    // Debug: Show what's in DB
+    try {
+      final db = await DatabaseHelper().database;
+      final all = await db.query('adjustments_v3', 
+          orderBy: 'created_at DESC', limit: 20);
+      debugPrint('[ADJ-HUB] Total in DB: ${all.length}');
+      for (final row in all) {
+        debugPrint('  → status=${row['status']} branch=${row['branch_code']}');
+      }
+    } catch (e) {
+      debugPrint('[ADJ-HUB] Query error: $e');
+    }
+    
     final draft = await AdjustmentV3Dao.countByStatus(
-        AdjustmentStatus.draft, branchCode: widget.branch);
+        AdjustmentStatus.draft, branchCode: branchId);
     final submitted = await AdjustmentV3Dao.countByStatus(
-        AdjustmentStatus.submitted, branchCode: widget.branch);
+        AdjustmentStatus.submitted, branchCode: branchId);
     final approved = await AdjustmentV3Dao.countByStatus(
-        AdjustmentStatus.approved, branchCode: widget.branch);
+        AdjustmentStatus.approved, branchCode: branchId);
     final rejected = await AdjustmentV3Dao.countByStatus(
-        AdjustmentStatus.rejected, branchCode: widget.branch);
+        AdjustmentStatus.rejected, branchCode: branchId);
+    
+    debugPrint('[ADJ-HUB] Counts: D=$draft S=$submitted A=$approved R=$rejected');
+    
     if (!mounted) return;
     setState(() {
       _draftCount = draft;

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
+import '../../services/firebase_config_service.dart';
+import '../../services/firebase_realtime_service.dart';
+import '../../services/device_id_service.dart';
 import '../../services/branch_inventory_service.dart';
 import '../../models/product_model.dart';
 import '../inventory/inventory_screen.dart';
@@ -340,12 +343,17 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       final positives = _items.where((i) => i.reason?.isPositive == true).length;
       final negatives = _items.where((i) => i.reason?.isNegative == true).length;
 
+      // Read real branchId (code) from DeviceAssignmentService
+      final assign = await DeviceAssignmentService().read();
+      final branchId = (assign['branchId'] ?? '').toString();
+      final branchName = (assign['branchName'] ?? widget.branch).toString();
+
       final header = AdjustmentV3(
         adjustmentId: adjustmentId,
         docNumber: 'DRAFT-${DateTime.now().millisecondsSinceEpoch}',
         status: AdjustmentStatus.draft,
-        branchCode: widget.branch,
-        branchName: widget.branch,
+        branchCode: branchId,
+        branchName: branchName,
         createdByName: widget.userName,
         totalItems: _items.length,
         totalPositive: positives,
@@ -371,6 +379,16 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       }).toList();
 
       await AdjustmentV3Dao.save(header: header, items: items);
+      
+      // Upload to Firebase (DRAFT status) — enables cross-device visibility
+      await _uploadAdjustmentToFirebase(
+        adjustmentId: adjustmentId,
+        docNumber: header.docNumber,
+        status: 'DRAFT',
+        header: header,
+        items: items,
+      );
+      
       if (!mounted) return;
       _showSnack('Draft saved (${_items.length} items)', color: _amber);
       setState(() {
@@ -464,12 +482,17 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       final positives = _items.where((i) => i.reason?.isPositive == true).length;
       final negatives = _items.where((i) => i.reason?.isNegative == true).length;
 
+      // Read real branchId (code) from DeviceAssignmentService
+      final assign = await DeviceAssignmentService().read();
+      final branchId = (assign['branchId'] ?? '').toString();
+      final branchName = (assign['branchName'] ?? widget.branch).toString();
+
       final header = AdjustmentV3(
         adjustmentId: adjustmentId,
         docNumber: _existingDraftId ?? 'ADJ-${DateTime.now().millisecondsSinceEpoch}',
         status: AdjustmentStatus.submitted,
-        branchCode: widget.branch,
-        branchName: widget.branch,
+        branchCode: branchId,
+        branchName: branchName,
         createdByName: widget.userName,
         submittedBy: pin.userName,
         totalItems: _items.length,
@@ -497,6 +520,17 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
       }).toList();
 
       await AdjustmentV3Dao.save(header: header, items: items);
+      
+      // Upload to Firebase (SUBMITTED status) — enables approve on any device
+      await _uploadAdjustmentToFirebase(
+        adjustmentId: adjustmentId,
+        docNumber: header.docNumber,
+        status: 'SUBMITTED',
+        header: header,
+        items: items,
+        submittedBy: pin.userName,
+      );
+      
       if (!mounted) return;
 
       _showSnack('Submitted for approval (${_items.length} items)',
@@ -1028,6 +1062,86 @@ class _AdjustmentPreparedScreenState extends State<AdjustmentPreparedScreen> {
   }
 }
 
+
+  // ═══ FIREBASE UPLOAD HELPER ═══
+  Future<void> _uploadAdjustmentToFirebase({
+    required String adjustmentId,
+    required String docNumber,
+    required String status,
+    required AdjustmentV3 header,
+    required List<AdjustmentV3Item> items,
+    String? submittedBy,
+  }) async {
+    try {
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        final cfg = await FirebaseConfigService().load();
+        if (cfg != null) {
+          await FirebaseRealtimeService.instance
+              .initializeFromManualConfig(cfg);
+        }
+      }
+      
+      final fb = FirebaseRealtimeService.instance.db;
+      if (fb == null) {
+        debugPrint('[ADJ-FB] Firebase not available');
+        return;
+      }
+      
+      final assign = await DeviceAssignmentService().read();
+      final companyCode = (assign['companyCode'] ?? '').toString();
+      final realBranchId = (assign['branchId'] ?? '').toString();
+      final branchName = (assign['branchName'] ?? '').toString();
+      final deviceId = await DeviceIdService().getOrCreate();
+      final now = DateTime.now().toIso8601String();
+      
+      if (companyCode.isEmpty || realBranchId.isEmpty) {
+        debugPrint('[ADJ-FB] Missing company/branch — skip upload');
+        return;
+      }
+      
+      final itemsPayload = items.map((i) => {
+        'productId': i.productId,
+        'sku': i.sku,
+        'productName': i.productName,
+        'category': i.category,
+        'qty': i.qty,
+        'direction': i.direction,
+        'unitCost': i.unitCost,
+        'reasonCode': i.reasonCode,
+        'reasonName': i.reasonName,
+      }).toList();
+      
+      final payload = <String, dynamic>{
+        'adjustmentId': adjustmentId,
+        'docNumber': docNumber,
+        'status': status,
+        'branchId': realBranchId,
+        'branchName': branchName,
+        'preparedBy': header.createdByName,
+        'preparedDate': header.createdAt,
+        'totalItems': items.length,
+        'totalPositive': header.totalPositive,
+        'totalNegative': header.totalNegative,
+        'items': itemsPayload,
+        'deviceId': deviceId,
+        'createdAt': header.createdAt,
+        'updatedAt': now,
+      };
+      
+      if (submittedBy != null) {
+        payload['submittedBy'] = submittedBy;
+        payload['submittedDate'] = now;
+      }
+      
+      await fb.ref(
+        'companies/$companyCode/branchAdjustments/$realBranchId/$adjustmentId'
+      ).set(payload);
+      
+      debugPrint('[ADJ-FB] ✅ Uploaded $adjustmentId ($status) to Firebase');
+    } catch (e) {
+      debugPrint('[ADJ-FB] ⚠️ Upload error: $e');
+    }
+  }
 // ─── Item Model (in-memory) ──────────────────────────────
 class _AdjItem {
   final Product product;

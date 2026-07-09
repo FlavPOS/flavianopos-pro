@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
 import 'package:excel/excel.dart';
 import 'package:printing/printing.dart';
 import 'adjustment_v3_model.dart';
@@ -39,9 +40,12 @@ class _AdjustmentRejectedScreenState extends State<AdjustmentRejectedScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    // Read real branchId (code) from DeviceAssignmentService
+    final assign = await DeviceAssignmentService().read();
+    final branchId = (assign['branchId'] ?? '').toString();
     final list = await AdjustmentV3Dao.getByStatus(
       AdjustmentStatus.rejected,
-      branchCode: widget.branch,
+      branchCode: branchId,
     );
     if (!mounted) return;
     setState(() {
