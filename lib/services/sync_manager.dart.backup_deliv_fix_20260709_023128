@@ -1091,9 +1091,6 @@ class SyncManager {
   ) async {
     try {
       final val = event.snapshot.value;
-      if (kDebugMode) {
-        debugPrint('[SYNC-DELIV] Event fired: status=$status, key=${event.snapshot.key}, valueType=${val.runtimeType}');
-      }
       if (val is! Map) return;
       final branchId = (event.snapshot.key ?? '').toString();
       if (branchId.isEmpty) return;
@@ -1114,9 +1111,6 @@ class SyncManager {
         final db = await DatabaseHelper().database;
 
         try {
-          if (kDebugMode) {
-            debugPrint('[SYNC-DELIV] Upserting $deliveryId (branch=$branchId, status=$status)');
-          }
           await db.insert('delivery_records', {
             'id': deliveryId,
             'refNumber': (m['refNumber'] ?? '').toString(),
@@ -1125,23 +1119,12 @@ class SyncManager {
             'plateNumber': (m['plateNumber'] ?? '').toString(),
             'receivedBy': (m['receivedBy'] ?? '').toString(),
             'notes': (m['notes'] ?? '').toString(),
-            'totalItems': (m['totalItems'] as num?)?.toInt() ?? 0,
-            'totalQuantity': (m['totalQuantity'] as num?)?.toInt() ?? 0,
-            'totalCost': (m['totalCost'] as num?)?.toDouble() ?? 0.0,
-            'totalRetail': (m['totalRetail'] as num?)?.toDouble() ?? 0.0,
-            'dateTime': (m['dateTime'] ?? m['dateReceived'] ?? m['date'] ?? DateTime.now().toIso8601String()).toString(),
+            'dateReceived': (m['dateReceived'] ?? m['date'] ?? '').toString(),
+            'status': status,
             'branchId': branchId,
             'branchName': (m['branchName'] ?? '').toString(),
-            'status': status,
-            'submittedDate': (m['submittedDate'] ?? '').toString(),
-            'submittedBy': (m['submittedBy'] ?? '').toString(),
-            'approvedDate': (m['approvedDate'] ?? '').toString(),
-            'approvedBy': (m['approvedBy'] ?? '').toString(),
-            'rejectedDate': (m['rejectedDate'] ?? '').toString(),
-            'rejectedBy': (m['rejectedBy'] ?? '').toString(),
-            'rejectionReason': (m['rejectionReason'] ?? '').toString(),
-            'lastEditedDate': (m['lastEditedDate'] ?? '').toString(),
-            'syncStatus': 'Synced',
+            'totalItems': (m['totalItems'] as num?)?.toInt() ?? 0,
+            'totalCost': (m['totalCost'] as num?)?.toDouble() ?? 0,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         } catch (e) {
           if (kDebugMode) debugPrint('[SYNC-DELIV] Insert error: $e');
