@@ -65,3 +65,4 @@ DOWNLOAD-THIS-KEYSTORE.jks
 for-codemagic-keystore.jks
 FLAVPOS-KEYSTORE*.jks
 FLAVPOS-KEYSTORE*.txt
+.firebase/

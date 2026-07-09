@@ -110,10 +110,13 @@ class _InboundHubScreenState extends State<InboundHubScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => InboundPendingScreen(
+                          builder: (_) => TransferListScreen(
                             branch: widget.branch,
                             userName: widget.userName,
                             branchId: _branchId,
+                            status: TransferStatus.floating,
+                            title: 'Pending Receipts',
+                            themeColor: _amber,
                           ),
                         ),
                       ).then((_) => _load());
