@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../models/product_model.dart';
 import '../../models/branch_model.dart';
 import '../../services/device_assignment_service.dart';
+import '../../services/firebase_config_service.dart';
+import '../../services/firebase_realtime_service.dart';
+import '../../services/device_id_service.dart';
 import '../../services/branch_inventory_service.dart';
 import '../inventory/inventory_screen.dart';
 import '../inventory_adjustment/approver_pin_dialog_v3.dart';
@@ -237,6 +240,15 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
       )).toList();
 
       await TransferV3Dao.save(header: header, items: items);
+      
+      // Upload to Firebase (DRAFT status) — enables cross-device visibility
+      await _uploadTransferToFirebase(
+        transferId: transferId,
+        header: header,
+        items: items,
+        status: 'DRAFT',
+      );
+      
       if (!mounted) return;
       _showSnack('Draft saved (${_items.length} items)', color: _purple);
       setState(() {
@@ -362,6 +374,15 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
       )).toList();
 
       await TransferV3Dao.save(header: header, items: items);
+      
+      // Upload to Firebase (SUBMITTED status) — enables approve on any device
+      await _uploadTransferToFirebase(
+        transferId: transferId,
+        header: header,
+        items: items,
+        status: 'SUBMITTED',
+      );
+      
       if (!mounted) return;
       _showSnack('Submitted for approval (${_items.length} items)', color: _green);
       setState(() {
@@ -808,6 +829,75 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
         Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
       ],
     );
+  }
+
+  // ═══ FIREBASE UPLOAD HELPER ═══
+  Future<void> _uploadTransferToFirebase({
+    required String transferId,
+    required TransferV3 header,
+    required List<TransferV3Item> items,
+    required String status,
+  }) async {
+    try {
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        final cfg = await FirebaseConfigService().load();
+        if (cfg != null) {
+          await FirebaseRealtimeService.instance
+              .initializeFromManualConfig(cfg);
+        }
+      }
+      
+      final fb = FirebaseRealtimeService.instance.db;
+      if (fb == null) {
+        debugPrint('[TRANSFER-FB] Firebase not available');
+        return;
+      }
+      
+      final assign = await DeviceAssignmentService().read();
+      final companyCode = (assign['companyCode'] ?? '').toString();
+      final deviceId = await DeviceIdService().getOrCreate();
+      final now = DateTime.now().toIso8601String();
+      
+      if (companyCode.isEmpty) {
+        debugPrint('[TRANSFER-FB] Missing companyCode');
+        return;
+      }
+      
+      final itemsPayload = items.map((i) => {
+        'productId': i.productId,
+        'sku': i.sku,
+        'productName': i.productName,
+        'category': i.category,
+        'issuedQty': i.issuedQty,
+        'unitCost': i.unitCost,
+      }).toList();
+      
+      await fb.ref(
+        'companies/$companyCode/interStoreTransfers/$transferId'
+      ).set({
+        'transferId': transferId,
+        'docNumber': header.docNumber,
+        'status': status,
+        'issuingBranchId': header.issuingBranchId,
+        'issuingBranchName': header.issuingBranchName,
+        'receivingBranchId': header.receivingBranchId,
+        'receivingBranchName': header.receivingBranchName,
+        'preparedBy': header.preparedBy,
+        'preparedDate': header.preparedDate,
+        'totalItems': items.length,
+        'totalIssuedQty': header.totalIssuedQty,
+        'totalCost': header.totalCost,
+        'notes': header.notes,
+        'items': itemsPayload,
+        'deviceId': deviceId,
+        'createdAt': header.createdAt,
+        'updatedAt': now,
+      });
+      
+      debugPrint('[TRANSFER-FB] ✅ Uploaded $transferId ($status) to Firebase');
+    } catch (e) {
+      debugPrint('[TRANSFER-FB] ⚠️ Upload error: $e');
+    }
   }
 }
 
