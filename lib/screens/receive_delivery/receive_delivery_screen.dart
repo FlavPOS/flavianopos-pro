@@ -434,7 +434,25 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       await DeliveryStorage.saveDelivery(record);
 
       if (isDraft) {
-        // Draft: skip Firebase upload + product stock update
+        // Upload Draft to Firebase for cross-device sync
+        // Uses branchReceivedDelivery path (main archive)
+        // Status field in data distinguishes Draft/Submitted/Approved/Rejected
+        try {
+          if (FirebaseRealtimeService.instance.isInitialized) {
+            final fb = FirebaseRealtimeService.instance.db;
+            final assign = await DeviceAssignmentService().read();
+            final companyCode = (assign['companyCode'] ?? '').toString();
+            if (fb != null && companyCode.isNotEmpty && myBranchId.isNotEmpty) {
+              await fb.ref(
+                'companies/$companyCode/branchReceivedDelivery/$myBranchId/${record.id}'
+              ).set(record.toJson());
+              debugPrint('[DELIV-FB] ✅ Draft uploaded: ${record.id}');
+            }
+          }
+        } catch (e) {
+          debugPrint('[DELIV-FB] Draft upload error: $e');
+        }
+        
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
