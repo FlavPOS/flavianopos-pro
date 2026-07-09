@@ -655,6 +655,31 @@ class _AdjustmentSubmittedDetailScreenState
         rejectedBy: pin.userName,
         rejectionReason: reasonCtrl.text.trim(),
       );
+      
+      // Upload REJECTED status to Firebase (cross-device sync)
+      try {
+        if (FirebaseRealtimeService.instance.isInitialized) {
+          final fb = FirebaseRealtimeService.instance.db;
+          final assign = await DeviceAssignmentService().read();
+          final companyCode = (assign['companyCode'] ?? '').toString();
+          final realBranchId = (assign['branchId'] ?? '').toString();
+          if (fb != null && companyCode.isNotEmpty && realBranchId.isNotEmpty) {
+            await fb.ref(
+              'companies/$companyCode/branchAdjustments/$realBranchId/${widget.adjustmentId}'
+            ).update({
+              'status': 'REJECTED',
+              'rejectedBy': pin.userName,
+              'rejectedDate': DateTime.now().toIso8601String(),
+              'rejectionReason': reasonCtrl.text.trim(),
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+            debugPrint('[ADJ-FB] ✅ Rejected uploaded: ${widget.adjustmentId}');
+          }
+        }
+      } catch (e) {
+        debugPrint('[ADJ-FB] Reject upload error: $e');
+      }
+      
       if (!mounted) return;
       _showSnack('Rejected by ${pin.userName}', color: _red);
       await Future.delayed(const Duration(milliseconds: 400));

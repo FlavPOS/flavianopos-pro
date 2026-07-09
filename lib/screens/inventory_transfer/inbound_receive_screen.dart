@@ -365,6 +365,30 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
           'rejection_reason': reasonCtrl.text.trim(),
         },
       );
+      
+      // Upload REJECTED status to Firebase (cross-device sync)
+      try {
+        if (FirebaseRealtimeService.instance.isInitialized) {
+          final fb = FirebaseRealtimeService.instance.db;
+          final assign = await DeviceAssignmentService().read();
+          final companyCode = (assign['companyCode'] ?? '').toString();
+          if (fb != null && companyCode.isNotEmpty) {
+            await fb.ref(
+              'companies/$companyCode/interStoreTransfers/${widget.transferId}'
+            ).update({
+              'status': 'REJECTED',
+              'rejectedBy': pin.userName,
+              'rejectedDate': DateTime.now().toIso8601String(),
+              'rejectionReason': reasonCtrl.text.trim(),
+              'updatedAt': DateTime.now().toIso8601String(),
+            });
+            debugPrint('[TRANSFER-FB] ✅ Rejected uploaded: ${widget.transferId}');
+          }
+        }
+      } catch (e) {
+        debugPrint('[TRANSFER-FB] Reject upload error: $e');
+      }
+      
       if (!mounted) return;
       _showSnack('Transfer rejected — sender will be notified', color: _red);
       await Future.delayed(const Duration(milliseconds: 400));
