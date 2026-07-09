@@ -1132,7 +1132,7 @@ class SyncManager {
             'dateTime': (m['dateTime'] ?? m['dateReceived'] ?? m['date'] ?? DateTime.now().toIso8601String()).toString(),
             'branchId': branchId,
             'branchName': (m['branchName'] ?? '').toString(),
-            'status': status,
+            'status': (m['status'] ?? status).toString(),
             'submittedDate': (m['submittedDate'] ?? '').toString(),
             'submittedBy': (m['submittedBy'] ?? '').toString(),
             'approvedDate': (m['approvedDate'] ?? '').toString(),
