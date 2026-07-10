@@ -10,7 +10,8 @@ import 'add_batch_screen.dart';
 import 'batch_log_screen.dart';
 
 class BatchScreen extends StatefulWidget {
-  const BatchScreen({super.key});
+  final String? initialFilter;
+  const BatchScreen({super.key, this.initialFilter});
   @override
   State<BatchScreen> createState() => _BatchScreenState();
 }
@@ -19,6 +20,9 @@ class _BatchScreenState extends State<BatchScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialFilter != null && widget.initialFilter!.isNotEmpty) {
+      _filterStatus = widget.initialFilter!;
+    }
     _loadBatches();
   }
 

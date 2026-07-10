@@ -26,7 +26,7 @@ import 'customers/customers_screen.dart';
 import 'settings/settings_screen.dart';
 import 'users/users_screen.dart';
 import 'branches/branches_screen.dart';
-import 'batch/batch_screen.dart';
+import 'batch/batch_hub_screen.dart';
 import '../models/batch_model.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -274,7 +274,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 'Batch':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const BatchScreen()),
+          MaterialPageRoute(builder: (context) => const BatchHubScreen()),
         ).then((_) => setState(() {}));
         break;
       case 'Expenses':
@@ -538,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const BatchScreen(),
+                            builder: (context) => const BatchHubScreen(),
                           ),
                         );
                       },
