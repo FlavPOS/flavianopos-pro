@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
+import '../../helpers/database_helper.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_list_screen.dart';
 
@@ -44,11 +45,29 @@ class _InboundHubScreenState extends State<InboundHubScreen> {
       final assign = await DeviceAssignmentService().read();
       _branchId = (assign['branchId'] ?? '').toString();
 
+      // ═══ DEBUG: Show what's in DB ═══
+      debugPrint('═══════════════════════════════════════');
+      debugPrint('[INBOUND-DEBUG] branchId (from device): $_branchId');
+      try {
+        final db = await DatabaseHelper().database;
+        final all = await db.query('interstore_transfers_v3',
+            orderBy: 'created_at DESC', limit: 20);
+        debugPrint('[INBOUND-DEBUG] Total transfers in DB: ${all.length}');
+        for (final row in all) {
+          debugPrint('  → id=${row['transfer_id']} status=${row['status']} from=${row['issuing_branch_id']} to=${row['receiving_branch_id']}');
+        }
+      } catch (e) {
+        debugPrint('[INBOUND-DEBUG] DB error: $e');
+      }
+      debugPrint('═══════════════════════════════════════');
+
       // Pending = FLOATING/PARTIAL transfers TO us
       final pending = await TransferV3Dao.countByStatuses(
         [TransferStatus.floating, TransferStatus.partiallyReceived],
         _branchId, 'inbound',
       );
+      debugPrint('[INBOUND-DEBUG] Pending count: $pending (expected FLOATING for $_branchId)');
+      debugPrint('[INBOUND-DEBUG] Status constants — FLOATING="${TransferStatus.floating}" PARTIAL="${TransferStatus.partiallyReceived}"');
 
       // Received = successfully accepted
       final received = await TransferV3Dao.countByStatuses(
@@ -117,6 +136,7 @@ class _InboundHubScreenState extends State<InboundHubScreen> {
                             status: TransferStatus.floating,
                             title: 'Pending Receipts',
                             themeColor: _amber,
+                            direction: 'inbound',
                           ),
                         ),
                       ).then((_) => _load());
@@ -141,6 +161,7 @@ class _InboundHubScreenState extends State<InboundHubScreen> {
                             status: TransferStatus.received,
                             title: 'Received Transfers',
                             themeColor: _green,
+                            direction: 'inbound',
                           ),
                         ),
                       ).then((_) => _load());
@@ -164,6 +185,7 @@ class _InboundHubScreenState extends State<InboundHubScreen> {
                             branchId: _branchId,
                             status: TransferStatus.rejected,
                             title: 'Rejected Transfers',
+                            direction: 'inbound',
                             themeColor: _red,
                           ),
                         ),

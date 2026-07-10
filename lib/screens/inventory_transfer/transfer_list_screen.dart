@@ -6,6 +6,7 @@ import 'package:excel/excel.dart' as xl;
 import 'package:printing/printing.dart';
 import 'transfer_v3_model.dart';
 import 'transfer_prepared_screen.dart';
+import 'inbound_receive_screen.dart';
 import 'transfer_submitted_detail_screen.dart';
 
 /// Outbound Draft/Submitted List Screen — reusable for both
@@ -16,6 +17,7 @@ class TransferListScreen extends StatefulWidget {
   final String status; // TransferStatus.draft, submitted, etc.
   final String title;
   final Color themeColor;
+  final String direction;
 
   const TransferListScreen({
     super.key,
@@ -25,6 +27,7 @@ class TransferListScreen extends StatefulWidget {
     required this.status,
     required this.title,
     required this.themeColor,
+    this.direction = 'outbound',
   });
 
   @override
@@ -85,20 +88,20 @@ class _TransferListScreenState extends State<TransferListScreen> {
           TransferStatus.closed,
         ],
         widget.branchId,
-        'outbound',
+        widget.direction,
       );
     } else if (widget.status == TransferStatus.floating) {
       // In-Transit shows floating + partially received (live tracking)
       list = await TransferV3Dao.getByStatuses(
         [TransferStatus.floating, TransferStatus.partiallyReceived],
         widget.branchId,
-        'outbound',
+        widget.direction,
       );
     } else {
       list = await TransferV3Dao.getByStatus(
         widget.status,
         widget.branchId,
-        'outbound',
+        widget.direction,
       );
     }
     if (!mounted) return;
@@ -109,6 +112,26 @@ class _TransferListScreenState extends State<TransferListScreen> {
   }
 
   Future<void> _openDetail(TransferV3 doc) async {
+    // ═══ INBOUND ROUTING ═══
+    // If inbound direction + FLOATING/PARTIALLY_RECEIVED → open InboundReceiveScreen
+    if (widget.direction == 'inbound' &&
+        (doc.status == TransferStatus.floating ||
+         doc.status == TransferStatus.partiallyReceived)) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => InboundReceiveScreen(
+            transferId: doc.transferId,
+            branch: widget.branch,
+            userName: widget.userName,
+          ),
+        ),
+      );
+      _load();
+      return;
+    }
+
+    // ═══ OUTBOUND SUBMITTED ═══
     if (widget.status == TransferStatus.submitted) {
       // Submitted → open full detail screen with Approve/Reject actions
       await Navigator.push(
@@ -123,7 +146,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
       );
       _load();
     } else {
-      // Draft → popup with edit button
+      // Draft OR read-only → popup with details
       _showDetailsSheet(doc);
     }
   }
