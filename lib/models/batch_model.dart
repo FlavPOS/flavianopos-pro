@@ -211,4 +211,70 @@ class ProductBatch {
         dateAdded: now.subtract(const Duration(days: 15))),
     ];
   }
+
+  // ═══ ENTERPRISE BATCH DEDUPE HELPERS ═══
+  
+  /// Find existing batch by unique key (productId + batchNumber + lotNumber + branchId)
+  /// Returns null if no match
+  static Future<ProductBatch?> findExistingBatch({
+    required String productId,
+    required String batchNumber,
+    required String lotNumber,
+    required String branchId,
+  }) async {
+    final dbHelper = DatabaseHelper();
+    final db = await dbHelper.database;
+    final rows = await db.query(
+      'batches',
+      where: 'productId = ? AND batchNumber = ? AND lotNumber = ? AND branchId = ?',
+      whereArgs: [productId, batchNumber, lotNumber, branchId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return ProductBatch.fromMap(rows.first);
+  }
+
+  /// Add quantity to existing batch (aggregation for dedupe)
+  static Future<void> addQuantityToBatch(String batchId, int addQty) async {
+    final dbHelper = DatabaseHelper();
+    final db = await dbHelper.database;
+    final row = await db.query('batches', where: 'id = ?', whereArgs: [batchId], limit: 1);
+    if (row.isEmpty) return;
+    
+    final currentQty = (row.first['quantity'] as num?)?.toInt() ?? 0;
+    final currentOriginal = (row.first['originalQty'] as num?)?.toInt() ?? 0;
+    final now = DateTime.now().toIso8601String();
+    
+    await db.update(
+      'batches',
+      {
+        'quantity': currentQty + addQty,
+        'originalQty': currentOriginal + addQty,
+        'updatedAt': now,
+      },
+      where: 'id = ?',
+      whereArgs: [batchId],
+    );
+    
+    // Sync updated batch to Firebase
+    final batch = await findBatchById(batchId);
+    if (batch != null) {
+      SyncBridge.enqueueBatch(batch, op: SyncOp.update);
+      
+      // Update in-memory cache
+      final idx = _allBatches.indexWhere((b) => b.id == batchId);
+      if (idx >= 0) {
+        _allBatches[idx] = batch;
+      }
+    }
+  }
+
+  /// Find batch by ID
+  static Future<ProductBatch?> findBatchById(String id) async {
+    final dbHelper = DatabaseHelper();
+    final db = await dbHelper.database;
+    final rows = await db.query('batches', where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return null;
+    return ProductBatch.fromMap(rows.first);
+  }
 }

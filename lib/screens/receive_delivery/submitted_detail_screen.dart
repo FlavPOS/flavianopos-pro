@@ -12,6 +12,7 @@ import '../../services/firebase_config_service.dart';
 import '../../services/firebase_realtime_service.dart';
 import '../../utils/receive_delivery_theme.dart';
 import '../../utils/approver_pin_dialog.dart';
+import '../../models/batch_model.dart';
 import 'delivery_model.dart';
 
 class SubmittedDetailScreen extends StatefulWidget {
@@ -179,10 +180,17 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         approvedDate: now.toIso8601String(), approvedBy: approver,
       );
       _moveFirebase(d.id, 'branchSubmittedDelivery', 'branchReceivedDelivery', updated);
+      
+      // ═══ AUTO-SAVE BATCHES WITH DEDUPE ═══
+      final batchStats = await _saveBatchesFromDelivery(d, assign);
+      
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Row(children: [const Icon(Icons.check_circle, color: Colors.white),
-          const SizedBox(width: 8), Expanded(child: Text('Approved: ${d.refNumber}'))]),
+        content: Row(children: [
+          const Icon(Icons.check_circle, color: Colors.white),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Approved: ${d.refNumber}${batchStats.isNotEmpty ? ' • $batchStats' : ''}')),
+        ]),
         backgroundColor: _green, behavior: SnackBarBehavior.floating,
       ));
       await _showApprovedSuccessDialog();
@@ -190,6 +198,88 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
       setState(() => _processing = false);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+    }
+  }
+
+  // ═══ AUTO-SAVE BATCHES FROM DELIVERY ═══
+  // Loops through delivery items, checks for existing batches (dedupe),
+  // adds qty to existing OR creates new batches
+  Future<String> _saveBatchesFromDelivery(DeliveryRecord d, Map<String, dynamic> assign) async {
+    try {
+      final branchId = (assign['branchId'] ?? '').toString();
+      final branchName = (assign['branchName'] ?? '').toString();
+      
+      if (branchId.isEmpty) {
+        debugPrint('[DELIV-BATCH] No branchId — skip batch save');
+        return '';
+      }
+      
+      int created = 0;
+      int aggregated = 0;
+      final now = DateTime.now();
+      
+      for (final item in d.items) {
+        // Skip items without batch info
+        if (item.batchNumber.trim().isEmpty) continue;
+        
+        DateTime? mfg;
+        DateTime? exp;
+        try {
+          if (item.mfgDate.isNotEmpty) mfg = DateTime.parse(item.mfgDate);
+          if (item.expDate.isNotEmpty) exp = DateTime.parse(item.expDate);
+        } catch (_) {}
+        
+        if (mfg == null || exp == null) continue;
+        
+        // Check duplicate
+        final existing = await ProductBatch.findExistingBatch(
+          productId: item.productId,
+          batchNumber: item.batchNumber.trim(),
+          lotNumber: '',
+          branchId: branchId,
+        );
+        
+        if (existing != null) {
+          // AGGREGATE — add qty to existing batch
+          await ProductBatch.addQuantityToBatch(existing.id, item.quantity);
+          aggregated++;
+          debugPrint('[DELIV-BATCH] Aggregated ${item.batchNumber}: +${item.quantity} to existing');
+        } else {
+          // NEW — create batch
+          final newBatch = ProductBatch(
+            id: 'B-${now.millisecondsSinceEpoch}-${item.productId}-${created + aggregated}',
+            productId: item.productId,
+            productName: item.itemName,
+            productSku: item.sku,
+            batchNumber: item.batchNumber.trim(),
+            manufacturedDate: mfg,
+            expiryDate: exp,
+            quantity: item.quantity,
+            originalQty: item.quantity,
+            costPrice: item.cost,
+            supplier: d.supplier,
+            notes: 'From Delivery: ${d.refNumber}',
+            dateAdded: now,
+            branchId: branchId,
+            branchName: branchName,
+            source: 'DELIVERY',
+            sourceDocId: d.id,
+            status: 'ACTIVE',
+          );
+          ProductBatch.addBatch(newBatch);
+          created++;
+          debugPrint('[DELIV-BATCH] Created new: ${newBatch.batchNumber}');
+        }
+      }
+      
+      if (created == 0 && aggregated == 0) return '';
+      final parts = <String>[];
+      if (created > 0) parts.add('$created new batch${created > 1 ? "es" : ""}');
+      if (aggregated > 0) parts.add('$aggregated aggregated');
+      return parts.join(', ');
+    } catch (e) {
+      debugPrint('[DELIV-BATCH] Error: $e');
+      return '';
     }
   }
 

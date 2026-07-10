@@ -111,6 +111,91 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
         final branchName = (assign['branchName'] ?? '').toString();
         final lotNumber = _lotCtrl.text.trim();
         
+        // ═══ DUPLICATE CHECK (only for NEW batches, not edits) ═══
+        if (!_isEditing) {
+          final existing = await ProductBatch.findExistingBatch(
+            productId: _productId!,
+            batchNumber: batchNumber,
+            lotNumber: lotNumber,
+            branchId: branchId,
+          );
+          if (existing != null && mounted) {
+            // Batch already exists — show dialog to add qty
+            final shouldAdd = await showDialog<bool>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+                title: const Text('Batch Already Exists', style: TextStyle(fontWeight: FontWeight.bold)),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('This batch is already registered:',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF6B7280))),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Product: ${existing.productName}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          Text('Batch #: ${existing.batchNumber}',
+                            style: const TextStyle(fontSize: 12)),
+                          if (existing.lotNumber.isNotEmpty)
+                            Text('Lot #: ${existing.lotNumber}',
+                              style: const TextStyle(fontSize: 12)),
+                          const SizedBox(height: 6),
+                          Text('Current Qty: ${existing.quantity} pcs',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.teal)),
+                          Text('Add $qty pcs → Total: ${existing.quantity + qty} pcs',
+                            style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    icon: const Icon(Icons.add),
+                    label: Text('Add $qty to Existing'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            );
+            
+            if (shouldAdd == true) {
+              // Add qty to existing batch
+              await ProductBatch.addQuantityToBatch(existing.id, qty);
+              if (mounted) {
+                _snack('✅ Added $qty to batch ${existing.batchNumber}');
+                Navigator.pop(context, existing);
+              }
+              return;
+            } else {
+              // User cancelled
+              return;
+            }
+          }
+        }
+        
         final batch = ProductBatch(
           id: widget.batch?.id ?? "B-${DateTime.now().millisecondsSinceEpoch}",
           productId: _productId!, productName: _productName ?? "",
