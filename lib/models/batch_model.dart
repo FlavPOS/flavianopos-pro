@@ -17,6 +17,16 @@ class ProductBatch {
   final String supplier;
   final String notes;
   final DateTime dateAdded;
+  
+  // Enterprise fields (branch scoping + lot tracking)
+  final String lotNumber;
+  final String branchId;
+  final String branchName;
+  final String source;         // 'MANUAL' | 'DELIVERY' | 'TRANSFER_IN'
+  final String sourceDocId;
+  final String status;         // 'ACTIVE' | 'CONSUMED' | 'EXPIRED'
+  final String deviceId;
+  final DateTime? updatedAt;
 
   ProductBatch({
     required this.id,
@@ -32,6 +42,14 @@ class ProductBatch {
     this.supplier = '',
     this.notes = '',
     required this.dateAdded,
+    this.lotNumber = '',
+    this.branchId = '',
+    this.branchName = '',
+    this.source = 'MANUAL',
+    this.sourceDocId = '',
+    this.status = 'ACTIVE',
+    this.deviceId = '',
+    this.updatedAt,
   });
 
   ProductBatch copyWith({
@@ -44,11 +62,19 @@ class ProductBatch {
       id: id ?? this.id, productId: productId ?? this.productId,
       productName: productName ?? this.productName, productSku: productSku ?? this.productSku,
       batchNumber: batchNumber ?? this.batchNumber,
+      lotNumber: this.lotNumber,
       manufacturedDate: manufacturedDate ?? this.manufacturedDate,
       expiryDate: expiryDate ?? this.expiryDate,
       quantity: quantity ?? this.quantity, originalQty: originalQty ?? this.originalQty,
       costPrice: costPrice ?? this.costPrice, supplier: supplier ?? this.supplier,
       notes: notes ?? this.notes, dateAdded: dateAdded ?? this.dateAdded,
+      branchId: this.branchId,
+      branchName: this.branchName,
+      source: this.source,
+      sourceDocId: this.sourceDocId,
+      status: this.status,
+      deviceId: this.deviceId,
+      updatedAt: this.updatedAt,
     );
   }
 
@@ -75,9 +101,17 @@ class ProductBatch {
   Map<String, dynamic> toMap() => {
     'id': id, 'productId': productId, 'productName': productName,
     'productSku': productSku, 'batchNumber': batchNumber,
+    'lotNumber': lotNumber,
     'manufacturedDate': manufacturedDate.toIso8601String(),
     'expiryDate': expiryDate.toIso8601String(),
     'quantity': quantity, 'originalQty': originalQty,
+    'branchId': branchId,
+    'branchName': branchName,
+    'source': source,
+    'sourceDocId': sourceDocId,
+    'status': status,
+    'deviceId': deviceId,
+    'updatedAt': updatedAt?.toIso8601String() ?? '',
     'costPrice': costPrice, 'supplier': supplier,
     'notes': notes, 'dateAdded': dateAdded.toIso8601String(),
   };
@@ -86,12 +120,20 @@ class ProductBatch {
     id: m['id'] ?? '', productId: m['productId'] ?? '',
     productName: m['productName'] ?? '', productSku: m['productSku'] ?? '',
     batchNumber: m['batchNumber'] ?? '',
+    lotNumber: m['lotNumber'] ?? '',
     manufacturedDate: DateTime.tryParse(m['manufacturedDate'] ?? '') ?? DateTime.now(),
     expiryDate: DateTime.tryParse(m['expiryDate'] ?? '') ?? DateTime.now(),
     quantity: m['quantity'] ?? 0, originalQty: m['originalQty'] ?? 0,
     costPrice: (m['costPrice'] ?? 0).toDouble(),
     supplier: m['supplier'] ?? '', notes: m['notes'] ?? '',
     dateAdded: DateTime.tryParse(m['dateAdded'] ?? '') ?? DateTime.now(),
+    branchId: (m['branchId'] ?? '').toString(),
+    branchName: (m['branchName'] ?? '').toString(),
+    source: (m['source'] ?? 'MANUAL').toString(),
+    sourceDocId: (m['sourceDocId'] ?? '').toString(),
+    status: (m['status'] ?? 'ACTIVE').toString(),
+    deviceId: (m['deviceId'] ?? '').toString(),
+    updatedAt: DateTime.tryParse(m['updatedAt'] ?? ''),
   );
 
   static List<ProductBatch> _allBatches = [];
@@ -102,9 +144,9 @@ class ProductBatch {
     return _allBatches;
   }
 
-  static Future<void> loadFromDB() async {
+  static Future<void> loadFromDB({String? branchId}) async {
     final db = DatabaseHelper();
-    final rows = await db.getAllBatches();
+    final rows = await db.getAllBatches(branchId: branchId);
     if (rows.isEmpty) {
       _allBatches = [];
     } else {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:excel/excel.dart' as xl;
@@ -15,7 +16,15 @@ class BatchScreen extends StatefulWidget {
 }
 
 class _BatchScreenState extends State<BatchScreen> {
-  final List<ProductBatch> _batches = List.from(ProductBatch.allBatches);
+  @override
+  void initState() {
+    super.initState();
+    _loadBatches();
+  }
+
+  List<ProductBatch> _batches = [];
+  bool _loading = true;
+  String _branchId = '';
   final _searchCtrl = TextEditingController();
   String _query = '';
   String _filterStatus = 'All';
@@ -51,7 +60,7 @@ class _BatchScreenState extends State<BatchScreen> {
       MaterialPageRoute(builder: (context) => const AddBatchScreen()));
     if (result != null && result is ProductBatch) {
       ProductBatch.addBatch(result);
-      setState(() { _batches.clear(); _batches.addAll(ProductBatch.allBatches); });
+      _loadBatches();
       _snack('Batch ${result.batchNumber} added!');
     }
   }
@@ -128,7 +137,7 @@ class _BatchScreenState extends State<BatchScreen> {
                 ),
               ]);
               ProductBatch.deleteBatch(batch.id);
-              setState(() { _batches.clear(); _batches.addAll(ProductBatch.allBatches); });
+              _loadBatches();
               if (context.mounted) Navigator.pop(ctx);
               _snack('Batch deleted & logged');
             },
@@ -332,6 +341,20 @@ class _BatchScreenState extends State<BatchScreen> {
 
   @override
   void dispose() { _searchCtrl.dispose(); super.dispose(); }
+
+  Future<void> _loadBatches() async {
+    setState(() => _loading = true);
+    final assign = await DeviceAssignmentService().read();
+    _branchId = (assign['branchId'] ?? '').toString();
+    debugPrint('[BATCH-LIST] Loading for branchId: $_branchId');
+    await ProductBatch.loadFromDB(branchId: _branchId);
+    if (!mounted) return;
+    setState(() {
+      _batches = List.from(ProductBatch.allBatches);
+      _loading = false;
+    });
+    debugPrint('[BATCH-LIST] Loaded ${_batches.length} batches');
+  }
 
   @override
   Widget build(BuildContext context) {

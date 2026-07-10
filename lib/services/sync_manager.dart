@@ -315,6 +315,13 @@ class SyncManager {
           .onChildAdded.listen((event) => _onDeliveryUpdate(event, companyCode, 'Rejected')));
       _rtListeners.add(fbDb.ref('companies/$companyCode/branchRejectedDelivery')
           .onChildChanged.listen((event) => _onDeliveryUpdate(event, companyCode, 'Rejected')));
+
+      // ═══ BATCHES ═══
+      // Nested: companies/{code}/batches/{branchId}/{batchId}
+      _rtListeners.add(fbDb.ref('companies/$companyCode/batches')
+          .onChildAdded.listen((event) => _onBatchBranchUpdate(event, companyCode)));
+      _rtListeners.add(fbDb.ref('companies/$companyCode/batches')
+          .onChildChanged.listen((event) => _onBatchBranchUpdate(event, companyCode)));
     }
   }
 
@@ -1185,6 +1192,74 @@ class SyncManager {
       _showSnackBar?.call('📦 Delivery synced from another device');
     } catch (e) {
       if (kDebugMode) debugPrint('[SYNC-DELIV] Error: $e');
+    }
+  }
+
+  // ═══ BATCHES SYNC HANDLER (Nested: branchId/batchId) ═══
+  Future<void> _onBatchBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final val = event.snapshot.value;
+      if (val is! Map) return;
+      final branchId = (event.snapshot.key ?? '').toString();
+      if (branchId.isEmpty) return;
+
+      // Get current device branchId to filter
+      final assign = await DeviceAssignmentService().read();
+      final myBranchId = (assign['branchId'] ?? '').toString();
+      
+      // Skip batches from other branches (per-branch scoping)
+      if (myBranchId.isNotEmpty && myBranchId != branchId) {
+        return;
+      }
+
+      for (final entry in val.entries) {
+        final batchId = entry.key.toString();
+        final batchData = entry.value;
+        if (batchData is! Map) continue;
+        final m = batchData.map((k, v) => MapEntry(k.toString(), v));
+
+        // Sync loop prevention
+        final incomingDeviceId = (m['deviceId'] ?? '').toString();
+        final myDeviceId = await DeviceIdService().getOrCreate();
+        if (incomingDeviceId.isNotEmpty && incomingDeviceId == myDeviceId) continue;
+
+        final db = await DatabaseHelper().database;
+        final now = DateTime.now().toIso8601String();
+
+        try {
+          await db.insert('batches', {
+            'id': batchId,
+            'productId': (m['productId'] ?? '').toString(),
+            'productName': (m['productName'] ?? '').toString(),
+            'productSku': (m['productSku'] ?? '').toString(),
+            'batchNumber': (m['batchNumber'] ?? '').toString(),
+            'lotNumber': (m['lotNumber'] ?? '').toString(),
+            'manufacturedDate': (m['manufacturedDate'] ?? '').toString(),
+            'expiryDate': (m['expiryDate'] ?? '').toString(),
+            'quantity': (m['quantity'] as num?)?.toInt() ?? 0,
+            'originalQty': (m['originalQty'] as num?)?.toInt() ?? 0,
+            'costPrice': (m['costPrice'] as num?)?.toDouble() ?? 0.0,
+            'supplier': (m['supplier'] ?? '').toString(),
+            'notes': (m['notes'] ?? '').toString(),
+            'branchId': branchId,
+            'branchName': (m['branchName'] ?? '').toString(),
+            'source': (m['source'] ?? 'MANUAL').toString(),
+            'sourceDocId': (m['sourceDocId'] ?? '').toString(),
+            'status': (m['status'] ?? 'ACTIVE').toString(),
+            'deviceId': incomingDeviceId,
+            'dateAdded': (m['dateAdded'] ?? now).toString(),
+            'updatedAt': (m['updatedAt'] ?? now).toString(),
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          
+          debugPrint('[SYNC-BATCH] $batchId synced (branch=$branchId)');
+        } catch (e) {
+          debugPrint('[SYNC-BATCH] Insert error: $e');
+        }
+      }
+
+      _showSnackBar?.call('📦 Batch synced from another device');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SYNC-BATCH] Error: $e');
     }
   }
 }

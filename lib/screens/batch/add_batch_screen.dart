@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
 import '../../models/batch_model.dart';
 import '../../models/batch_log_model.dart';
 import '../../models/product_model.dart';
@@ -18,6 +19,7 @@ class AddBatchScreen extends StatefulWidget {
 class _AddBatchScreenState extends State<AddBatchScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _batchCtrl;
+  late TextEditingController _lotCtrl;
   late TextEditingController _qtyCtrl;
   late TextEditingController _costCtrl;
   late TextEditingController _supplierCtrl;
@@ -40,6 +42,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
     super.initState();
     final b = widget.batch;
     _batchCtrl = TextEditingController(text: b?.batchNumber ?? '');
+    _lotCtrl = TextEditingController(text: b?.lotNumber ?? '');
     _qtyCtrl = TextEditingController(text: b != null ? b.quantity.toString() : '');
     _costCtrl = TextEditingController(text: b != null ? b.costPrice.toString() : '');
     _supplierCtrl = TextEditingController(text: b?.supplier ?? '');
@@ -53,7 +56,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
 
   @override
   void dispose() {
-    _batchCtrl.dispose(); _qtyCtrl.dispose(); _costCtrl.dispose();
+    _batchCtrl.dispose(); _lotCtrl.dispose(); _qtyCtrl.dispose(); _costCtrl.dispose();
     _supplierCtrl.dispose(); _notesCtrl.dispose();
     super.dispose();
   }
@@ -102,15 +105,27 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
         final qty = int.tryParse(_qtyCtrl.text) ?? 0;
         final cost = double.tryParse(_costCtrl.text) ?? 0;
         final batchNumber = _batchCtrl.text.trim();
+        // Get current branchId from device assignment
+        final assign = await DeviceAssignmentService().read();
+        final branchId = (assign['branchId'] ?? '').toString();
+        final branchName = (assign['branchName'] ?? '').toString();
+        final lotNumber = _lotCtrl.text.trim();
+        
         final batch = ProductBatch(
           id: widget.batch?.id ?? "B-${DateTime.now().millisecondsSinceEpoch}",
           productId: _productId!, productName: _productName ?? "",
           productSku: _productSku ?? "", batchNumber: batchNumber,
+          lotNumber: lotNumber,
           manufacturedDate: _mfgDate!, expiryDate: _expDate!,
           quantity: qty, originalQty: widget.batch?.originalQty ?? qty,
           costPrice: cost, supplier: _supplierCtrl.text.trim(),
           notes: _notesCtrl.text.trim(),
           dateAdded: widget.batch?.dateAdded ?? DateTime.now(),
+          branchId: branchId,
+          branchName: branchName,
+          source: widget.batch?.source ?? 'MANUAL',
+          sourceDocId: widget.batch?.sourceDocId ?? '',
+          status: 'ACTIVE',
         );
         if (_isEditing) {
           final old = widget.batch!;
@@ -267,7 +282,12 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: TextFormField(controller: _batchCtrl,
-                decoration: _dec('Batch / LOT Number', Icons.tag),
+                decoration: _dec('Batch #', Icons.tag),
+                validator: (v) => (v?.trim().isEmpty ?? true) ? 'Required' : null,
+              )),
+              const SizedBox(width: 8),
+              Expanded(child: TextFormField(controller: _lotCtrl,
+                decoration: _dec('Lot # (optional)', Icons.confirmation_number),
                 validator: (v) => v == null || v.isEmpty ? 'Required' : null)),
               const SizedBox(width: 8),
               ElevatedButton.icon(onPressed: _genBatch,

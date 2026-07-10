@@ -98,6 +98,19 @@ class DatabaseHelper {
     // DELIVERY RECORDS BRANCH MIGRATION - per-branch delivery tagging
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchId TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN branchName TEXT DEFAULT ''"); } catch (_) {}
+    
+    // BATCHES ENTERPRISE MIGRATION - branch scoping + lot tracking + source
+    try { await db.execute("ALTER TABLE batches ADD COLUMN lotNumber TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN branchId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN branchName TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN source TEXT DEFAULT 'MANUAL'"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN sourceDocId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN status TEXT DEFAULT 'ACTIVE'"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN deviceId TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("ALTER TABLE batches ADD COLUMN updatedAt TEXT DEFAULT ''"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_batches_branchId ON batches(branchId)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_batches_lotNumber ON batches(lotNumber)"); } catch (_) {}
+    try { await db.execute("CREATE INDEX IF NOT EXISTS idx_batches_status ON batches(status)"); } catch (_) {}
     try {
     // STOCK TRANSFER DEVICE MIGRATION - device-based filtering support
     try { await db.execute("ALTER TABLE stock_transfers ADD COLUMN fromDeviceId TEXT DEFAULT ''"); } catch (_) {}
@@ -1007,7 +1020,13 @@ try {
   Future<int> insertBatch(Map<String, dynamic> b) async { final db = await database; return await db.insert('batches', b, conflictAlgorithm: ConflictAlgorithm.replace); }
   Future<int> updateBatch(String id, Map<String, dynamic> b) async { final db = await database; return await db.update('batches', b, where: 'id = ?', whereArgs: [id]); }
   Future<int> deleteBatch(String id) async { final db = await database; return await db.delete('batches', where: 'id = ?', whereArgs: [id]); }
-  Future<List<Map<String, dynamic>>> getAllBatches() async { final db = await database; return await db.query('batches', orderBy: 'expiryDate ASC'); }
+  Future<List<Map<String, dynamic>>> getAllBatches({String? branchId}) async {
+    final db = await database;
+    if (branchId != null && branchId.isNotEmpty) {
+      return await db.query('batches', where: 'branchId = ?', whereArgs: [branchId], orderBy: 'expiryDate ASC');
+    }
+    return await db.query('batches', orderBy: 'expiryDate ASC');
+  }
   Future<Map<String, dynamic>?> getBatchById(String id) async { final db = await database; final r = await db.query('batches', where: 'id = ?', whereArgs: [id]); return r.isNotEmpty ? r.first : null; }
   Future<List<Map<String, dynamic>>> getBatchesByProduct(String productId) async { final db = await database; return await db.query('batches', where: 'productId = ?', whereArgs: [productId], orderBy: 'expiryDate ASC'); }
   Future<void> updateBatchQty(String id, int newQty) async { final db = await database; await db.update('batches', {'quantity': newQty}, where: 'id = ?', whereArgs: [id]); }
