@@ -323,8 +323,14 @@ class SyncManager {
       _rtListeners.add(fbDb.ref('companies/$companyCode/batches')
           .onChildChanged.listen((event) => _onBatchBranchUpdate(event, companyCode)));
       // Handle deletes/removals for cross-device sync
-      _rtListeners.add(fbDb.ref('companies/$companyCode/batches')
-          .onChildRemoved.listen((event) => _onBatchBranchRemove(event, companyCode)));
+      // Listen at BRANCH level so onChildRemoved fires per individual batch
+      final batchAssign = await DeviceAssignmentService().read();
+      final batchMyBranchId = (batchAssign['branchId'] ?? '').toString();
+      if (batchMyBranchId.isNotEmpty) {
+        _rtListeners.add(fbDb.ref('companies/$companyCode/batches/$batchMyBranchId')
+            .onChildRemoved.listen((event) => _onBatchRemoved(event, companyCode, batchMyBranchId)));
+        debugPrint('[SYNC-BATCH] Listening for deletes at branches/$batchMyBranchId');
+      }
     }
   }
 
@@ -1266,31 +1272,24 @@ class SyncManager {
     }
   }
 
-  // ═══ BATCH REMOVE HANDLER (Cross-Device Cascade Delete) ═══
-  Future<void> _onBatchBranchRemove(DatabaseEvent event, String companyCode) async {
+  // ═══ BATCH REMOVE HANDLER (Individual Batch Delete) ═══
+  // Fires when a specific batch is removed from Firebase
+  Future<void> _onBatchRemoved(DatabaseEvent event, String companyCode, String branchId) async {
     try {
-      final branchId = (event.snapshot.key ?? '').toString();
-      if (branchId.isEmpty) return;
+      final batchId = (event.snapshot.key ?? '').toString();
+      if (batchId.isEmpty) return;
 
-      // Filter to current branch
-      final assign = await DeviceAssignmentService().read();
-      final myBranchId = (assign['branchId'] ?? '').toString();
-      if (myBranchId.isNotEmpty && myBranchId != branchId) return;
+      debugPrint('[SYNC-BATCH-DEL] Individual batch removed: $batchId (branch=$branchId)');
 
-      final val = event.snapshot.value;
       final db = await DatabaseHelper().database;
-      
-      if (val is Map) {
-        // Multiple batches removed under this branch
-        for (final entry in val.entries) {
-          final batchId = entry.key.toString();
-          try {
-            await db.delete('batches', where: 'id = ?', whereArgs: [batchId]);
-            debugPrint('[SYNC-BATCH-DEL] Removed $batchId');
-          } catch (e) {
-            debugPrint('[SYNC-BATCH-DEL] Delete error: $e');
-          }
-        }
+      try {
+        await db.delete('batches', where: 'id = ?', whereArgs: [batchId]);
+        debugPrint('[SYNC-BATCH-DEL] ✅ Removed $batchId from local SQLite');
+        
+        // Also remove from in-memory cache
+        // (Force refresh on next load)
+      } catch (e) {
+        debugPrint('[SYNC-BATCH-DEL] Delete error: $e');
       }
 
       _showSnackBar?.call('🗑️ Batch removed from another device');
