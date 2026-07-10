@@ -374,19 +374,13 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
               Expanded(child: TextFormField(controller: _lotCtrl,
                 decoration: _dec('Lot # (optional)', Icons.confirmation_number),
                 validator: (v) => v == null || v.isEmpty ? 'Required' : null)),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(onPressed: _genBatch,
-                icon: const Icon(Icons.auto_awesome, size: 16),
-                label: const Text('Auto', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
             ]),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(child: TextFormField(controller: _qtyCtrl,
                 decoration: _dec('Quantity', Icons.numbers),
                 keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Required';
                   final n = int.tryParse(v);
@@ -396,8 +390,61 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
               const SizedBox(width: 12),
               Expanded(child: TextFormField(controller: _costCtrl,
                 decoration: _dec('Cost Price (P)', Icons.money),
-                keyboardType: TextInputType.number)),
+                keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
+              )),
             ]),
+            const SizedBox(height: 12),
+            
+            // ═══ TOTAL VALUE DISPLAY (auto-calc) ═══
+            AnimatedBuilder(
+              animation: Listenable.merge([_qtyCtrl, _costCtrl]),
+              builder: (context, _) {
+                final qty = int.tryParse(_qtyCtrl.text) ?? 0;
+                final cost = double.tryParse(_costCtrl.text) ?? 0.0;
+                final total = qty * cost;
+                final hasValue = total > 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: hasValue ? const Color(0xFFCCFBF1) : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: hasValue ? const Color(0xFF0D9488) : Colors.grey[300]!,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.account_balance_wallet_rounded,
+                        color: hasValue ? const Color(0xFF0F766E) : Colors.grey[500],
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Total Value',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: hasValue ? const Color(0xFF0F766E) : Colors.grey[600],
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '₱ ${total.toStringAsFixed(2)}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: hasValue ? const Color(0xFF0D9488) : Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            
             const SizedBox(height: 24),
             _sec('Dates', Icons.calendar_month),
             const SizedBox(height: 12),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/device_assignment_service.dart';
 import '../../models/batch_model.dart';
-import 'batch_screen.dart';
+import 'batch_list_screen.dart';
 import 'add_batch_screen.dart';
 import 'batch_log_screen.dart';
 
@@ -152,7 +152,7 @@ class _BatchHubScreenState extends State<BatchHubScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => BatchScreen(initialFilter: filter),
+        builder: (_) => BatchListScreen(initialFilter: filter),
       ),
     ).then((_) => _loadCounts());
   }
