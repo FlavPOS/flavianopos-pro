@@ -105,11 +105,14 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
         final qty = int.tryParse(_qtyCtrl.text) ?? 0;
         final cost = double.tryParse(_costCtrl.text) ?? 0;
         final batchNumber = _batchCtrl.text.trim();
+        debugPrint('[ADD-BATCH] Save started');
+        debugPrint('[ADD-BATCH] batch=$batchNumber qty=$qty cost=$cost');
         // Get current branchId from device assignment
         final assign = await DeviceAssignmentService().read();
         final branchId = (assign['branchId'] ?? '').toString();
         final branchName = (assign['branchName'] ?? '').toString();
         final lotNumber = _lotCtrl.text.trim();
+        debugPrint('[ADD-BATCH] branchId=$branchId productId=$_productId lot=$lotNumber');
         
         // ═══ DUPLICATE CHECK (only for NEW batches, not edits) ═══
         if (!_isEditing) {
@@ -196,6 +199,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
           }
         }
         
+        debugPrint('[ADD-BATCH] Creating ProductBatch...');
         final batch = ProductBatch(
           id: widget.batch?.id ?? "B-${DateTime.now().millisecondsSinceEpoch}",
           productId: _productId!, productName: _productName ?? "",
@@ -235,8 +239,20 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
           try { await BatchLogStorage.saveLogs(logs); } catch (_) {}
         } else {
           final now = DateTime.now();
+          // ═══ CRITICAL FIX: Actually save the new batch! ═══
+          debugPrint('[ADD-BATCH] Calling ProductBatch.addBatch...');
+          ProductBatch.addBatch(batch);
+          debugPrint('[ADD-BATCH] ✅ Saved to SQLite + Firebase queue');
           try { await BatchLogStorage.saveLogs([BatchLog(id: "LOG-${now.millisecondsSinceEpoch}", batchId: batch.id, batchNumber: batchNumber, productName: _productName ?? "", productSku: _productSku ?? "", action: "Created", reason: "New Batch", field: "New Batch", oldValue: "", newValue: "Qty: $qty, Cost: ${cost.toStringAsFixed(2)}", dateTime: now)]); } catch (_) {}
         }
+        
+        // Also handle _isEditing updates
+        if (_isEditing) {
+          debugPrint('[ADD-BATCH] Calling ProductBatch.updateBatch...');
+          ProductBatch.updateBatch(batch.id, batch);
+          debugPrint('[ADD-BATCH] ✅ Updated');
+        }
+        
         if (mounted) Navigator.pop(context, batch);
       } catch (e) { _snack("Save error: $e"); }
     }
