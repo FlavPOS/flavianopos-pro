@@ -1,6 +1,8 @@
 // lib/screens/receive_delivery/approved_list_screen.dart
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
+import '../../theme/business_theme.dart';
 import 'package:intl/intl.dart';
 import 'package:excel/excel.dart' as xl;
 import 'package:printing/printing.dart';
@@ -30,7 +32,11 @@ class _ApprovedListScreenState extends State<ApprovedListScreen> {
 
   Future<void> _loadApproved() async {
     setState(() => _loading = true);
-    final list = await DeliveryStorage.getByStatus(DeliveryStatus.approved);
+    // Get current branchId for filtering
+    final assign = await DeviceAssignmentService().read();
+    final branchId = (assign['branchId'] ?? '').toString();
+    
+    final list = await DeliveryStorage.getByStatus(DeliveryStatus.approved, branchId: branchId);
     if (mounted) {
       setState(() {
         _approved = list;

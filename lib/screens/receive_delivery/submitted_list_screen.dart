@@ -1,5 +1,6 @@
 // lib/screens/receive_delivery/submitted_list_screen.dart
 import 'package:flutter/material.dart';
+import '../../theme/business_theme.dart';
 import '../../models/product_model.dart';
 import '../../helpers/database_helper.dart';
 import '../../services/firebase_config_service.dart';
@@ -32,7 +33,11 @@ class _SubmittedListScreenState extends State<SubmittedListScreen> {
 
   Future<void> _loadSubmitted() async {
     setState(() => _loading = true);
-    final list = await DeliveryStorage.getByStatus(DeliveryStatus.submitted);
+    // Get current branchId for filtering
+    final assign = await DeviceAssignmentService().read();
+    final branchId = (assign['branchId'] ?? '').toString();
+    
+    final list = await DeliveryStorage.getByStatus(DeliveryStatus.submitted, branchId: branchId);
     if (mounted) {
       setState(() {
         _submitted = list;

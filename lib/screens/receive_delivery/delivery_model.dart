@@ -279,12 +279,17 @@ class DeliveryStorage {
   }
 
   // ═══ NEW: Filter by status ═══
-  static Future<List<DeliveryRecord>> getByStatus(String status) async {
+  static Future<List<DeliveryRecord>> getByStatus(String status, {String? branchId}) async {
     final db = DatabaseHelper();
     final rows = await db.getAllDeliveryRecords();
     List<DeliveryRecord> result = [];
     for (final row in rows) {
       if ((row['status'] ?? 'Draft') != status) continue;
+      // Branch filter — only show current branch's data
+      if (branchId != null && branchId.isNotEmpty) {
+        final rowBranchId = (row['branchId'] ?? '').toString();
+        if (rowBranchId != branchId) continue;
+      }
       final itemRows = await db.getDeliveryItems(row['id']);
       final items = itemRows.map((r) => DeliveryItemRecord.fromMap(r)).toList();
       result.add(DeliveryRecord.fromMap(row, items));
@@ -295,8 +300,8 @@ class DeliveryStorage {
   }
 
   // ═══ NEW: Count by status ═══
-  static Future<int> countByStatus(String status) async {
-    final list = await getByStatus(status);
+  static Future<int> countByStatus(String status, {String? branchId}) async {
+    final list = await getByStatus(status, branchId: branchId);
     return list.length;
   }
 

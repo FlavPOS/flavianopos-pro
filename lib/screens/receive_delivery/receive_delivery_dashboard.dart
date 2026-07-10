@@ -1,6 +1,8 @@
 // lib/screens/receive_delivery/receive_delivery_dashboard.dart
 // Modern SaaS-style dashboard with Plus Jakarta Sans typography
 import 'package:flutter/material.dart';
+import '../../services/device_assignment_service.dart';
+import '../../theme/business_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/product_model.dart';
 import 'receive_delivery_screen.dart';
@@ -64,10 +66,17 @@ class _ReceiveDeliveryDashboardState extends State<ReceiveDeliveryDashboard> {
 
   Future<void> _loadCounts() async {
     setState(() => _loading = true);
-    final drafts = await DeliveryStorage.countByStatus(DeliveryStatus.draft);
-    final submitted = await DeliveryStorage.countByStatus(DeliveryStatus.submitted);
-    final approved = await DeliveryStorage.countByStatus(DeliveryStatus.approved);
-    final rejected = await DeliveryStorage.countByStatus(DeliveryStatus.rejected);
+    // Get current branchId for filtering (matches synced data)
+    final assign = await DeviceAssignmentService().read();
+    final branchId = (assign['branchId'] ?? '').toString();
+    debugPrint('[DELIV-DASH] Loading counts for branchId: $branchId');
+    
+    final drafts = await DeliveryStorage.countByStatus(DeliveryStatus.draft, branchId: branchId);
+    final submitted = await DeliveryStorage.countByStatus(DeliveryStatus.submitted, branchId: branchId);
+    final approved = await DeliveryStorage.countByStatus(DeliveryStatus.approved, branchId: branchId);
+    final rejected = await DeliveryStorage.countByStatus(DeliveryStatus.rejected, branchId: branchId);
+    
+    debugPrint('[DELIV-DASH] Counts: D=$drafts S=$submitted A=$approved R=$rejected');
     if (mounted) {
       setState(() {
         _draftCount = drafts;

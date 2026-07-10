@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/business_theme.dart';
 import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 import 'package:pdf/pdf.dart';
@@ -484,37 +485,46 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
 
   // ═══ WORKFLOW: Save as Draft OR Submit dialog ═══
   Future<String?> _showSaveOrSubmitDialog(String refNumber, String supplier, int totalItems, int totalQty, double totalRetail) async {
+    final wide = BusinessTheme.isWideScreen(context);
     return await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.orange[700],
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(wide ? 8 : 16)),
+        insetPadding: EdgeInsets.symmetric(horizontal: wide ? 40 : 24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: wide ? 520 : 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: wide ? BusinessTheme.surface : Colors.orange[700],
+                  border: wide ? const Border(bottom: BorderSide(color: BusinessTheme.border, width: 1)) : null,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(wide ? 8 : 16)),
+                ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: wide ? BusinessTheme.surfaceAlt : Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.local_shipping_outlined, color: Colors.white, size: 20),
+                    child: Icon(Icons.local_shipping_outlined, color: wide ? BusinessTheme.primary : Colors.white, size: 20),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Save Delivery',
-                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold, letterSpacing: 0.3),
+                      style: TextStyle(
+                        color: wide ? BusinessTheme.textPrimary : Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
                 ],
@@ -551,32 +561,35 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                   ),
                   const SizedBox(height: 16),
                   Material(
-                    color: const Color(0xFFEDE9FE),
-                    borderRadius: BorderRadius.circular(12),
+                    color: wide ? BusinessTheme.surface : const Color(0xFFEDE9FE),
+                    borderRadius: BorderRadius.circular(wide ? 6 : 12),
                     child: InkWell(
                       onTap: () => Navigator.pop(ctx, 'DRAFT'),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(wide ? 6 : 12),
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3), width: 1.5),
+                          borderRadius: BorderRadius.circular(wide ? 6 : 12),
+                          border: Border.all(
+                            color: wide ? BusinessTheme.borderStrong : const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                            width: wide ? 1 : 1.5,
+                          ),
                         ),
                         child: Row(
-                          children: const [
-                            Icon(Icons.description_outlined, color: Color(0xFF7C3AED), size: 22),
-                            SizedBox(width: 12),
+                          children: [
+                            Icon(Icons.description_outlined, color: wide ? BusinessTheme.textSecondary : const Color(0xFF7C3AED), size: 22),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Save as Draft', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF7C3AED))),
-                                  SizedBox(height: 2),
-                                  Text('Continue editing later', style: TextStyle(fontSize: 11, color: Color(0xFF7C3AED))),
+                                  Text('Save as Draft', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: wide ? BusinessTheme.textPrimary : const Color(0xFF7C3AED))),
+                                  const SizedBox(height: 2),
+                                  Text('Continue editing later', style: TextStyle(fontSize: 11, color: wide ? BusinessTheme.textSecondary : const Color(0xFF7C3AED))),
                                 ],
                               ),
                             ),
-                            Icon(Icons.arrow_forward_ios, color: Color(0xFF7C3AED), size: 14),
+                            Icon(Icons.arrow_forward_ios, color: wide ? BusinessTheme.textMuted : const Color(0xFF7C3AED), size: 14),
                           ],
                         ),
                       ),
@@ -584,11 +597,11 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
                   ),
                   const SizedBox(height: 10),
                   Material(
-                    color: const Color(0xFF2563EB),
-                    borderRadius: BorderRadius.circular(12),
+                    color: wide ? BusinessTheme.primary : const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(wide ? 6 : 12),
                     child: InkWell(
                       onTap: () => Navigator.pop(ctx, 'SUBMIT'),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(wide ? 6 : 12),
                       child: Container(
                         padding: const EdgeInsets.all(14),
                         child: Row(
@@ -623,6 +636,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
           ],
         ),
       ),
+    ),
     );
   }
 
