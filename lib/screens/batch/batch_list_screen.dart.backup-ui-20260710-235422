@@ -240,24 +240,13 @@ class _BatchListScreenState extends State<BatchListScreen> {
     
     // Progress
     final progress = b.originalQty > 0 ? b.quantity / b.originalQty : 0.0;
-
-    // v1.0.40 — Multi-select support
-    final isSelected = _selectedBatchIds.contains(b.id);
-
-    return GestureDetector(
-      onLongPress: () {
-        if (!_selectionMode) _enterSelectionMode(b.id);
-      },
-      onTap: _selectionMode ? () => _toggleSelection(b.id) : null,
-      child: Container(
+    
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: isSelected ? _tealBg : _card,
+        color: _card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? _teal : _border,
-          width: isSelected ? 2 : 1,
-        ),
+        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -466,8 +455,7 @@ class _BatchListScreenState extends State<BatchListScreen> {
           ],
         ),
       ),
-    ),
-    ); // v1.0.40 — Close GestureDetector
+    );
   }
 
   String _fmtDate(DateTime d) {
@@ -579,53 +567,32 @@ class _BatchListScreenState extends State<BatchListScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _selectionMode ? _tealDark : _teal,
+        backgroundColor: _teal,
         foregroundColor: Colors.white,
         elevation: 0,
-        leading: _selectionMode
-          ? IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: _exitSelectionMode,
-            )
-          : null,
-        title: Text(
-          _selectionMode
-            ? '${_selectedBatchIds.length} selected'
-            : 'Batch Management',
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        title: const Text(
+          'Batch Management',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
-        actions: _selectionMode
-          ? [
-              IconButton(
-                icon: const Icon(Icons.select_all),
-                tooltip: 'Select All',
-                onPressed: () => _selectAllVisible(filtered),
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit_note),
-                tooltip: 'Bulk Update Reason',
-                onPressed: _openBulkReasonSheet,
-              ),
-            ]
-          : [
-              IconButton(
-                icon: const Icon(Icons.download_rounded),
-                tooltip: 'Export',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Export coming soon'), behavior: SnackBarBehavior.floating),
-                  );
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.history_rounded),
-                tooltip: 'Activity Log',
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const BatchLogScreen()),
-                ),
-              ),
-            ],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Export',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Export coming soon'), behavior: SnackBarBehavior.floating),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.history_rounded),
+            tooltip: 'Activity Log',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BatchLogScreen()),
+            ),
+          ),
+        ],
       ),
       body: _loading
         ? const Center(child: CircularProgressIndicator(color: _teal))
