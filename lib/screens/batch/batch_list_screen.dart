@@ -4,6 +4,10 @@ import '../../models/batch_model.dart';
 import 'add_batch_screen.dart';
 import 'batch_log_screen.dart';
 import '../../utils/approver_pin_dialog.dart';
+import '../../utils/batch_excel_exporter.dart';
+import 'dart:html' as html;
+import 'dart:convert';
+import '../../widgets/bulk_reason_sheet.dart';
 
 /// Enterprise Batch List — matches modern SaaS design
 /// Green header, status cards, FEFO sort, beautiful batch cards
@@ -46,6 +50,10 @@ class _BatchListScreenState extends State<BatchListScreen> {
   String _statusFilter = 'All'; // All | Fresh | Near Expiry | Expired
   
   List<ProductBatch> _allBatches = [];
+
+  // ═══ v1.0.40 Multi-Select State ═══
+  bool _selectionMode = false;
+  final Set<String> _selectedBatchIds = {};
   
   @override
   void initState() {
@@ -235,13 +243,24 @@ class _BatchListScreenState extends State<BatchListScreen> {
     
     // Progress
     final progress = b.originalQty > 0 ? b.quantity / b.originalQty : 0.0;
-    
-    return Container(
+
+    // v1.0.40 — Multi-select support
+    final isSelected = _selectedBatchIds.contains(b.id);
+
+    return GestureDetector(
+      onLongPress: () {
+        if (!_selectionMode) _enterSelectionMode(b.id);
+      },
+      onTap: _selectionMode ? () => _toggleSelection(b.id) : null,
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: _card,
+        color: isSelected ? _tealBg : _card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
+        border: Border.all(
+          color: isSelected ? _teal : _border,
+          width: isSelected ? 2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -450,7 +469,8 @@ class _BatchListScreenState extends State<BatchListScreen> {
           ],
         ),
       ),
-    );
+    ),
+    ); // v1.0.40 — Close GestureDetector
   }
 
   String _fmtDate(DateTime d) {
@@ -562,31 +582,97 @@ class _BatchListScreenState extends State<BatchListScreen> {
     return Scaffold(
       backgroundColor: _bg,
       appBar: AppBar(
-        backgroundColor: _teal,
+        backgroundColor: _selectionMode ? _tealDark : _teal,
         foregroundColor: Colors.white,
         elevation: 0,
-        title: const Text(
-          'Batch Management',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        leading: _selectionMode
+          ? IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _exitSelectionMode,
+            )
+          : null,
+        title: Text(
+          _selectionMode
+            ? '${_selectedBatchIds.length} selected'
+            : 'Batch Management',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download_rounded),
-            tooltip: 'Export',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Export coming soon'), behavior: SnackBarBehavior.floating),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'Activity Log',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const BatchLogScreen()),
+          // v1.0.42 — Always-visible Bulk Update icon with badge
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: IconButton(
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.edit_note,
+                    color: _selectedBatchIds.isEmpty
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.white,
+                  ),
+                  if (_selectedBatchIds.isNotEmpty)
+                    Positioned(
+                      right: -6, top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.orange,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white, width: 1),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          '${_selectedBatchIds.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              tooltip: _selectedBatchIds.isEmpty
+                ? 'Select batches first'
+                : 'Update ${_selectedBatchIds.length} selected',
+              onPressed: () {
+                if (_selectedBatchIds.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Long-press a batch to select first'),
+                      behavior: SnackBarBehavior.floating,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+                _openBulkReasonSheet();
+              },
             ),
           ),
+          if (_selectionMode)
+            IconButton(
+              icon: const Icon(Icons.select_all),
+              tooltip: 'Select All',
+              onPressed: () => _selectAllVisible(filtered),
+            ),
+          IconButton(
+            icon: const Icon(Icons.download_rounded),
+            tooltip: 'Export to Excel',
+            onPressed: _exportToExcel,
+          ),
+          // v1.0.44 — Activity Log icon hidden (accessible via Batch Hub)
+          // IconButton(
+          //   icon: const Icon(Icons.history_rounded),
+          //   tooltip: 'Activity Log',
+          //   onPressed: () => Navigator.push(
+          //     context,
+          //     MaterialPageRoute(builder: (_) => const BatchLogScreen()),
+          //   ),
+          // ),
         ],
       ),
       body: _loading
@@ -719,4 +805,274 @@ class _BatchListScreenState extends State<BatchListScreen> {
       ),
     );
   }
+
+
+  // ═══════════════════════════════════════════════════════
+  // v1.0.40 — Multi-Select Helpers
+  // ═══════════════════════════════════════════════════════
+  void _enterSelectionMode(String batchId) {
+    setState(() {
+      _selectionMode = true;
+      _selectedBatchIds.add(batchId);
+    });
+  }
+
+  void _toggleSelection(String batchId) {
+    setState(() {
+      if (_selectedBatchIds.contains(batchId)) {
+        _selectedBatchIds.remove(batchId);
+        if (_selectedBatchIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedBatchIds.add(batchId);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedBatchIds.clear();
+    });
+  }
+
+
+  // ═══════════════════════════════════════════════════════
+  // v1.0.43 — Excel Export
+  // ═══════════════════════════════════════════════════════
+  Future<void> _exportToExcel() async {
+    final scope = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.download_rounded, color: _teal),
+          const SizedBox(width: 10),
+          const Text('Export to Excel', style: TextStyle(fontSize: 16)),
+        ]),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Choose scope:', style: TextStyle(fontSize: 13, color: _textSecondary)),
+              const SizedBox(height: 12),
+              _exportOption(ctx, 'ALL', 'All Batches (${_allBatches.length})',
+                'Complete inventory', Icons.inventory_2, _teal),
+              const SizedBox(height: 8),
+              if (_selectedBatchIds.isNotEmpty)
+                _exportOption(ctx, 'SELECTED', 'Selected Only (${_selectedBatchIds.length})',
+                  'Currently selected batches', Icons.check_box, Colors.blue),
+              if (_selectedBatchIds.isNotEmpty) const SizedBox(height: 8),
+              _exportOption(ctx, 'ACTIVE', 'Active Only',
+                'Fresh + Near Exp (excludes SOLD/RETURNED)', Icons.check_circle, _greenSoft),
+              const SizedBox(height: 8),
+              _exportOption(ctx, 'HISTORY', 'History (Closed)',
+                'SOLD / RETURNED / ADJUSTED', Icons.history, Colors.purple),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ],
+      ),
+    );
+
+    if (scope == null || !mounted) return;
+
+    List<ProductBatch> batches;
+    switch (scope) {
+      case 'SELECTED':
+        batches = _allBatches.where((b) => _selectedBatchIds.contains(b.id)).toList();
+        break;
+      case 'ACTIVE':
+        batches = _allBatches.where((b) =>
+          b.status == 'ACTIVE' && !b.isExpired && b.quantity > 0).toList();
+        break;
+      case 'HISTORY':
+        batches = _allBatches.where((b) =>
+          b.status == 'SOLD' || b.status == 'RETURNED' || b.status == 'ADJUSTED').toList();
+        break;
+      case 'ALL':
+      default:
+        batches = List.from(_allBatches);
+    }
+
+    if (batches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No batches to export'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: _teal)),
+      );
+
+      final bytes = BatchExcelExporter.exportBatches(
+        batches: batches,
+        branchName: _branchId,
+        branchId: _branchId,
+        exportedBy: 'admin',
+      );
+
+      if (mounted) Navigator.pop(context);
+
+      final now = DateTime.now();
+      final ts = '${now.year}${now.month.toString().padLeft(2, "0")}${now.day.toString().padLeft(2, "0")}';
+      final filename = 'FlavPOS_Batches_${_branchId}_$ts.xlsx';
+
+      final base64Data = base64Encode(bytes);
+      final anchor = html.AnchorElement(
+        href: 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,$base64Data',
+      )
+        ..download = filename
+        ..style.display = 'none';
+      html.document.body?.append(anchor);
+      anchor.click();
+      anchor.remove();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✅ Exported ${batches.length} batches to $filename'),
+          backgroundColor: _greenSoft,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      debugPrint('[EXPORT] ✅ Downloaded $filename');
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('❌ Export failed: $e'),
+          backgroundColor: _redSoft,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      debugPrint('[EXPORT] ❌ Error: $e');
+    }
+  }
+
+  Widget _exportOption(BuildContext ctx, String code, String title, String subtitle,
+      IconData icon, Color color) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, code),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8))),
+            ],
+          )),
+          Icon(Icons.chevron_right, color: color, size: 20),
+        ]),
+      ),
+    );
+  }
+
+  void _selectAllVisible(List<ProductBatch> visible) {
+    setState(() {
+      if (_selectedBatchIds.length == visible.length) {
+        _selectedBatchIds.clear();
+        _selectionMode = false;
+      } else {
+        _selectedBatchIds.addAll(visible.map((b) => b.id));
+      }
+    });
+  }
+
+  Future<void> _openBulkReasonSheet() async {
+    if (_selectedBatchIds.isEmpty) return;
+    final selected = _allBatches
+      .where((b) => _selectedBatchIds.contains(b.id))
+      .toList();
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BulkReasonSheet(batches: selected),
+    );
+    if (result == null || !mounted) return;
+    await _applyBulkUpdate(result, selected);
+  }
+
+  Future<void> _applyBulkUpdate(
+    Map<String, dynamic> data,
+    List<ProductBatch> selected,
+  ) async {
+    final reason = data['reason'] as String;
+    final qtyChange = data['qtyChange'] as int?;
+    final note = data['note'] as String?;
+
+    // Show progress
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    int ok = 0, fail = 0;
+    for (final batch in selected) {
+      try {
+        final newQty = qtyChange != null
+          ? (batch.quantity + qtyChange).clamp(0, batch.originalQty)
+          : batch.quantity;
+
+        final updated = batch.copyWith(
+          quantity: newQty,
+          notes: note != null && note.isNotEmpty
+            ? '${batch.notes} | $reason: $note'
+            : '${batch.notes} | $reason',
+        );
+
+        ProductBatch.updateBatch(batch.id, updated);
+        ok++;
+        debugPrint('[BULK-UPDATE] ✅ ${batch.batchNumber} → $reason (qty: ${batch.quantity}→$newQty)');
+      } catch (e) {
+        fail++;
+        debugPrint('[BULK-UPDATE] ❌ ${batch.batchNumber}: $e');
+      }
+    }
+
+    if (mounted) Navigator.pop(context); // close progress
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          '✅ Updated $ok batches'
+          '${fail > 0 ? " (❌ $fail failed)" : ""}'
+        ),
+        backgroundColor: fail > 0 ? Colors.orange : Colors.green,
+        duration: const Duration(seconds: 3),
+      ));
+    }
+
+    _exitSelectionMode();
+    await _load(); // reload from DB
+  }
+
 }

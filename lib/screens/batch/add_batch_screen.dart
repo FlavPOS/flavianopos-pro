@@ -30,10 +30,6 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
   String? _productName;
   String? _productSku;
 
-  static const List<String> _reasons = [
-    'SOLD', 'RETURN TO VENDOR', 'DAMAGE',
-    'CHARGED TO EMPLOYEE', 'EXPIRED', 'CORRECTION', 'OTHER',
-  ];
 
   bool get _isEditing => widget.batch != null;
 
@@ -90,9 +86,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
     return '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
   }
 
-  void _genBatch() {
-    final now = DateTime.now();
-    final n = 'LOT-${now.year}-${now.millisecondsSinceEpoch.toString().substring(7)}';
+-${now.millisecondsSinceEpoch.toString().substring(7)}';
     setState(() => _batchCtrl.text = n);
   }
   Future<void> _save() async {
@@ -218,25 +212,74 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
         );
         if (_isEditing) {
           final old = widget.batch!;
-          final changes = <MapEntry<String, List<String>>>[];
-          void check(String field, String oldVal, String newVal) { if (oldVal != newVal) changes.add(MapEntry(field, [oldVal, newVal])); }
-          check("Batch #", old.batchNumber, batchNumber);
-          check("Quantity", old.quantity.toString(), qty.toString());
-          check("Cost Price", old.costPrice.toStringAsFixed(2), cost.toStringAsFixed(2));
-          check("Mfg Date", _fmtD(old.manufacturedDate), _fmtD(_mfgDate));
-          check("Expiry Date", _fmtD(old.expiryDate), _fmtD(_expDate));
-          check("Supplier", old.supplier, _supplierCtrl.text.trim());
-          check("Notes", old.notes, _notesCtrl.text.trim());
-          if (changes.isEmpty) { _snack("No changes detected"); return; }
-          final reason = await _showReasonDialog(changes);
+          // v1.0.41 — Always show reason dialog (removed no-changes blocker)
+          final reason = await _showReasonDialog([]);
           if (reason == null) return;
           final now = DateTime.now();
-          final logs = <BatchLog>[];
-          for (var i = 0; i < changes.length; i++) {
-            final c = changes[i];
-            logs.add(BatchLog(id: "LOG-${now.millisecondsSinceEpoch}-$i", batchId: batch.id, batchNumber: batchNumber, productName: _productName ?? "", productSku: _productSku ?? "", action: "Updated", reason: reason, field: c.key, oldValue: c.value[0], newValue: c.value[1], dateTime: now));
+
+          // Branch by action reason
+          ProductBatch finalBatch;
+          if (reason == 'CHANGE QTY') {
+            // Just update qty from form
+            finalBatch = batch;
+          } else {
+            // ALREADY RETURNED / SOLD / ADJUSTED — close batch
+            final statusMap = {
+              'ALREADY RETURNED': 'RETURNED',
+              'ALREADY SOLD': 'SOLD',
+              'ALREADY ADJUSTED': 'ADJUSTED',
+            };
+            final newStatus = statusMap[reason] ?? 'CLOSED';
+            finalBatch = ProductBatch(
+              id: batch.id,
+              productId: batch.productId,
+              productName: batch.productName,
+              productSku: batch.productSku,
+              batchNumber: batch.batchNumber,
+              lotNumber: batch.lotNumber,
+              manufacturedDate: batch.manufacturedDate,
+              expiryDate: batch.expiryDate,
+              quantity: 0,
+              originalQty: batch.originalQty,
+              costPrice: batch.costPrice,
+              supplier: batch.supplier,
+              notes: '${batch.notes} | Marked as $reason on ${_fmtD(now)}'.trim(),
+              dateAdded: batch.dateAdded,
+              branchId: batch.branchId,
+              branchName: batch.branchName,
+              source: batch.source,
+              sourceDocId: batch.sourceDocId,
+              status: newStatus,
+            );
           }
-          try { await BatchLogStorage.saveLogs(logs); } catch (_) {}
+
+          // Log the action
+          try {
+            await BatchLogStorage.saveLogs([BatchLog(
+              id: "LOG-${now.millisecondsSinceEpoch}",
+              batchId: batch.id,
+              batchNumber: batchNumber,
+              productName: _productName ?? "",
+              productSku: _productSku ?? "",
+              action: reason == 'CHANGE QTY' ? 'Qty Changed' : 'Batch Closed',
+              reason: reason,
+              field: reason,
+              oldValue: 'Qty: ${old.quantity}, Status: ${old.status}',
+              newValue: 'Qty: ${finalBatch.quantity}, Status: ${finalBatch.status}',
+              dateTime: now,
+            )]);
+          } catch (_) {}
+
+          // Update in DB + Firebase
+          debugPrint('[UPDATE-BATCH] Reason: $reason, newStatus: ${finalBatch.status}');
+          ProductBatch.updateBatch(batch.id, finalBatch);
+          debugPrint('[UPDATE-BATCH] ✅ Batch ${batch.batchNumber} updated');
+
+          if (mounted) {
+            _snack('✅ Batch updated: $reason');
+            Navigator.pop(context, finalBatch);
+          }
+          return;
         } else {
           final now = DateTime.now();
           // ═══ CRITICAL FIX: Actually save the new batch! ═══
@@ -246,84 +289,98 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
           try { await BatchLogStorage.saveLogs([BatchLog(id: "LOG-${now.millisecondsSinceEpoch}", batchId: batch.id, batchNumber: batchNumber, productName: _productName ?? "", productSku: _productSku ?? "", action: "Created", reason: "New Batch", field: "New Batch", oldValue: "", newValue: "Qty: $qty, Cost: ${cost.toStringAsFixed(2)}", dateTime: now)]); } catch (_) {}
         }
         
-        // Also handle _isEditing updates
-        if (_isEditing) {
-          debugPrint('[ADD-BATCH] Calling ProductBatch.updateBatch...');
-          ProductBatch.updateBatch(batch.id, batch);
-          debugPrint('[ADD-BATCH] ✅ Updated');
-        }
-        
+        // v1.0.41 — Edit branch handles its own navigation above
         if (mounted) Navigator.pop(context, batch);
       } catch (e) { _snack("Save error: $e"); }
     }
   }
   Future<String?> _showReasonDialog(List<MapEntry<String, List<String>>> changes) async {
-    String selectedReason = _reasons[0];
-    final customCtrl = TextEditingController();
-    bool isOther = false;
-
+    // v1.0.41 — 4 action cards (CHANGE QTY / RETURNED / SOLD / ADJUSTED)
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(children: [
-            Icon(Icons.edit_note, color: Colors.teal[700], size: 28),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Reason for Update', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-          ]),
-          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Changes (${changes.length}):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue[800])),
-                const SizedBox(height: 4),
-                ...changes.map((c) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(children: [
-                    Icon(Icons.arrow_right, size: 16, color: Colors.blue[600]),
-                    Text('${c.key}: ', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                    Flexible(child: Text('${c.value[0]} \u2192 ${c.value[1]}', style: TextStyle(fontSize: 11, color: Colors.grey[700]))),
-                  ]),
-                )),
-              ]),
-            ),
-            const SizedBox(height: 16),
-            const Align(alignment: Alignment.centerLeft, child: Text('Select Reason:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
-            const SizedBox(height: 8),
-            ...(_reasons.map((r) => RadioListTile<String>(
-              value: r, groupValue: selectedReason, dense: true, visualDensity: VisualDensity.compact,
-              activeColor: Colors.teal[700],
-              title: Text(r, style: const TextStyle(fontSize: 13)),
-              onChanged: (v) => setDlgState(() { selectedReason = v!; isOther = v == 'OTHER'; }),
-            ))),
-            if (isOther) ...[
-              const SizedBox(height: 8),
-              TextField(
-                controller: customCtrl, autofocus: true,
-                decoration: InputDecoration(
-                  hintText: 'Enter custom reason...', isDense: true,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.edit_note, color: Colors.teal[700], size: 28),
+          const SizedBox(width: 10),
+          Expanded(child: Text(
+            'Update Batch #${widget.batch?.batchNumber ?? ""}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          )),
+        ]),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Choose action:',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF6B7280))),
               ),
-            ],
-          ])),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel')),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text('Confirm Update'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              onPressed: () {
-                final reason = isOther ? (customCtrl.text.trim().isEmpty ? 'OTHER' : customCtrl.text.trim().toUpperCase()) : selectedReason;
-                Navigator.pop(ctx, reason);
-              },
-            ),
-          ],
+              const SizedBox(height: 12),
+              _actionCard(ctx, 'CHANGE QTY', 'Update quantity only',
+                Icons.edit_note, Colors.teal),
+              const SizedBox(height: 8),
+              _actionCard(ctx, 'ALREADY RETURNED', 'Returned to vendor',
+                Icons.assignment_return, Colors.blue),
+              const SizedBox(height: 8),
+              _actionCard(ctx, 'ALREADY SOLD', 'All units sold',
+                Icons.point_of_sale, Colors.green),
+              const SizedBox(height: 8),
+              _actionCard(ctx, 'ALREADY ADJUSTED', 'Stock adjusted',
+                Icons.build, Colors.purple),
+            ]),
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionCard(BuildContext ctx, String code, String subtitle,
+      IconData icon, MaterialColor color) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, code),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.shade200, width: 1.5),
+        ),
+        child: Row(children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: color.shade100,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color.shade700, size: 24),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(code, style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.bold,
+                color: color.shade900,
+              )),
+              const SizedBox(height: 2),
+              Text(subtitle, style: TextStyle(
+                fontSize: 12, color: color.shade700,
+              )),
+            ],
+          )),
+          Icon(Icons.chevron_right, color: color.shade400),
+        ]),
       ),
     );
   }
@@ -490,18 +547,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.teal[700], foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
-            if (_isEditing) ...[
-              const SizedBox(height: 12),
-              SizedBox(width: double.infinity, height: 44,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.history),
-                  label: const Text('VIEW UPDATE LOGS', style: TextStyle(fontWeight: FontWeight.w600)),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.teal[700],
-                    side: BorderSide(color: Colors.teal[700]!, width: 1.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => BatchLogScreen(filterBatchId: widget.batch!.id, filterBatchNumber: widget.batch!.batchNumber))))),
-            ],
+
           ]),
         ),
       ),
