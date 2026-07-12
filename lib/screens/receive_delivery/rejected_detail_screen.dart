@@ -532,7 +532,7 @@ class _SkuAccordionRow extends StatelessWidget {
                       Icon(Icons.qr_code, size: 12, color: _muted),
                       const SizedBox(width: 4),
                       Text(
-                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber),
+                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber) + (b.lotNumber.isNotEmpty ? ' · Lot #' + b.lotNumber : ''),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ]),

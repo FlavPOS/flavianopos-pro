@@ -24,11 +24,12 @@ class ReceiveDeliveryScreen extends StatefulWidget {
 
 class _BatchEntry {
   final batchCtrl = TextEditingController();
+  final lotCtrl = TextEditingController();
   final qtyCtrl = TextEditingController();
   DateTime? mfgDate;
   DateTime? expDate;
   int get qty => int.tryParse(qtyCtrl.text) ?? 0;
-  void dispose() { batchCtrl.dispose(); qtyCtrl.dispose(); }
+  void dispose() { batchCtrl.dispose(); lotCtrl.dispose(); qtyCtrl.dispose(); }
 }
 
 class _DeliveryItem {
@@ -147,6 +148,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       if (itemRec.batchNumber.isNotEmpty) {
         final batch = _BatchEntry();
         batch.batchCtrl.text = itemRec.batchNumber;
+        batch.lotCtrl.text = itemRec.lotNumber;
         batch.qtyCtrl.text = itemRec.quantity.toString();
         try {
           if (itemRec.mfgDate.isNotEmpty) batch.mfgDate = DateTime.parse(itemRec.mfgDate);
@@ -326,7 +328,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
   Future<void> _showBatchPopup(int itemIndex) async {
     final item = _items[itemIndex];
     final List<_BatchEntry> workingBatches = [];
-    for (final b in item.batches) { final copy = _BatchEntry(); copy.batchCtrl.text = b.batchCtrl.text; copy.qtyCtrl.text = b.qtyCtrl.text; copy.mfgDate = b.mfgDate; copy.expDate = b.expDate; workingBatches.add(copy); }
+    for (final b in item.batches) { final copy = _BatchEntry(); copy.batchCtrl.text = b.batchCtrl.text; copy.lotCtrl.text = b.lotCtrl.text; copy.qtyCtrl.text = b.qtyCtrl.text; copy.mfgDate = b.mfgDate; copy.expDate = b.expDate; workingBatches.add(copy); }
     if (workingBatches.isEmpty) workingBatches.add(_BatchEntry());
     final result = await showDialog<List<_BatchEntry>>(context: context, barrierDismissible: false,
       builder: (ctx) => _BatchPopupDialog(productName: item.product.name, productSku: item.product.sku, batches: workingBatches));
@@ -341,6 +343,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
       if (item.batches.isEmpty || item.totalBatchQty <= 0) { _snack('${item.product.name}: Please add batch details'); return; }
       for (final b in item.batches) {
         if (b.batchCtrl.text.trim().isEmpty) { _snack('${item.product.name}: Batch number required'); return; }
+        if (b.lotCtrl.text.trim().isEmpty) { _snack('${item.product.name}: Lot number required for batch ${b.batchCtrl.text}'); return; }
         if (b.mfgDate == null || b.expDate == null) { _snack('${item.product.name}: MFG and EXP dates required for batch ${b.batchCtrl.text}'); return; }
         if (b.expDate!.isBefore(b.mfgDate!)) { _snack('${item.product.name}: EXP cannot be before MFG'); return; }
         if (b.qty <= 0) { _snack('${item.product.name}: Batch ${b.batchCtrl.text} qty must be > 0'); return; }
@@ -374,7 +377,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             // ═══ END PHASE B2 ═══
             for (final be in item.batches) {
               if (be.qty <= 0) continue;
-              recs.add(DeliveryItemRecord(productId: old.id, itemName: old.name, sku: old.sku, quantity: be.qty, oldStock: old.stockQty, newStock: ns, cost: old.costPrice, retail: old.sellingPrice, batchNumber: be.batchCtrl.text.trim(), mfgDate: be.mfgDate != null ? _fmtDateISO(be.mfgDate!) : '', expDate: be.expDate != null ? _fmtDateISO(be.expDate!) : ''));
+              recs.add(DeliveryItemRecord(productId: old.id, itemName: old.name, sku: old.sku, quantity: be.qty, oldStock: old.stockQty, newStock: ns, cost: old.costPrice, retail: old.sellingPrice, batchNumber: be.batchCtrl.text.trim(), lotNumber: be.lotCtrl.text.trim(), mfgDate: be.mfgDate != null ? _fmtDateISO(be.mfgDate!) : '', expDate: be.expDate != null ? _fmtDateISO(be.expDate!) : ''));
             }
             updated[idx] = Product(id: old.id, sku: old.sku, name: old.name, category: old.category, unit: old.unit, costPrice: old.costPrice, sellingPrice: old.sellingPrice, stockQty: ns, reorderLevel: old.reorderLevel, barcode: old.barcode, imagePath: old.imagePath, imageUrl: old.imageUrl);
           }
@@ -384,7 +387,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             final existingIdx = ProductBatch.allBatches.indexWhere((b) => b.productId == item.product.id && b.batchNumber == batchNum);
             if (existingIdx >= 0) { final existing = ProductBatch.allBatches[existingIdx]; ProductBatch.updateBatch(existing.id, existing.copyWith(quantity: existing.quantity + be.qty)); }
             else { final batchId = 'B-${now.millisecondsSinceEpoch}-${item.product.id}-$batchNum';
-              ProductBatch.addBatch(ProductBatch(id: batchId, productId: item.product.id, productName: item.product.name, productSku: item.product.sku, batchNumber: batchNum, manufacturedDate: be.mfgDate!, expiryDate: be.expDate!, quantity: be.qty, originalQty: be.qty, costPrice: item.product.costPrice, supplier: _supplierCtrl.text.trim(), notes: 'DR# $refNumber', dateAdded: now)); }
+              ProductBatch.addBatch(ProductBatch(id: batchId, productId: item.product.id, productName: item.product.name, productSku: item.product.sku, batchNumber: batchNum, lotNumber: be.lotCtrl.text.trim(), manufacturedDate: be.mfgDate!, expiryDate: be.expDate!, quantity: be.qty, originalQty: be.qty, costPrice: item.product.costPrice, supplier: _supplierCtrl.text.trim(), notes: 'DR# $refNumber', dateAdded: now)); }
           }
         }
       }
@@ -839,7 +842,7 @@ class _ReceiveDeliveryScreenState extends State<ReceiveDeliveryScreen> {
             children: [
               _pdfTableCell(''),
               _pdfTableCell(
-                '   Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}    MFG: ${b.mfgDate.isEmpty ? "-" : b.mfgDate}    EXP: ${b.expDate.isEmpty ? "-" : b.expDate}',
+                '   Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}    Lot: ${b.lotNumber.isEmpty ? "-" : b.lotNumber}    MFG: ${b.mfgDate.isEmpty ? "-" : b.mfgDate}    EXP: ${b.expDate.isEmpty ? "-" : b.expDate}',
               ),
               _pdfTableCell(_fmtMoney(b.quantity.toDouble()), align: pw.Alignment.centerRight),
               _pdfTableCell(b.retail.toStringAsFixed(2), align: pw.Alignment.centerRight),
@@ -1602,6 +1605,21 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                         ),
                       );
+                      // v1.0.45 — Lot Number (REQUIRED)
+                      final lotField = TextField(
+                        controller: b.lotCtrl,
+                        style: const TextStyle(fontSize: 13),
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          labelText: 'Lot Number *',
+                          hintText: 'e.g., LOT-2026-001',
+                          hintStyle: const TextStyle(fontSize: 11, color: Colors.grey),
+                          isDense: true,
+                          prefixIcon: const Icon(Icons.qr_code_2, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                        ),
+                      );
                       final qtyField = TextField(
                         controller: b.qtyCtrl,
                         keyboardType: TextInputType.number,
@@ -1683,18 +1701,24 @@ class _BatchPopupDialogState extends State<_BatchPopupDialog> {
                           ),
                           const SizedBox(height: 8),
                           // All 4 fields (responsive: 1 row on big screen, stacked on small)
-                          if (isWide)
+                          if (isWide) ...[
                             Row(children: [
                               Expanded(flex: 3, child: batchField),
                               const SizedBox(width: 8),
+                              Expanded(flex: 3, child: lotField),
+                              const SizedBox(width: 8),
                               Expanded(flex: 2, child: qtyField),
+                            ]),
+                            const SizedBox(height: 8),
+                            Row(children: [
+                              Expanded(child: mfgField),
                               const SizedBox(width: 8),
-                              Expanded(flex: 3, child: mfgField),
-                              const SizedBox(width: 8),
-                              Expanded(flex: 3, child: expField),
-                            ])
-                          else ...[
+                              Expanded(child: expField),
+                            ]),
+                          ] else ...[
                             batchField,
+                            const SizedBox(height: 8),
+                            lotField,
                             const SizedBox(height: 8),
                             qtyField,
                             const SizedBox(height: 8),

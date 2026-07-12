@@ -90,7 +90,7 @@ class _ApprovedDetailScreenState extends State<ApprovedDetailScreen> {
         String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
         rows.add(pw.TableRow(children: [
           _pC(''),
-          _pC('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
+          _pC('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   Lot: ${b.lotNumber.isEmpty ? "-" : b.lotNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
           _pC(_int.format(b.quantity), align: pw.Alignment.centerRight, size: 9),
           _pC(_money(b.retail), align: pw.Alignment.centerRight, size: 9),
           _pC(_money(line), align: pw.Alignment.centerRight, size: 9),
@@ -701,7 +701,7 @@ class _SkuAccordionRow extends StatelessWidget {
                       Icon(Icons.qr_code, size: 12, color: _muted),
                       const SizedBox(width: 4),
                       Text(
-                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber),
+                        'Batch #' + (b.batchNumber.isEmpty ? '-' : b.batchNumber) + (b.lotNumber.isNotEmpty ? ' · Lot #' + b.lotNumber : ''),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ]),

@@ -86,9 +86,6 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
     return '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
   }
 
--${now.millisecondsSinceEpoch.toString().substring(7)}';
-    setState(() => _batchCtrl.text = n);
-  }
   Future<void> _save() async {
     if (_formKey.currentState!.validate()) {
       try {

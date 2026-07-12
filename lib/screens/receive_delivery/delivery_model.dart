@@ -19,6 +19,7 @@ class DeliveryItemRecord {
   final double cost;
   final double retail;
   final String batchNumber;
+  final String lotNumber;
   final String mfgDate;
   final String expDate;
 
@@ -26,14 +27,14 @@ class DeliveryItemRecord {
     required this.productId, required this.itemName, required this.sku,
     required this.quantity, required this.oldStock, required this.newStock,
     required this.cost, required this.retail,
-    this.batchNumber = '', this.mfgDate = '', this.expDate = '',
+    this.batchNumber = '', this.lotNumber = '', this.mfgDate = '', this.expDate = '',
   });
 
   Map<String, dynamic> toJson() => {
     'productId': productId, 'itemName': itemName, 'sku': sku,
     'quantity': quantity, 'oldStock': oldStock, 'newStock': newStock,
     'cost': cost, 'retail': retail,
-    'batchNumber': batchNumber, 'mfgDate': mfgDate, 'expDate': expDate,
+    'batchNumber': batchNumber, 'lotNumber': lotNumber, 'mfgDate': mfgDate, 'expDate': expDate,
   };
 
   factory DeliveryItemRecord.fromJson(Map<String, dynamic> json) => DeliveryItemRecord(
@@ -42,7 +43,7 @@ class DeliveryItemRecord {
     oldStock: json['oldStock'] ?? 0, newStock: json['newStock'] ?? 0,
     cost: (json['cost'] as num?)?.toDouble() ?? 0.0,
     retail: (json['retail'] as num?)?.toDouble() ?? 0.0,
-    batchNumber: json['batchNumber'] ?? '', mfgDate: json['mfgDate'] ?? '',
+    batchNumber: json['batchNumber'] ?? '', lotNumber: json['lotNumber'] ?? '', mfgDate: json['mfgDate'] ?? '',
     expDate: json['expDate'] ?? '',
   );
 

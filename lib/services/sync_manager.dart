@@ -1183,6 +1183,7 @@ class SyncManager {
                   'cost': (im['cost'] ?? im['unitCost'] as num?)?.toDouble() ?? 0.0,
                   'retail': (im['retail'] ?? im['unitRetail'] as num?)?.toDouble() ?? 0.0,
                   'batchNumber': (im['batchNumber'] ?? '').toString(),
+                  'lotNumber': (im['lotNumber'] ?? '').toString(),
                   'mfgDate': (im['mfgDate'] ?? '').toString(),
                   'expDate': (im['expDate'] ?? '').toString(),
                 });

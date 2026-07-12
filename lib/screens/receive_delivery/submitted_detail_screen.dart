@@ -231,11 +231,11 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         
         if (mfg == null || exp == null) continue;
         
-        // Check duplicate
+        // Check duplicate (v1.0.45 — now includes lot #)
         final existing = await ProductBatch.findExistingBatch(
           productId: item.productId,
           batchNumber: item.batchNumber.trim(),
-          lotNumber: '',
+          lotNumber: item.lotNumber.trim(),
           branchId: branchId,
         );
         
@@ -252,6 +252,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
             productName: item.itemName,
             productSku: item.sku,
             batchNumber: item.batchNumber.trim(),
+            lotNumber: item.lotNumber.trim(),
             manufacturedDate: mfg,
             expiryDate: exp,
             quantity: item.quantity,
@@ -540,7 +541,7 @@ class _SubmittedDetailScreenState extends State<SubmittedDetailScreen> {
         String exp = b.expDate.isEmpty ? '-' : b.expDate.split('T').first;
         tableRows.add(pw.TableRow(children: [
           _pCell(''),
-          _pCell('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
+          _pCell('    Batch: ${b.batchNumber.isEmpty ? "-" : b.batchNumber}   Lot: ${b.lotNumber.isEmpty ? "-" : b.lotNumber}   MFG: $mfg   EXP: $exp', size: 8, color: PdfColors.grey800),
           _pCell(_int.format(b.quantity), align: pw.Alignment.centerRight, size: 9),
           _pCell(_peso.format(b.retail).replaceAll("₱",""), align: pw.Alignment.centerRight, size: 9),
           _pCell(_peso.format(line).replaceAll("₱",""), align: pw.Alignment.centerRight, size: 9),
@@ -1243,8 +1244,10 @@ class _BatchTable extends StatelessWidget {
               Row(children: [
                 const Icon(Icons.qr_code, size: 12, color: _muted),
                 const SizedBox(width: 4),
-                Text('Batch #${b.batchNumber.isEmpty ? "-" : b.batchNumber}',
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(
+                  'Batch #${b.batchNumber.isEmpty ? "-" : b.batchNumber}${b.lotNumber.isNotEmpty ? " · Lot #${b.lotNumber}" : ""}',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
               ]),
               const SizedBox(height: 4),
               Row(children: [

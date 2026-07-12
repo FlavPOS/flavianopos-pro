@@ -86,6 +86,9 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN status TEXT DEFAULT 'Draft'"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN submittedDate TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN submittedBy TEXT DEFAULT ''"); } catch (_) {}
+
+    // v1.0.45 — Lot Number for delivery_items
+    try { await db.execute("ALTER TABLE delivery_items ADD COLUMN lotNumber TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN approvedDate TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN approvedBy TEXT DEFAULT ''"); } catch (_) {}
     try { await db.execute("ALTER TABLE delivery_records ADD COLUMN rejectedDate TEXT DEFAULT ''"); } catch (_) {}
@@ -569,7 +572,7 @@ try {
     itemName TEXT DEFAULT '', sku TEXT DEFAULT '',
     quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0,
     newStock INTEGER DEFAULT 0, cost REAL DEFAULT 0, retail REAL DEFAULT 0,
-    batchNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expDate TEXT DEFAULT '',
+    batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expDate TEXT DEFAULT '',
     FOREIGN KEY (deliveryId) REFERENCES delivery_records(id)
     )
     ''');
@@ -776,7 +779,7 @@ try {
       await db.execute('CREATE TABLE IF NOT EXISTS transfer_items (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, itemId TEXT DEFAULT \'\', itemCode TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', category TEXT DEFAULT \'\', unit TEXT DEFAULT \'pcs\', batchId TEXT DEFAULT \'\', batchNumber TEXT DEFAULT \'\', manufacturedDate TEXT, expiryDate TEXT, qtyTransferred INTEGER DEFAULT 0, qtyReceived INTEGER DEFAULT 0, cost REAL DEFAULT 0, remarks TEXT DEFAULT \'\', FOREIGN KEY (transferId) REFERENCES stock_transfers(id))');
       await db.execute('CREATE TABLE IF NOT EXISTS transfer_ledger (id TEXT PRIMARY KEY, transferId TEXT DEFAULT \'\', referenceNo TEXT DEFAULT \'\', itemId TEXT DEFAULT \'\', itemCode TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', batchId TEXT DEFAULT \'\', batchNumber TEXT DEFAULT \'\', branchId TEXT DEFAULT \'\', branchName TEXT DEFAULT \'\', movementType TEXT DEFAULT \'\', manufacturedDate TEXT, expiryDate TEXT, beginningBalance INTEGER DEFAULT 0, qtyIn INTEGER DEFAULT 0, qtyOut INTEGER DEFAULT 0, endingBalance INTEGER DEFAULT 0, cost REAL DEFAULT 0, user TEXT DEFAULT \'\', date TEXT NOT NULL, remarks TEXT DEFAULT \'\')');
       await db.execute('CREATE TABLE IF NOT EXISTS delivery_records (id TEXT PRIMARY KEY, refNumber TEXT DEFAULT \'\', supplier TEXT DEFAULT \'\', driverName TEXT DEFAULT \'\', plateNumber TEXT DEFAULT \'\', receivedBy TEXT DEFAULT \'\', notes TEXT DEFAULT \'\', totalItems INTEGER DEFAULT 0, totalQuantity INTEGER DEFAULT 0, totalCost REAL DEFAULT 0, totalRetail REAL DEFAULT 0, dateTime TEXT NOT NULL)');
-      await db.execute('CREATE TABLE IF NOT EXISTS delivery_items (id INTEGER PRIMARY KEY AUTOINCREMENT, deliveryId TEXT NOT NULL, productId TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', sku TEXT DEFAULT \'\', quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0, newStock INTEGER DEFAULT 0, cost REAL DEFAULT 0, retail REAL DEFAULT 0, FOREIGN KEY (deliveryId) REFERENCES delivery_records(id))');
+      await db.execute('CREATE TABLE IF NOT EXISTS delivery_items (id INTEGER PRIMARY KEY AUTOINCREMENT, deliveryId TEXT NOT NULL, productId TEXT DEFAULT \'\', itemName TEXT DEFAULT \'\', sku TEXT DEFAULT \'\', quantity INTEGER DEFAULT 0, oldStock INTEGER DEFAULT 0, newStock INTEGER DEFAULT 0, cost REAL DEFAULT 0, retail REAL DEFAULT 0, batchNumber TEXT DEFAULT \'\', lotNumber TEXT DEFAULT \'\', mfgDate TEXT DEFAULT \'\', expDate TEXT DEFAULT \'\', FOREIGN KEY (deliveryId) REFERENCES delivery_records(id))');
       await db.execute('CREATE TABLE IF NOT EXISTS discount_records (id INTEGER PRIMARY KEY AUTOINCREMENT, transactionId TEXT NOT NULL, dateTime TEXT NOT NULL, discountType TEXT DEFAULT \'\', customerName TEXT DEFAULT \'\', idNumber TEXT DEFAULT \'\', age INTEGER, discountPercentage REAL DEFAULT 0, fixedDiscount REAL DEFAULT 0, isPercentage INTEGER DEFAULT 1, totalGross REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, totalNet REAL DEFAULT 0, cashier TEXT DEFAULT \'\', branch TEXT DEFAULT \'\')');
       await db.execute('CREATE TABLE IF NOT EXISTS discount_items (id INTEGER PRIMARY KEY AUTOINCREMENT, discountRecordId INTEGER NOT NULL, itemName TEXT DEFAULT \'\', sku TEXT DEFAULT \'\', qty INTEGER DEFAULT 0, unitPrice REAL DEFAULT 0, grossAmount REAL DEFAULT 0, discountAmount REAL DEFAULT 0, netAmount REAL DEFAULT 0, FOREIGN KEY (discountRecordId) REFERENCES discount_records(id))');
 
