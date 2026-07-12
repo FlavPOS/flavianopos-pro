@@ -30,12 +30,6 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
   String? _productName;
   String? _productSku;
 
-  static const List<String> _reasons = [
-    'CHANGE QTY',
-    'ALREADY RETURNED',
-    'ALREADY SOLD',
-    'ALREADY ADJUSTED',
-  ];
 
   bool get _isEditing => widget.batch != null;
 
@@ -92,9 +86,7 @@ class _AddBatchScreenState extends State<AddBatchScreen> {
     return '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}/${d.year}';
   }
 
-  void _genBatch() {
-    final now = DateTime.now();
-    final n = 'LOT-${now.year}-${now.millisecondsSinceEpoch.toString().substring(7)}';
+-${now.millisecondsSinceEpoch.toString().substring(7)}';
     setState(() => _batchCtrl.text = n);
   }
   Future<void> _save() async {

@@ -4,6 +4,9 @@ import '../../models/batch_model.dart';
 import 'add_batch_screen.dart';
 import 'batch_log_screen.dart';
 import '../../utils/approver_pin_dialog.dart';
+import '../../utils/batch_excel_exporter.dart';
+import 'dart:html' as html;
+import 'dart:convert';
 import '../../widgets/bulk_reason_sheet.dart';
 
 /// Enterprise Batch List — matches modern SaaS design
@@ -658,21 +661,18 @@ class _BatchListScreenState extends State<BatchListScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.download_rounded),
-            tooltip: 'Export',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Export coming soon'), behavior: SnackBarBehavior.floating),
-              );
-            },
+            tooltip: 'Export to Excel',
+            onPressed: _exportToExcel,
           ),
-          IconButton(
-            icon: const Icon(Icons.history_rounded),
-            tooltip: 'Activity Log',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const BatchLogScreen()),
-            ),
-          ),
+          // v1.0.44 — Activity Log icon hidden (accessible via Batch Hub)
+          // IconButton(
+          //   icon: const Icon(Icons.history_rounded),
+          //   tooltip: 'Activity Log',
+          //   onPressed: () => Navigator.push(
+          //     context,
+          //     MaterialPageRoute(builder: (_) => const BatchLogScreen()),
+          //   ),
+          // ),
         ],
       ),
       body: _loading
@@ -833,6 +833,164 @@ class _BatchListScreenState extends State<BatchListScreen> {
       _selectionMode = false;
       _selectedBatchIds.clear();
     });
+  }
+
+
+  // ═══════════════════════════════════════════════════════
+  // v1.0.43 — Excel Export
+  // ═══════════════════════════════════════════════════════
+  Future<void> _exportToExcel() async {
+    final scope = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.download_rounded, color: _teal),
+          const SizedBox(width: 10),
+          const Text('Export to Excel', style: TextStyle(fontSize: 16)),
+        ]),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Choose scope:', style: TextStyle(fontSize: 13, color: _textSecondary)),
+              const SizedBox(height: 12),
+              _exportOption(ctx, 'ALL', 'All Batches (${_allBatches.length})',
+                'Complete inventory', Icons.inventory_2, _teal),
+              const SizedBox(height: 8),
+              if (_selectedBatchIds.isNotEmpty)
+                _exportOption(ctx, 'SELECTED', 'Selected Only (${_selectedBatchIds.length})',
+                  'Currently selected batches', Icons.check_box, Colors.blue),
+              if (_selectedBatchIds.isNotEmpty) const SizedBox(height: 8),
+              _exportOption(ctx, 'ACTIVE', 'Active Only',
+                'Fresh + Near Exp (excludes SOLD/RETURNED)', Icons.check_circle, _greenSoft),
+              const SizedBox(height: 8),
+              _exportOption(ctx, 'HISTORY', 'History (Closed)',
+                'SOLD / RETURNED / ADJUSTED', Icons.history, Colors.purple),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        ],
+      ),
+    );
+
+    if (scope == null || !mounted) return;
+
+    List<ProductBatch> batches;
+    switch (scope) {
+      case 'SELECTED':
+        batches = _allBatches.where((b) => _selectedBatchIds.contains(b.id)).toList();
+        break;
+      case 'ACTIVE':
+        batches = _allBatches.where((b) =>
+          b.status == 'ACTIVE' && !b.isExpired && b.quantity > 0).toList();
+        break;
+      case 'HISTORY':
+        batches = _allBatches.where((b) =>
+          b.status == 'SOLD' || b.status == 'RETURNED' || b.status == 'ADJUSTED').toList();
+        break;
+      case 'ALL':
+      default:
+        batches = List.from(_allBatches);
+    }
+
+    if (batches.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('No batches to export'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: _teal)),
+      );
+
+      final bytes = BatchExcelExporter.exportBatches(
+        batches: batches,
+        branchName: _branchId,
+        branchId: _branchId,
+        exportedBy: 'admin',
+      );
+
+      if (mounted) Navigator.pop(context);
+
+      final now = DateTime.now();
+      final ts = '${now.year}${now.month.toString().padLeft(2, "0")}${now.day.toString().padLeft(2, "0")}';
+      final filename = 'FlavPOS_Batches_${_branchId}_$ts.xlsx';
+
+      final base64Data = base64Encode(bytes);
+      final anchor = html.AnchorElement(
+        href: 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,$base64Data',
+      )
+        ..download = filename
+        ..style.display = 'none';
+      html.document.body?.append(anchor);
+      anchor.click();
+      anchor.remove();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✅ Exported ${batches.length} batches to $filename'),
+          backgroundColor: _greenSoft,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      debugPrint('[EXPORT] ✅ Downloaded $filename');
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('❌ Export failed: $e'),
+          backgroundColor: _redSoft,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+      debugPrint('[EXPORT] ❌ Error: $e');
+    }
+  }
+
+  Widget _exportOption(BuildContext ctx, String code, String title, String subtitle,
+      IconData icon, Color color) {
+    return InkWell(
+      onTap: () => Navigator.pop(ctx, code),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8))),
+            ],
+          )),
+          Icon(Icons.chevron_right, color: color, size: 20),
+        ]),
+      ),
+    );
   }
 
   void _selectAllVisible(List<ProductBatch> visible) {

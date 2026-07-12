@@ -66,3 +66,7 @@ for-codemagic-keystore.jks
 FLAVPOS-KEYSTORE*.jks
 FLAVPOS-KEYSTORE*.txt
 .firebase/
+
+# Patch backups (don't commit)
+*.backup
+*.backup-*
