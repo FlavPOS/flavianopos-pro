@@ -40,6 +40,7 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
   TransferV3? _doc;
   final List<_ReceiveItem> _items = [];
+  Map<String, List<TransferItemBatch>> _batchesByProduct = {}; // v1.0.54 — batches for PDF
   bool _loading = true;
   bool _actionInProgress = false;
 
@@ -61,6 +62,13 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
     setState(() => _loading = true);
     final d = await TransferV3Dao.getById(widget.transferId);
     final it = await TransferV3Dao.getItems(widget.transferId);
+    // v1.0.54 — Load batches for PDF batch list
+    final allBatches = await TransferV3Dao.getBatches(widget.transferId);
+    final batchMap = <String, List<TransferItemBatch>>{};
+    for (final b in allBatches) {
+      batchMap.putIfAbsent(b.productId, () => []).add(b);
+    }
+    debugPrint('[INBOUND-RECEIVE] Loaded ${allBatches.length} batches for ${widget.transferId}');
     if (!mounted) return;
 
     _items.clear();
@@ -74,6 +82,7 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
     setState(() {
       _doc = d;
+      _batchesByProduct = batchMap;
       _loading = false;
     });
   }
@@ -906,17 +915,69 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 _rc4H('Short'),
                 _rc4H('Retail Value'),
               ]),
-              ...pageItems.map((ri) {
-                final sh = ri.item.issuedQty - ri.receivedQty;
-                final retail = ri.receivedQty * ri.item.unitCost;
-                return pw.TableRow(children: [
-                  _rc4C(ri.item.sku),
-                  _rc4C(ri.item.productName),
-                  _rc4CR(ri.item.issuedQty.toString()),
-                  _rc4CR(ri.receivedQty.toString()),
-                  _rc4CR(sh > 0 ? sh.toString() : '-'),
-                  _rc4CR(retail.toStringAsFixed(2)),
-                ]);
+              ...pageItems.expand<pw.TableRow>((ri) {
+                final item = ri.item;
+                final batches = _batchesByProduct[item.productId] ?? [];
+                final rows = <pw.TableRow>[];
+
+                if (batches.isEmpty) {
+                  final sh = item.issuedQty - ri.receivedQty;
+                  final retail = ri.receivedQty * item.unitCost;
+                  rows.add(pw.TableRow(children: [
+                    _rc4C(item.sku),
+                    _rc4C(item.productName),
+                    _rc4CR(item.issuedQty.toString()),
+                    _rc4CR(ri.receivedQty.toString()),
+                    _rc4CR(sh > 0 ? sh.toString() : '-'),
+                    _rc4CR(retail.toStringAsFixed(2)),
+                  ]));
+                } else {
+                  // Product header row (bold)
+                  rows.add(pw.TableRow(children: [
+                    _rc4C(item.sku, bold: true),
+                    _rc4C(item.productName, bold: true),
+                    _rc4C(''),
+                    _rc4C(''),
+                    _rc4C(''),
+                    _rc4C(''),
+                  ]));
+
+                  int itemIssued = 0;
+                  double itemTotal = 0;
+                  for (final b in batches) {
+                    final bTotal = b.transferQty * b.unitCost;
+                    itemIssued += b.transferQty;
+                    itemTotal += bTotal;
+                    final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
+                    final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    rows.add(pw.TableRow(children: [
+                      _rc4C(''),
+                      _rc4C(info),
+                      _rc4CR(b.transferQty.toString()),
+                      _rc4CR(b.transferQty.toString()),
+                      _rc4CR('-'),
+                      _rc4CR(bTotal.toStringAsFixed(2)),
+                    ]));
+                  }
+
+                  // ITEM SUBTOTAL row (light-blue)
+                  final itemShort = itemIssued - ri.receivedQty;
+                  rows.add(pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
+                    ),
+                    children: [
+                      _rc4C(''),
+                      _rc4C('ITEM SUBTOTAL', bold: true),
+                      _rc4CR(itemIssued.toString(), bold: true),
+                      _rc4CR(ri.receivedQty.toString(), bold: true),
+                      _rc4CR(itemShort > 0 ? itemShort.toString() : '-', bold: true),
+                      _rc4CR(itemTotal.toStringAsFixed(2), bold: true),
+                    ],
+                  ));
+                }
+                return rows;
               }),
               if (currentPage == totalPagesCount)
                 pw.TableRow(children: [

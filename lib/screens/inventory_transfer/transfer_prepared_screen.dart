@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../widgets/transfer_batch_picker.dart';
+import '../../models/batch_model.dart';
 import '../../models/product_model.dart';
 import '../../models/branch_model.dart';
 import '../../services/device_assignment_service.dart';
@@ -95,6 +97,13 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
     final draft = await TransferV3Dao.getById(draftId);
     if (draft == null) return;
     final items = await TransferV3Dao.getItems(draftId);
+    // v1.0.49 — Load batches for each item
+    final allBatches = await TransferV3Dao.getBatches(draftId);
+    final batchMap = <String, List<TransferItemBatch>>{};
+    for (final b in allBatches) {
+      batchMap.putIfAbsent(b.productId, () => []).add(b);
+    }
+    debugPrint('[LOAD-DRAFT] Loaded ${allBatches.length} batches for $draftId');
     if (!mounted) return;
 
     // Set destination
@@ -119,11 +128,24 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
           sellingPrice: 0, stockQty: 0,
         );
       }
-      _items.add(_TrItem(
+      final item = _TrItem(
         product: prod,
         qtyCtrl: TextEditingController(text: di.issuedQty.toString()),
         qty: di.issuedQty,
-      ));
+      );
+      // v1.0.49 — Restore batches from DB
+      final savedBatches = batchMap[di.productId] ?? [];
+      item.batches = savedBatches.map((b) => TransferBatchPick(
+        batchId: b.batchId,
+        batchNumber: b.batchNumber,
+        lotNumber: b.lotNumber,
+        mfgDate: b.mfgDate,
+        expiryDate: b.expiryDate,
+        availableQty: b.transferQty,  // approximate
+        transferQty: b.transferQty,
+        unitCost: b.unitCost,
+      )).toList();
+      _items.add(item);
     }
     setState(() {});
   }
@@ -239,7 +261,55 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
         createdAt: now,
       )).toList();
 
-      await TransferV3Dao.save(header: header, items: items);
+      // v1.0.48 — Build batches from all items
+      final allBatches = <TransferItemBatch>[];
+      for (final trItem in _items) {
+        for (final bp in trItem.batches) {
+          allBatches.add(TransferItemBatch(
+            transferId: transferId,
+            productId: trItem.product.id,
+            batchId: bp.batchId,
+            batchNumber: bp.batchNumber,
+            lotNumber: bp.lotNumber,
+            mfgDate: bp.mfgDate,
+            expiryDate: bp.expiryDate,
+            transferQty: bp.transferQty,
+            unitCost: bp.unitCost,
+          ));
+        }
+      }
+      debugPrint('[TRANSFER-SUBMIT] Building batches...');
+      debugPrint('[TRANSFER-SAVE] Saving ${allBatches.length} batches for $transferId');
+      debugPrint('[TRANSFER-SUBMIT] Calling save with ${allBatches.length} batches');
+      await TransferV3Dao.save(header: header, items: items, batches: allBatches);
+      debugPrint('[TRANSFER-SUBMIT] Save complete');
+      
+      // v1.0.51 — Verify batches saved
+      final verifyBatches = await TransferV3Dao.getBatches(transferId);
+      debugPrint('[TRANSFER-VERIFY] After save: ${verifyBatches.length} batches in DB');
+
+      // v1.0.48 — Deduct qty from source batches
+      for (final trItem in _items) {
+        for (final bp in trItem.batches) {
+          try {
+            final srcBatch = ProductBatch.allBatches.firstWhere((b) => b.id == bp.batchId);
+            final newQty = srcBatch.quantity - bp.transferQty;
+            String newNotes = srcBatch.notes;
+            if (newQty <= 0) {
+              newNotes = '${srcBatch.notes} | Depleted via Transfer ${header.docNumber} to ${_selectedDestination!.name}';
+            } else {
+              newNotes = '${srcBatch.notes} | -${bp.transferQty} via ${header.docNumber}';
+            }
+            ProductBatch.updateBatch(srcBatch.id, srcBatch.copyWith(
+              quantity: newQty.clamp(0, srcBatch.originalQty),
+              notes: newNotes,
+            ));
+            debugPrint('[TRANSFER-BATCH] Deducted ${bp.transferQty} from ${srcBatch.batchNumber}');
+          } catch (e) {
+            debugPrint('[TRANSFER-BATCH] Deduct error: $e');
+          }
+        }
+      }
       
       // Upload to Firebase (DRAFT status) — enables cross-device visibility
       await _uploadTransferToFirebase(
@@ -283,8 +353,12 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
       return;
     }
 
-    // Validate qty > 0
+    // Validate qty > 0 and batches selected (v1.0.48)
     for (final item in _items) {
+      if (!item.hasBatches) {
+        _showSnack('Select batches for ${item.product.name}', color: _red);
+        return;
+      }
       if (item.qty <= 0) {
         _showSnack('Invalid qty for ${item.product.name}', color: _red);
         return;
@@ -373,7 +447,52 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
         createdAt: now,
       )).toList();
 
-      await TransferV3Dao.save(header: header, items: items);
+      // v1.0.52 — Build batches for submit path
+      final allBatches = <TransferItemBatch>[];
+      for (final trItem in _items) {
+        for (final bp in trItem.batches) {
+          allBatches.add(TransferItemBatch(
+            transferId: transferId,
+            productId: trItem.product.id,
+            batchId: bp.batchId,
+            batchNumber: bp.batchNumber,
+            lotNumber: bp.lotNumber,
+            mfgDate: bp.mfgDate,
+            expiryDate: bp.expiryDate,
+            transferQty: bp.transferQty,
+            unitCost: bp.unitCost,
+          ));
+        }
+      }
+      debugPrint('[SUBMIT] Saving ${allBatches.length} batches for $transferId');
+      await TransferV3Dao.save(header: header, items: items, batches: allBatches);
+      
+      // v1.0.52 — Verify batches saved
+      final verifyBatches = await TransferV3Dao.getBatches(transferId);
+      debugPrint('[SUBMIT-VERIFY] After save: ${verifyBatches.length} batches in DB');
+      
+      // v1.0.52 — Deduct qty from source batches
+      for (final trItem in _items) {
+        for (final bp in trItem.batches) {
+          try {
+            final srcBatch = ProductBatch.allBatches.firstWhere((b) => b.id == bp.batchId);
+            final newQty = srcBatch.quantity - bp.transferQty;
+            String newNotes = srcBatch.notes;
+            if (newQty <= 0) {
+              newNotes = '${srcBatch.notes} | Depleted via Transfer ${header.docNumber} to ${_selectedDestination!.name}';
+            } else {
+              newNotes = '${srcBatch.notes} | -${bp.transferQty} via ${header.docNumber}';
+            }
+            ProductBatch.updateBatch(srcBatch.id, srcBatch.copyWith(
+              quantity: newQty.clamp(0, srcBatch.originalQty),
+              notes: newNotes,
+            ));
+            debugPrint('[SUBMIT-BATCH] Deducted ${bp.transferQty} from ${srcBatch.batchNumber}');
+          } catch (e) {
+            debugPrint('[SUBMIT-BATCH] Deduct error: $e');
+          }
+        }
+      }
       
       // Upload to Firebase (SUBMITTED status) — enables approve on any device
       await _uploadTransferToFirebase(
@@ -396,6 +515,37 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       _showSnack('Submit failed: $e', color: _red);
+    }
+  }
+
+  // v1.0.48 — Open batch picker dialog for an item
+  Future<void> _openBatchPicker(_TrItem item) async {
+    await ProductBatch.loadFromDB(branchId: _fromBranchId);
+    final allBatches = ProductBatch.allBatches
+      .where((b) => b.productId == item.product.id && b.branchId == _fromBranchId)
+      .toList();
+
+    if (allBatches.isEmpty) {
+      _showSnack('No batches available for this product', color: _red);
+      return;
+    }
+
+    final result = await showDialog<List<TransferBatchPick>>(
+      context: context,
+      builder: (_) => TransferBatchPickerDialog(
+        productName: item.product.name,
+        productSku: item.product.sku,
+        availableBatches: allBatches,
+        initialSelections: item.batches,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        item.batches = result;
+        item.qty = item.batchTotal;
+        item.qtyCtrl.text = item.qty.toString();
+      });
     }
   }
 
@@ -723,6 +873,34 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
                   fontWeight: invalid ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
+              const Spacer(),
+              // v1.0.48 — Batch selector button
+              InkWell(
+                onTap: () => _openBatchPicker(item),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _purple.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _purple.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.qr_code_2, size: 12, color: _purple),
+                    const SizedBox(width: 4),
+                    Text(
+                      item.hasBatches
+                          ? 'Edit Batches (${item.batches.length})'
+                          : 'Select Batches',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _purple,
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
               if (invalid) ...[
                 const Spacer(),
                 Text(
@@ -871,6 +1049,20 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
         'issuedQty': i.issuedQty,
         'unitCost': i.unitCost,
       }).toList();
+
+      // v1.0.53 — Include batches in Firebase upload
+      final localBatches = await TransferV3Dao.getBatches(transferId);
+      final batchesPayload = localBatches.map((b) => {
+        'productId': b.productId,
+        'batchId': b.batchId,
+        'batchNumber': b.batchNumber,
+        'lotNumber': b.lotNumber,
+        'mfgDate': b.mfgDate.toIso8601String(),
+        'expiryDate': b.expiryDate.toIso8601String(),
+        'transferQty': b.transferQty,
+        'unitCost': b.unitCost,
+      }).toList();
+      debugPrint('[TRANSFER-FB] Uploading ${batchesPayload.length} batches with transfer');
       
       await fb.ref(
         'companies/$companyCode/interStoreTransfers/$transferId'
@@ -889,6 +1081,7 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
         'totalCost': header.totalCost,
         'notes': header.notes,
         'items': itemsPayload,
+        'batches': batchesPayload,  // v1.0.53
         'deviceId': deviceId,
         'createdAt': header.createdAt,
         'updatedAt': now,
@@ -902,6 +1095,11 @@ class _TransferPreparedScreenState extends State<TransferPreparedScreen> {
 }
 
 class _TrItem {
+  List<TransferBatchPick> batches = [];  // v1.0.48 — batch selections
+  int get batchTotal => batches.fold(0, (s, b) => s + b.transferQty);
+  bool get hasBatches => batches.isNotEmpty;
+
+
   final Product product;
   final TextEditingController qtyCtrl;
   int qty;

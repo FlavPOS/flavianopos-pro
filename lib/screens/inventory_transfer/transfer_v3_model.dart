@@ -190,6 +190,59 @@ class TransferV3 {
 }
 
 /// IST Line Item
+// v1.0.48 — Batch tracking for transfer items
+class TransferItemBatch {
+  final int? id;
+  final String transferId;
+  final String productId;
+  final String batchId;
+  final String batchNumber;
+  final String lotNumber;
+  final DateTime mfgDate;
+  final DateTime expiryDate;
+  final int transferQty;
+  final double unitCost;
+
+  const TransferItemBatch({
+    this.id,
+    required this.transferId,
+    required this.productId,
+    required this.batchId,
+    required this.batchNumber,
+    required this.lotNumber,
+    required this.mfgDate,
+    required this.expiryDate,
+    required this.transferQty,
+    required this.unitCost,
+  });
+
+  Map<String, dynamic> toMap() => {
+    if (id != null) 'id': id,
+    'transferId': transferId,
+    'productId': productId,
+    'batchId': batchId,
+    'batchNumber': batchNumber,
+    'lotNumber': lotNumber,
+    'mfgDate': mfgDate.toIso8601String(),
+    'expiryDate': expiryDate.toIso8601String(),
+    'transferQty': transferQty,
+    'unitCost': unitCost,
+  };
+
+  factory TransferItemBatch.fromMap(Map<String, dynamic> m) => TransferItemBatch(
+    id: m['id'] as int?,
+    transferId: (m['transferId'] ?? '').toString(),
+    productId: (m['productId'] ?? '').toString(),
+    batchId: (m['batchId'] ?? '').toString(),
+    batchNumber: (m['batchNumber'] ?? '').toString(),
+    lotNumber: (m['lotNumber'] ?? '').toString(),
+    mfgDate: DateTime.tryParse(m['mfgDate'] ?? '') ?? DateTime.now(),
+    expiryDate: DateTime.tryParse(m['expiryDate'] ?? '') ?? DateTime.now(),
+    transferQty: (m['transferQty'] as num?)?.toInt() ?? 0,
+    unitCost: (m['unitCost'] as num?)?.toDouble() ?? 0.0,
+  );
+}
+
 class TransferV3Item {
   final int? itemId;
   final String transferId;
@@ -264,6 +317,7 @@ class TransferV3Dao {
   static Future<String> save({
     required TransferV3 header,
     required List<TransferV3Item> items,
+    List<TransferItemBatch> batches = const [],
   }) async {
     final db = await DatabaseHelper().database;
     await db.transaction((txn) async {
@@ -273,6 +327,13 @@ class TransferV3Dao {
           where: 'transfer_id = ?', whereArgs: [header.transferId]);
       for (final item in items) {
         await txn.insert(_tItems, item.toMap());
+      }
+      // v1.0.48 — Save batches
+      await txn.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+      await txn.delete('transfer_item_batches',
+          where: 'transferId = ?', whereArgs: [header.transferId]);
+      for (final batch in batches) {
+        await txn.insert('transfer_item_batches', batch.toMap());
       }
     });
     return header.transferId;
@@ -398,5 +459,29 @@ class TransferV3Dao {
   static String generateId({required String fromBranch, required String toBranch}) {
     final ts = DateTime.now().millisecondsSinceEpoch;
     return 'IST-$fromBranch-$toBranch-$ts';
+  }
+
+  // v1.0.48 — Load all batches for a transfer
+  static Future<List<TransferItemBatch>> getBatches(String transferId) async {
+    final db = await DatabaseHelper().database;
+    try {
+      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+    } catch (_) {}
+    final rows = await db.query('transfer_item_batches',
+        where: 'transferId = ?', whereArgs: [transferId]);
+    return rows.map(TransferItemBatch.fromMap).toList();
+  }
+
+  // v1.0.48 — Load batches for specific product
+  static Future<List<TransferItemBatch>> getBatchesForItem(
+      String transferId, String productId) async {
+    final db = await DatabaseHelper().database;
+    try {
+      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+    } catch (_) {}
+    final rows = await db.query('transfer_item_batches',
+        where: 'transferId = ? AND productId = ?',
+        whereArgs: [transferId, productId]);
+    return rows.map(TransferItemBatch.fromMap).toList();
   }
 }

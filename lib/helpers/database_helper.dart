@@ -23,7 +23,7 @@ class DatabaseHelper {
   Future<Database> _initDB() async {
     final path = join(await getDatabasesPath(), 'quickpos_pro.db');
     return await openDatabase(
-      path, version: 15,
+      path, version: 16,
       onCreate: _createDB, onUpgrade: _upgradeDB,
       onConfigure: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
       onOpen: _ensureAllTables,
@@ -381,6 +381,9 @@ try {
   }
 
   Future<void> _createDB(Database db, int version) async {
+    // v1.0.48 — Transfer item batches (must exist before anything else)
+    await db.execute('CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT \'\', lotNumber TEXT DEFAULT \'\', mfgDate TEXT DEFAULT \'\', expiryDate TEXT DEFAULT \'\', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_tib_transfer ON transfer_item_batches(transferId)');
     // ── 1. products ──
     await db.execute('''
     CREATE TABLE products (
@@ -996,6 +999,17 @@ try {
     if (oldVersion < 7) {
       await db.execute('CREATE TABLE IF NOT EXISTS adjustment_reasons (id TEXT PRIMARY KEY, label TEXT NOT NULL, type TEXT NOT NULL, iconName TEXT DEFAULT "edit", isDefault INTEGER DEFAULT 0, isActive INTEGER DEFAULT 1, sortOrder INTEGER DEFAULT 0, dateCreated TEXT NOT NULL)');
       await _seedDefaultReasons(db);
+    }
+
+    // v1.0.48 — Version 16: Add transfer_item_batches for existing DBs
+    if (oldVersion < 16) {
+      try {
+        await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_tib_transfer ON transfer_item_batches(transferId)");
+        print('[DB-MIGRATION] v16: transfer_item_batches ready');
+      } catch (e) {
+        print('[DB-MIGRATION] v16 error');
+      }
     }
   }
 

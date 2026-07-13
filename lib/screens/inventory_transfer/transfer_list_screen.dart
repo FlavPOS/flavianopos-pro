@@ -199,6 +199,13 @@ class _TransferListScreenState extends State<TransferListScreen> {
 
   Future<void> _showDetailsSheet(TransferV3 doc) async {
     final items = await TransferV3Dao.getItems(doc.transferId);
+    // v1.0.49 — Load batches for expandable display
+    final allBatches = await TransferV3Dao.getBatches(doc.transferId);
+    final batchMap = <String, List<TransferItemBatch>>{};
+    for (final b in allBatches) {
+      batchMap.putIfAbsent(b.productId, () => []).add(b);
+    }
+    debugPrint('[LIST-VIEW] Loaded ${allBatches.length} batches for ${doc.transferId}');
     if (!mounted) return;
     // Full-screen dialog (better UX than bottom sheet)
     await Navigator.of(context).push(
@@ -273,55 +280,14 @@ class _TransferListScreenState extends State<TransferListScreen> {
                     itemCount: items.length,
                     itemBuilder: (context, index) {
                       final item = items[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _card,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: _divider),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.productName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600, fontSize: 13),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis),
-                                  Text('SKU: ${item.sku}',
-                                      style: const TextStyle(
-                                          color: _textSecondary, fontSize: 11)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: widget.themeColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text('${item.issuedQty}',
-                                      style: TextStyle(
-                                          color: widget.themeColor,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.bold)),
-                                ),
-                                const SizedBox(height: 2),
-                                Text('pcs',
-                                    style: const TextStyle(
-                                        color: _textSecondary, fontSize: 10)),
-                              ],
-                            ),
-                          ],
-                        ),
+                      // v1.0.49 — Expandable batch card
+                      final itemBatches = batchMap[item.productId] ?? [];
+                      return _ExpandableItemCard(
+                        productName: item.productName,
+                        sku: item.sku,
+                        issuedQty: item.issuedQty,
+                        themeColor: widget.themeColor,
+                        batches: itemBatches,
                       );
                     },
                   ),
@@ -1254,3 +1220,284 @@ class _TransferListScreenState extends State<TransferListScreen> {
     }
   }
 }
+
+// v1.0.49 — Expandable card showing batches
+class _ExpandableItemCard extends StatefulWidget {
+  final String productName;
+  final String sku;
+  final int issuedQty;
+  final Color themeColor;
+  final List<TransferItemBatch> batches;
+
+  const _ExpandableItemCard({
+    required this.productName,
+    required this.sku,
+    required this.issuedQty,
+    required this.themeColor,
+    required this.batches,
+  });
+
+  @override
+  State<_ExpandableItemCard> createState() => _ExpandableItemCardState();
+}
+
+class _ExpandableItemCardState extends State<_ExpandableItemCard> {
+  static const _card = Color(0xFFFFFFFF);
+  static const _divider = Color(0xFFE5E7EB);
+  static const _textSecondary = Color(0xFF6B7280);
+  bool _expanded = false;
+
+  // v1.0.50 — Show batches in full popup dialog on long-press
+  Future<void> _showBatchesDialog(BuildContext ctx0) async {
+    await showDialog(
+      context: ctx0,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 500,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: widget.themeColor,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.qr_code_2, color: Colors.white),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.productName,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text('SKU: ${widget.sku}',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    ],
+                  )),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${widget.issuedQty}',
+                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text('pcs', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                    ],
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ]),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: widget.themeColor.withValues(alpha: 0.08),
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(children: [
+                  Icon(Icons.inventory_2, size: 16, color: widget.themeColor),
+                  const SizedBox(width: 8),
+                  Text('${widget.batches.length} ${widget.batches.length == 1 ? "batch" : "batches"} selected',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: widget.themeColor)),
+                ]),
+              ),
+              Flexible(child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                shrinkWrap: true,
+                itemCount: widget.batches.length,
+                itemBuilder: (context, i) {
+                  final b = widget.batches[i];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: widget.themeColor.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: widget.themeColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(Icons.qr_code_2, size: 14, color: widget.themeColor),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(
+                            'Batch #${b.batchNumber}${b.lotNumber.isNotEmpty ? " · Lot #${b.lotNumber}" : ""}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          )),
+                        ]),
+                        const SizedBox(height: 10),
+                        Row(children: [
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                              Text('${b.transferQty} pcs',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: widget.themeColor)),
+                            ],
+                          )),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('MFG', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                              Text('${b.mfgDate.year}-${b.mfgDate.month.toString().padLeft(2, '0')}-${b.mfgDate.day.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(fontSize: 13)),
+                            ],
+                          )),
+                          Expanded(child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('EXP', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                              Text('${b.expiryDate.year}-${b.expiryDate.month.toString().padLeft(2, '0')}-${b.expiryDate.day.toString().padLeft(2, '0')}',
+                                  style: const TextStyle(fontSize: 13)),
+                            ],
+                          )),
+                        ]),
+                      ],
+                    ),
+                  );
+                },
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBatches = widget.batches.isNotEmpty;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: hasBatches ? () => setState(() => _expanded = !_expanded) : null,
+            onLongPress: hasBatches ? () => _showBatchesDialog(context) : null,  // v1.0.50
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(widget.productName,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text('SKU: ${widget.sku}',
+                            style: const TextStyle(color: _textSecondary, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: widget.themeColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text('${widget.issuedQty}',
+                            style: TextStyle(color: widget.themeColor, fontSize: 15, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text('pcs', style: TextStyle(color: _textSecondary, fontSize: 10)),
+                    ],
+                  ),
+                  if (hasBatches) ...[
+                    const SizedBox(width: 6),
+                    Icon(_expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                        color: widget.themeColor),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (_expanded && hasBatches)
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                children: widget.batches.map((b) => Container(
+                  margin: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.qr_code_2, size: 14, color: Colors.grey.shade600),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(
+                          'Batch #${b.batchNumber}${b.lotNumber.isNotEmpty ? " · Lot #${b.lotNumber}" : ""}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        )),
+                      ]),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                            Text('${b.transferQty} pcs',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: widget.themeColor)),
+                          ],
+                        )),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('MFG', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                            Text('${b.mfgDate.year}-${b.mfgDate.month.toString().padLeft(2, '0')}-${b.mfgDate.day.toString().padLeft(2, '0')}',
+                              style: const TextStyle(fontSize: 12)),
+                          ],
+                        )),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('EXP', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                            Text('${b.expiryDate.year}-${b.expiryDate.month.toString().padLeft(2, '0')}-${b.expiryDate.day.toString().padLeft(2, '0')}',
+                              style: const TextStyle(fontSize: 12)),
+                          ],
+                        )),
+                      ]),
+                    ],
+                  ),
+                )).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+

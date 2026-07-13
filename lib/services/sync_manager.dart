@@ -1043,6 +1043,35 @@ class SyncManager {
         }
       }
 
+      // v1.0.53 — Sync batches from Firebase
+      try {
+        final batches = m['batches'];
+        if (batches is List) {
+          await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+          await db.delete('transfer_item_batches',
+              where: 'transferId = ?', whereArgs: [transferId]);
+          for (final b in batches) {
+            if (b is Map) {
+              final bm = b.map((k, v) => MapEntry(k.toString(), v));
+              await db.insert('transfer_item_batches', {
+                'transferId': transferId,
+                'productId': (bm['productId'] ?? '').toString(),
+                'batchId': (bm['batchId'] ?? '').toString(),
+                'batchNumber': (bm['batchNumber'] ?? '').toString(),
+                'lotNumber': (bm['lotNumber'] ?? '').toString(),
+                'mfgDate': (bm['mfgDate'] ?? '').toString(),
+                'expiryDate': (bm['expiryDate'] ?? '').toString(),
+                'transferQty': (bm['transferQty'] as num?)?.toInt() ?? 0,
+                'unitCost': (bm['unitCost'] as num?)?.toDouble() ?? 0,
+              });
+            }
+          }
+          if (kDebugMode) debugPrint('[SYNC-BATCHES] Synced ${batches.length} batches for $transferId');
+        }
+      } catch (e) {
+        if (kDebugMode) debugPrint('[SYNC-BATCHES] Error: $e');
+      }
+
       if (kDebugMode) debugPrint('[SYNC-TRANSFER] $transferId synced');
       _showSnackBar?.call('🔄 Transfer synced from another device');
     } catch (e) {
