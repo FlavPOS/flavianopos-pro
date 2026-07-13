@@ -883,16 +883,28 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   int itemQty = 0;
                   double itemTotal = 0;
                   for (final b in batches) {
-                    final bTotal = b.transferQty * b.unitCost;
-                    itemQty += b.transferQty;
+                    // v1.0.57+109 — Show received qty when variance recorded
+                    final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
+                    final qtyToShow = hasVariance ? b.receivedQty : b.transferQty;
+                    final bTotal = qtyToShow * b.unitCost;
+                    itemQty += qtyToShow;
                     itemTotal += bTotal;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    String varSuffix = '';
+                    if (hasVariance) {
+                      final variance = b.receivedQty - b.transferQty;
+                      varSuffix = variance < 0
+                          ? '  |  Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                          : variance > 0
+                              ? '  |  Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                              : '';
+                    }
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
                     rows.add(pw.TableRow(children: [
                       _p4C(''),
                       _p4C(info),
-                      _p4CR(b.transferQty.toString()),
+                      _p4CR(qtyToShow.toString()),
                       _p4CR(b.unitCost.toStringAsFixed(2)),
                       _p4CR(bTotal.toStringAsFixed(2)),
                     ]));
@@ -1444,14 +1456,33 @@ class _ExpandableItemCardState extends State<_ExpandableItemCard> {
                         ]),
                         const SizedBox(height: 10),
                         Row(children: [
-                          Expanded(child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
-                              Text('${b.transferQty} pcs',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: widget.themeColor)),
-                            ],
-                          )),
+                          Expanded(child: Builder(builder: (_) {
+                            // v1.0.57+109 — Variance-aware display
+                            final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
+                            final displayQty = hasVariance ? b.receivedQty : b.transferQty;
+                            final variance = b.receivedQty - b.transferQty;
+                            final varColor = variance < 0
+                                ? const Color(0xFFF59E0B)
+                                : variance > 0
+                                    ? const Color(0xFF3B82F6)
+                                    : widget.themeColor;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(hasVariance ? 'Received' : 'Qty', style: const TextStyle(fontSize: 10, color: _textSecondary)),
+                                Text('$displayQty pcs',
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: varColor)),
+                                if (hasVariance) Text(
+                                  variance < 0
+                                      ? 'Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                      : variance > 0
+                                          ? 'Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                          : 'Issued ${b.transferQty}',
+                                  style: TextStyle(fontSize: 9, color: varColor, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            );
+                          })),
                           Expanded(child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1566,14 +1597,33 @@ class _ExpandableItemCardState extends State<_ExpandableItemCard> {
                       ]),
                       const SizedBox(height: 6),
                       Row(children: [
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
-                            Text('${b.transferQty} pcs',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: widget.themeColor)),
-                          ],
-                        )),
+                        Expanded(child: Builder(builder: (_) {
+                          // v1.0.57+109 — Variance-aware inline
+                          final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
+                          final displayQty = hasVariance ? b.receivedQty : b.transferQty;
+                          final variance = b.receivedQty - b.transferQty;
+                          final varColor = variance < 0
+                              ? const Color(0xFFF59E0B)
+                              : variance > 0
+                                  ? const Color(0xFF3B82F6)
+                                  : widget.themeColor;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(hasVariance ? 'Received' : 'Qty', style: const TextStyle(fontSize: 10, color: _textSecondary)),
+                              Text('$displayQty pcs',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: varColor)),
+                              if (hasVariance) Text(
+                                variance < 0
+                                    ? 'Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                    : variance > 0
+                                        ? 'Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                        : 'Issued ${b.transferQty}',
+                                style: TextStyle(fontSize: 9, color: varColor, fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          );
+                        })),
                         Expanded(child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

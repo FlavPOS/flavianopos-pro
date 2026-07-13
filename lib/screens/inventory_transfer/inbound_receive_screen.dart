@@ -301,6 +301,29 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
       }
       debugPrint('[INBOUND-BATCH] Summary: $batchesSaved merged, $batchesCreated created');
 
+      // v1.0.57+111 — Reload updated batches for Firebase sync (variance-aware)
+      List<Map<String, dynamic>> batchesPayload = [];
+      try {
+        final updatedBatches = await TransferV3Dao.getBatches(widget.transferId);
+        batchesPayload = updatedBatches.map((b) => {
+          'productId': b.productId,
+          'batchId': b.batchId,
+          'batchNumber': b.batchNumber,
+          'lotNumber': b.lotNumber,
+          'mfgDate': b.mfgDate.toIso8601String(),
+          'expiryDate': b.expiryDate.toIso8601String(),
+          'transferQty': b.transferQty,
+          'unitCost': b.unitCost,
+          'receivedQty': b.receivedQty,
+          'postbackQty': b.postbackQty,
+          'shortReason': b.shortReason,
+          'varianceNotes': b.varianceNotes,
+        }).toList();
+        debugPrint('[INBOUND-RECEIVE] Reloaded ${batchesPayload.length} batches for Firebase sync');
+      } catch (e) {
+        debugPrint('[INBOUND-RECEIVE] Batch reload failed: $e');
+      }
+
       final db = await DatabaseHelper().database;
       for (final ri in _items) {
         if (ri.receivedQty <= 0) continue;
@@ -383,10 +406,12 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
             'totalReceivedQty': _totalReceived,
             'totalShortQty': _totalShort,
             'updatedAt': now,
+            'batches': batchesPayload, // v1.0.57+111 — sync variance to Firebase
           });
           await fb.ref('companies/$companyCode/inboundTransfers/$realBranchId/${widget.transferId}').update({
             'status': newStatus,
             'receivedDate': now,
+            'batches': batchesPayload, // v1.0.57+111 — sync variance to Firebase
           });
           debugPrint('[INBOUND-RECEIVE] Firebase status updated');
         }
