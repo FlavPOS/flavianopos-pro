@@ -268,6 +268,25 @@ class _TransferSubmittedDetailScreenState
             'updatedAt': now,
           };
 
+          // v1.0.57+108 — Include batches so they're preserved through APPROVE
+          final localBatches = await TransferV3Dao.getBatches(widget.transferId);
+          final batchesPayload = localBatches.map((b) => {
+            'productId': b.productId,
+            'batchId': b.batchId,
+            'batchNumber': b.batchNumber,
+            'lotNumber': b.lotNumber,
+            'mfgDate': b.mfgDate.toIso8601String(),
+            'expiryDate': b.expiryDate.toIso8601String(),
+            'transferQty': b.transferQty,
+            'unitCost': b.unitCost,
+            'receivedQty': b.receivedQty,
+            'postbackQty': b.postbackQty,
+            'shortReason': b.shortReason,
+            'varianceNotes': b.varianceNotes,
+          }).toList();
+          docPayload['batches'] = batchesPayload;
+          debugPrint('[TRANSFER-APPROVE] Attaching ${batchesPayload.length} batches to Firebase upload');
+
           // Index for outbound branch (source)
           await fb.ref(
             'companies/$companyCode/interStoreTransfers/${widget.transferId}'
