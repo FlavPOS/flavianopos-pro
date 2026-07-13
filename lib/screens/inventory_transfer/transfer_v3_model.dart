@@ -341,7 +341,11 @@ class TransferV3Dao {
         await txn.insert(_tItems, item.toMap());
       }
       // v1.0.48 — Save batches
-      await txn.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+      await txn.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '')");
+      // v1.0.56 — Safe migrations for existing DBs (idempotent)
+      try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN receivedQty INTEGER DEFAULT 0"); } catch (_) {}
+      try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN postbackQty INTEGER DEFAULT 0"); } catch (_) {}
+      try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN shortReason TEXT DEFAULT ''"); } catch (_) {}
       await txn.delete('transfer_item_batches',
           where: 'transferId = ?', whereArgs: [header.transferId]);
       for (final batch in batches) {
