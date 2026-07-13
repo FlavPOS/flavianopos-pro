@@ -1120,10 +1120,29 @@ class _SubmittedItemCardState extends State<_SubmittedItemCard> {
                     ]),
                     const SizedBox(height: 10),
                     Row(children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
-                        Text('${b.transferQty} pcs', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: widget.themeColor)),
-                      ])),
+                      Expanded(child: Builder(builder: (_) {
+                        // v1.0.57 — Variance-aware display: show receivedQty if variance recorded
+                        final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
+                        final displayQty = hasVariance ? b.receivedQty : b.transferQty;
+                        final variance = b.receivedQty - b.transferQty;
+                        final varColor = variance < 0
+                            ? const Color(0xFFF59E0B)  // yellow (short)
+                            : variance > 0
+                                ? const Color(0xFF3B82F6)  // blue (overage)
+                                : widget.themeColor;
+                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('Received', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                          Text('$displayQty pcs', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: varColor)),
+                          if (hasVariance) Text(
+                            variance < 0
+                                ? 'Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                : variance > 0
+                                    ? 'Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                                    : 'Issued ${b.transferQty}',
+                            style: TextStyle(fontSize: 9, color: varColor, fontWeight: FontWeight.w600),
+                          ),
+                        ]);
+                      })),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         const Text('MFG', style: TextStyle(fontSize: 10, color: _textSecondary)),
                         Text('${b.mfgDate.year}-${b.mfgDate.month.toString().padLeft(2, '0')}-${b.mfgDate.day.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 13)),
@@ -1195,10 +1214,29 @@ class _SubmittedItemCardState extends State<_SubmittedItemCard> {
               ]),
               const SizedBox(height: 6),
               Row(children: [
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Qty', style: TextStyle(fontSize: 10, color: _textSecondary)),
-                  Text('${b.transferQty} pcs', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: widget.themeColor)),
-                ])),
+                Expanded(child: Builder(builder: (_) {
+                  // v1.0.57 — Variance-aware display
+                  final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
+                  final displayQty = hasVariance ? b.receivedQty : b.transferQty;
+                  final variance = b.receivedQty - b.transferQty;
+                  final varColor = variance < 0
+                      ? const Color(0xFFF59E0B)
+                      : variance > 0
+                          ? const Color(0xFF3B82F6)
+                          : widget.themeColor;
+                  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Received', style: TextStyle(fontSize: 10, color: _textSecondary)),
+                    Text('$displayQty pcs', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: varColor)),
+                    if (hasVariance) Text(
+                      variance < 0
+                          ? 'Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                          : variance > 0
+                              ? 'Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
+                              : 'Issued ${b.transferQty}',
+                      style: TextStyle(fontSize: 9, color: varColor, fontWeight: FontWeight.w600),
+                    ),
+                  ]);
+                })),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const Text('MFG', style: TextStyle(fontSize: 10, color: _textSecondary)),
                   Text('${b.mfgDate.year}-${b.mfgDate.month.toString().padLeft(2, '0')}-${b.mfgDate.day.toString().padLeft(2, '0')}', style: const TextStyle(fontSize: 12)),
