@@ -81,10 +81,15 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
       // v1.0.56 — Build per-batch inputs
       final itemBatches = batchMap[item.productId] ?? [];
       final receiveBatches = itemBatches.map((b) => _ReceiveBatch(source: b)).toList();
+      // v1.0.57+108 — For PARTIAL re-open, use previous received qty; else default to issued
+      final isReopening = d?.status == TransferStatus.partiallyReceived;
+      final initialQty = isReopening
+          ? (item.receivedQty > 0 ? item.receivedQty : item.issuedQty)
+          : item.issuedQty;
       _items.add(_ReceiveItem(
         item: item,
-        receivedCtrl: TextEditingController(text: item.issuedQty.toString()),
-        receivedQty: item.issuedQty,
+        receivedCtrl: TextEditingController(text: initialQty.toString()),
+        receivedQty: initialQty,
         batches: receiveBatches,
       ));
     }
@@ -124,8 +129,9 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
   Future<void> _confirmReceipt() async {
     if (_actionInProgress) return;
+    // v1.0.57+108 — Allow overage (Phase 2A supports it with reason picker)
     for (final item in _items) {
-      if (item.receivedQty < 0 || item.receivedQty > item.item.issuedQty) {
+      if (item.receivedQty < 0) {
         _showSnack('Invalid received qty for ${item.item.productName}', color: _red);
         return;
       }
@@ -137,10 +143,11 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
     final result = await ApproverPinDialog.show(
       context: context,
-      title: _hasVariance ? 'Partial Receipt' : 'Confirm Receipt',
+      // v1.0.57+108 — Same title regardless of variance (variance captured via Phase 2A)
+      title: _hasVariance ? 'Confirm with Variance' : 'Confirm Full Receipt',
       headerColor: _hasVariance ? _yellow : _green,
       subtitle: _hasVariance
-          ? 'Stock will be added with variance recorded'
+          ? 'Stock will be added with variance reasons recorded'
           : 'Stock will be added to your branch',
       allowedRoles: const ['Supervisor', 'Manager', 'Admin'],
     );
@@ -175,9 +182,10 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
       final companyCode = (assign['companyCode'] ?? '').toString();
       final realBranchId = (assign['branchId'] ?? '').toString();
 
-      final newStatus = _hasVariance
-          ? TransferStatus.partiallyReceived
-          : TransferStatus.received;
+      // v1.0.57+108 — Variance is captured via Phase 2A reasons + Phase 2B postback
+      // Confirm Partial closes the transfer as RECEIVED with variance recorded per batch
+      // (Was: stuck at PARTIALLY_RECEIVED with no way to close)
+      final newStatus = TransferStatus.received;
 
       await TransferV3Dao.updateStatus(
         transferId: widget.transferId,
