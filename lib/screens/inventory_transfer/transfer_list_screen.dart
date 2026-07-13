@@ -246,14 +246,14 @@ class _TransferListScreenState extends State<TransferListScreen> {
                         icon: const Icon(Icons.print_rounded, color: Colors.white),
                         tooltip: 'Reprint IST',
                         onPressed: () async {
-                          await _printPdf(doc, items);
+                          await _printPdf(doc, items, batchMap);
                         },
                       ),
                       IconButton(
                         icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white),
                         tooltip: 'Export PDF',
                         onPressed: () async {
-                          await _downloadPdf(doc, items);
+                          await _downloadPdf(doc, items, batchMap);
                         },
                       ),
                       // Edit for drafts
@@ -674,6 +674,61 @@ class _TransferListScreenState extends State<TransferListScreen> {
         sheet.setColumnWidth(i, 18);
       }
 
+      // v1.0.55 — Add BATCHES sheet (Option B)
+      final batchSheet = excel['BATCHES'];
+      final batchHeaders = [
+        'IST No.', 'From Branch', 'To Branch', 'SKU', 'Product Name',
+        'Batch #', 'Lot #', 'MFG Date', 'EXP Date', 'Batch Qty', 'Unit Cost', 'Total @ Retail', 'Status',
+      ];
+      for (var i = 0; i < batchHeaders.length; i++) {
+        final cell = batchSheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = xl.TextCellValue(batchHeaders[i]);
+        cell.cellStyle = xl.CellStyle(
+          bold: true,
+          backgroundColorHex: xl.ExcelColor.fromHexString('#065F46'),
+          fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+          horizontalAlign: xl.HorizontalAlign.Center,
+        );
+      }
+
+      int batchRow = 1;
+      for (final doc in _transfers) {
+        final items = await TransferV3Dao.getItems(doc.transferId);
+        final allBatches = await TransferV3Dao.getBatches(doc.transferId);
+        if (allBatches.isEmpty) continue;
+        final itemsBySku = <String, TransferV3Item>{
+          for (final it in items) it.productId: it,
+        };
+        final ref = doc.docNumber.isEmpty ? doc.transferId : doc.docNumber;
+        for (final b in allBatches) {
+          final it = itemsBySku[b.productId];
+          if (it == null) continue;
+          final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
+          final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
+          final total = b.transferQty * b.unitCost;
+          final brow = [
+            ref,
+            '${doc.issuingBranchId} (${doc.issuingBranchName})',
+            '${doc.receivingBranchId} (${doc.receivingBranchName})',
+            it.sku, it.productName,
+            b.batchNumber, b.lotNumber,
+            mfgStr, expStr,
+            b.transferQty.toString(),
+            b.unitCost.toStringAsFixed(2),
+            total.toStringAsFixed(2),
+            doc.status,
+          ];
+          for (var c = 0; c < brow.length; c++) {
+            batchSheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: batchRow))
+                .value = xl.TextCellValue(brow[c]);
+          }
+          batchRow++;
+        }
+      }
+      for (var i = 0; i < batchHeaders.length; i++) {
+        batchSheet.setColumnWidth(i, 16);
+      }
+
       final bytes = excel.save();
       if (bytes == null) throw 'Failed to encode Excel';
 
@@ -707,7 +762,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
 
 
   // ═══ PDF Generator + Print/Download ═══
-  Future<Uint8List> _generatePdf(TransferV3 doc, List<TransferV3Item> items) async {
+  Future<Uint8List> _generatePdf(TransferV3 doc, List<TransferV3Item> items, Map<String, List<TransferItemBatch>> batchesByProduct) async {
     final pdf = pw.Document();
     // ignore: unused_local_variable
     final now = DateTime.now();
@@ -801,17 +856,63 @@ class _TransferListScreenState extends State<TransferListScreen> {
                 _p4H('Unit Retail'),
                 _p4H('Retail Value'),
               ]),
-              // Data rows
-              ...pageItems.asMap().entries.map((entry) {
-                final item = entry.value;
-                final retail = item.issuedQty * item.unitCost;
-                return pw.TableRow(children: [
-                  _p4C(item.sku),
-                  _p4C(item.productName),
-                  _p4CR(item.issuedQty.toString()),
-                  _p4CR(item.unitCost.toStringAsFixed(2)),
-                  _p4CR(retail.toStringAsFixed(2)),
-                ]);
+              // Data rows — v1.0.55 with batch sub-rows
+              ...pageItems.expand<pw.TableRow>((item) {
+                final batches = batchesByProduct[item.productId] ?? [];
+                final rows = <pw.TableRow>[];
+
+                if (batches.isEmpty) {
+                  final retail = item.issuedQty * item.unitCost;
+                  rows.add(pw.TableRow(children: [
+                    _p4C(item.sku),
+                    _p4C(item.productName),
+                    _p4CR(item.issuedQty.toString()),
+                    _p4CR(item.unitCost.toStringAsFixed(2)),
+                    _p4CR(retail.toStringAsFixed(2)),
+                  ]));
+                } else {
+                  // Product header row (bold)
+                  rows.add(pw.TableRow(children: [
+                    _p4C(item.sku, bold: true),
+                    _p4C(item.productName, bold: true),
+                    _p4C(''),
+                    _p4C(''),
+                    _p4C(''),
+                  ]));
+
+                  int itemQty = 0;
+                  double itemTotal = 0;
+                  for (final b in batches) {
+                    final bTotal = b.transferQty * b.unitCost;
+                    itemQty += b.transferQty;
+                    itemTotal += bTotal;
+                    final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
+                    final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    rows.add(pw.TableRow(children: [
+                      _p4C(''),
+                      _p4C(info),
+                      _p4CR(b.transferQty.toString()),
+                      _p4CR(b.unitCost.toStringAsFixed(2)),
+                      _p4CR(bTotal.toStringAsFixed(2)),
+                    ]));
+                  }
+
+                  // ITEM SUBTOTAL (light-blue)
+                  rows.add(pw.TableRow(
+                    decoration: const pw.BoxDecoration(
+                      color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
+                    ),
+                    children: [
+                      _p4C(''),
+                      _p4C('ITEM SUBTOTAL', bold: true),
+                      _p4CR(itemQty.toString(), bold: true),
+                      _p4CR('-'),
+                      _p4CR(itemTotal.toStringAsFixed(2), bold: true),
+                    ],
+                  ));
+                }
+                return rows;
               }),
               // Grand total (only on last page)
               if (currentPage == totalPagesCount)
@@ -997,9 +1098,9 @@ class _TransferListScreenState extends State<TransferListScreen> {
   );
 
 
-  Future<void> _printPdf(TransferV3 doc, List<TransferV3Item> items) async {
+  Future<void> _printPdf(TransferV3 doc, List<TransferV3Item> items, Map<String, List<TransferItemBatch>> batchMap) async {
     try {
-      final bytes = await _generatePdf(doc, items);
+      final bytes = await _generatePdf(doc, items, batchMap);
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     } catch (e) {
       if (!mounted) return;
@@ -1009,9 +1110,9 @@ class _TransferListScreenState extends State<TransferListScreen> {
     }
   }
 
-  Future<void> _downloadPdf(TransferV3 doc, List<TransferV3Item> items) async {
+  Future<void> _downloadPdf(TransferV3 doc, List<TransferV3Item> items, Map<String, List<TransferItemBatch>> batchMap) async {
     try {
-      final bytes = await _generatePdf(doc, items);
+      final bytes = await _generatePdf(doc, items, batchMap);
       final docNum = doc.docNumber.isEmpty ? doc.transferId : doc.docNumber;
       await Printing.sharePdf(bytes: bytes, filename: 'IST-$docNum.pdf');
       if (!mounted) return;
