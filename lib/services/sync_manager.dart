@@ -1020,8 +1020,14 @@ class SyncManager {
         'updated_at': (m['updatedAt'] ?? '').toString(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-      final items = m['items'];
-      if (items is List) {
+      // v1.0.57+107 — Handle items array-as-Map from Firebase
+      final rawItems = m['items'];
+      final items = rawItems is List
+          ? rawItems
+          : rawItems is Map
+              ? (rawItems).values.toList()
+              : <dynamic>[];
+      if (items.isNotEmpty) {
         await db.delete('interstore_transfer_items_v3',
             where: 'transfer_id = ?', whereArgs: [transferId]);
         for (final item in items) {
@@ -1043,11 +1049,22 @@ class SyncManager {
         }
       }
 
-      // v1.0.53 — Sync batches from Firebase
+      // v1.0.53/57 — Sync batches from Firebase (handles both List and Map form)
       try {
-        final batches = m['batches'];
-        if (batches is List) {
-          await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0)");
+        final rawBatches = m['batches'];
+        // v1.0.57+107 — Firebase sometimes returns arrays as Map with numeric keys
+        final batches = rawBatches is List
+            ? rawBatches
+            : rawBatches is Map
+                ? (rawBatches).values.toList()
+                : <dynamic>[];
+        if (batches.isNotEmpty) {
+          await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '', varianceNotes TEXT DEFAULT '')");
+          // v1.0.56/57 — safe migrations for existing DBs
+          try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN receivedQty INTEGER DEFAULT 0"); } catch (_) {}
+          try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN postbackQty INTEGER DEFAULT 0"); } catch (_) {}
+          try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN shortReason TEXT DEFAULT ''"); } catch (_) {}
+          try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN varianceNotes TEXT DEFAULT ''"); } catch (_) {}
           await db.delete('transfer_item_batches',
               where: 'transferId = ?', whereArgs: [transferId]);
           for (final b in batches) {
@@ -1063,10 +1080,16 @@ class SyncManager {
                 'expiryDate': (bm['expiryDate'] ?? '').toString(),
                 'transferQty': (bm['transferQty'] as num?)?.toInt() ?? 0,
                 'unitCost': (bm['unitCost'] as num?)?.toDouble() ?? 0,
+                'receivedQty': (bm['receivedQty'] as num?)?.toInt() ?? 0,
+                'postbackQty': (bm['postbackQty'] as num?)?.toInt() ?? 0,
+                'shortReason': (bm['shortReason'] ?? '').toString(),
+                'varianceNotes': (bm['varianceNotes'] ?? '').toString(),
               });
             }
           }
-          if (kDebugMode) debugPrint('[SYNC-BATCHES] Synced ${batches.length} batches for $transferId');
+          if (kDebugMode) debugPrint('[SYNC-BATCHES] Synced ${batches.length} batches for $transferId (form: ${rawBatches.runtimeType})');
+        } else {
+          if (kDebugMode) debugPrint('[SYNC-BATCHES] No batches for $transferId (raw type: ${rawBatches?.runtimeType})');
         }
       } catch (e) {
         if (kDebugMode) debugPrint('[SYNC-BATCHES] Error: $e');
