@@ -10,6 +10,7 @@ import 'package:pdf/pdf.dart' as pdf_pkg;
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'transfer_v3_model.dart';
+import '../../models/batch_model.dart'; // v1.0.56 — ProductBatch integration
 
 class InboundReceiveScreen extends StatefulWidget {
   final String transferId;
@@ -54,6 +55,9 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
   void dispose() {
     for (final item in _items) {
       item.receivedCtrl.dispose();
+      for (final rb in item.batches) {         // v1.0.56
+        rb.qtyCtrl.dispose();
+      }
     }
     super.dispose();
   }
@@ -73,10 +77,14 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
     _items.clear();
     for (final item in it) {
+      // v1.0.56 — Build per-batch inputs
+      final itemBatches = batchMap[item.productId] ?? [];
+      final receiveBatches = itemBatches.map((b) => _ReceiveBatch(source: b)).toList();
       _items.add(_ReceiveItem(
         item: item,
         receivedCtrl: TextEditingController(text: item.issuedQty.toString()),
         receivedQty: item.issuedQty,
+        batches: receiveBatches,
       ));
     }
 
@@ -195,6 +203,70 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
           if (ok) successCount++;
         }
       }
+
+      // v1.0.56 — Save per-batch receivedQty + merge into ProductBatch (Batch Management)
+      int batchesSaved = 0;
+      int batchesCreated = 0;
+      for (final ri in _items) {
+        for (final rb in ri.batches) {
+          if (rb.receivedQty <= 0) continue;
+
+          // 1. Update transfer_item_batches.receivedQty
+          if (rb.source.id != null) {
+            try {
+              await TransferV3Dao.updateBatchReceivedQty(
+                batchTableId: rb.source.id!,
+                receivedQty: rb.receivedQty,
+              );
+            } catch (e) {
+              debugPrint('[INBOUND-BATCH] updateBatchReceivedQty failed: $e');
+            }
+          }
+
+          // 2. Merge into ProductBatch (local branch inventory)
+          try {
+            final existing = await ProductBatch.findExistingBatch(
+              productId: rb.source.productId,
+              batchNumber: rb.source.batchNumber,
+              lotNumber: rb.source.lotNumber,
+              branchId: realBranchId,
+            );
+
+            if (existing != null) {
+              await ProductBatch.addQuantityToBatch(existing.id, rb.receivedQty);
+              batchesSaved++;
+              debugPrint('[INBOUND-BATCH] Merged +${rb.receivedQty} → existing ${existing.id}');
+            } else {
+              final newBatchId = 'BATCH-${DateTime.now().millisecondsSinceEpoch}-${rb.source.batchId}';
+              final newBatch = ProductBatch(
+                id: newBatchId,
+                productId: rb.source.productId,
+                productName: ri.item.productName,
+                productSku: ri.item.sku,
+                batchNumber: rb.source.batchNumber,
+                lotNumber: rb.source.lotNumber,
+                manufacturedDate: rb.source.mfgDate,
+                expiryDate: rb.source.expiryDate,
+                quantity: rb.receivedQty,
+                originalQty: rb.receivedQty,
+                costPrice: rb.source.unitCost,
+                branchId: realBranchId,
+                branchName: _doc?.receivingBranchName ?? '',
+                source: 'TRANSFER_IN',
+                sourceDocId: widget.transferId,
+                notes: 'IST-${_doc?.docNumber ?? widget.transferId}',
+                dateAdded: DateTime.now(),
+              );
+              ProductBatch.addBatch(newBatch); // static void — auto-syncs via SyncBridge
+              batchesCreated++;
+              debugPrint('[INBOUND-BATCH] Created new $newBatchId qty=${rb.receivedQty}');
+            }
+          } catch (e) {
+            debugPrint('[INBOUND-BATCH] ProductBatch merge/create failed: $e');
+          }
+        }
+      }
+      debugPrint('[INBOUND-BATCH] Summary: $batchesSaved merged, $batchesCreated created');
 
       final db = await DatabaseHelper().database;
       for (final ri in _items) {
@@ -485,8 +557,11 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
     final borderColor = isRejected
         ? _red
         : (isPartial ? _yellow : _green);
+    final hasBatches = ri.batches.isNotEmpty; // v1.0.56
 
-    return Container(
+    return GestureDetector(
+      onLongPress: hasBatches ? () => _openBatchDialog(ri) : null,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -581,11 +656,203 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                   child: const Text('Not receiving',
                       style: TextStyle(color: _red, fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
+              // v1.0.56 — Chevron to expand batch list
+              if (hasBatches)
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(
+                    ri.expanded ? Icons.expand_less : Icons.expand_more,
+                    color: borderColor,
+                    size: 22,
+                  ),
+                  tooltip: 'Show batches',
+                  onPressed: () => setState(() => ri.expanded = !ri.expanded),
+                ),
             ],
           ),
+          // v1.0.56 — Inline expandable batch section
+          if (hasBatches && ri.expanded) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            _buildBatchList(ri, inDialog: false),
+          ],
         ],
       ),
+      ),
     );
+  }
+
+  // v1.0.56 — Batch list widget (reused for inline + dialog)
+  Widget _buildBatchList(_ReceiveItem ri, {required bool inDialog}) {
+    int subIssued = 0;
+    int subReceived = 0;
+    for (final rb in ri.batches) {
+      subIssued += rb.source.transferQty;
+      subReceived += rb.receivedQty;
+    }
+    final subShort = subIssued - subReceived;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: const [
+            Icon(Icons.inventory_2_outlined, size: 15, color: _textSecondary),
+            SizedBox(width: 6),
+            Text('Batch Details',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _textPrimary)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ...ri.batches.asMap().entries.map((entry) {
+          final rb = entry.value;
+          final isLast = entry.key == ri.batches.length - 1;
+          final rowColor = rb.hasShort ? _yellow : _green;
+          final mfgStr = '${rb.source.mfgDate.year.toString().padLeft(4,'0')}-${rb.source.mfgDate.month.toString().padLeft(2,'0')}-${rb.source.mfgDate.day.toString().padLeft(2,'0')}';
+          final expStr = '${rb.source.expiryDate.year.toString().padLeft(4,'0')}-${rb.source.expiryDate.month.toString().padLeft(2,'0')}-${rb.source.expiryDate.day.toString().padLeft(2,'0')}';
+          return Padding(
+            padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Batch: ${rb.source.batchNumber}   Lot: ${rb.source.lotNumber}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                Text('MFG: $mfgStr   EXP: $expStr',
+                    style: const TextStyle(fontSize: 11, color: _textSecondary)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text('Issued: ${rb.source.transferQty}',
+                        style: const TextStyle(fontSize: 11, color: _textSecondary)),
+                    const SizedBox(width: 10),
+                    const Text('Received:', style: TextStyle(fontSize: 11, color: _textSecondary)),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 60,
+                      child: TextField(
+                        controller: rb.qtyCtrl,
+                        onChanged: (v) {
+                          setState(() {
+                            var n = int.tryParse(v) ?? 0;
+                            if (n < 0) n = 0;
+                            if (n > rb.source.transferQty) {
+                              n = rb.source.transferQty;
+                              rb.qtyCtrl.text = n.toString();
+                            }
+                            rb.receivedQty = n;
+                            // Auto-sum to item level
+                            final total = ri.batches.fold<int>(0, (s, x) => s + x.receivedQty);
+                            ri.receivedQty = total;
+                            ri.receivedCtrl.text = total.toString();
+                          });
+                        },
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: rowColor),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: rowColor.withValues(alpha: 0.6), width: 1),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (rb.hasShort)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _yellow.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('Short ${rb.short}',
+                            style: const TextStyle(color: _yellow, fontSize: 10, fontWeight: FontWeight.bold)),
+                      )
+                    else
+                      const Icon(Icons.check_circle_rounded, color: _green, size: 14),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        const SizedBox(height: 6),
+        const Divider(height: 1),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Batch Total  Issued: $subIssued', style: const TextStyle(fontSize: 11, color: _textSecondary)),
+            Text('Received: $subReceived', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: _green)),
+            Text('Short: $subShort',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subShort > 0 ? _yellow : _textSecondary)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // v1.0.56 — Long-press full-screen dialog
+  Future<void> _openBatchDialog(_ReceiveItem ri) async {
+    await showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return Container(
+              padding: const EdgeInsets.all(16),
+              constraints: const BoxConstraints(maxWidth: 600, maxHeight: 700),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.inventory_2_rounded, color: _green),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(ri.item.productName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  Text('SKU: ${ri.item.sku}',
+                      style: const TextStyle(fontSize: 11, color: _textSecondary)),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: _buildBatchList(ri, inDialog: true),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Done'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    if (mounted) setState(() {}); // refresh parent after dialog close
   }
 
   Widget _buildBottomBar() {
@@ -1182,10 +1449,28 @@ class _ReceiveItem {
   final TransferV3Item item;
   final TextEditingController receivedCtrl;
   int receivedQty;
+  bool expanded;                                // v1.0.56 — chevron state
+  List<_ReceiveBatch> batches;                  // v1.0.56 — per-batch inputs
 
   _ReceiveItem({
     required this.item,
     required this.receivedCtrl,
     required this.receivedQty,
-  });
+    this.expanded = false,
+    List<_ReceiveBatch>? batches,
+  }) : batches = batches ?? [];
+}
+
+// v1.0.56 — Per-batch received qty input
+class _ReceiveBatch {
+  final TransferItemBatch source;
+  final TextEditingController qtyCtrl;
+  int receivedQty;
+
+  _ReceiveBatch({required this.source})
+      : qtyCtrl = TextEditingController(text: source.transferQty.toString()),
+        receivedQty = source.transferQty;
+
+  int get short => source.transferQty - receivedQty;
+  bool get hasShort => short > 0;
 }
