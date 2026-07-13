@@ -203,8 +203,9 @@ class TransferItemBatch {
   final int transferQty;
   final double unitCost;
   final int receivedQty;      // v1.0.56 — actual received qty per batch
-  final int postbackQty;      // v1.0.56 — reserved for Phase 2 postback
-  final String shortReason;   // v1.0.56 — reserved for Phase 2 reason picker
+  final int postbackQty;      // v1.0.56 — reserved for Phase 2B postback
+  final String shortReason;   // v1.0.57 — variance reason (SHORT: RETURN/DAMAGED/MISSING, OVERAGE: EXTRA_PACKED/BONUS/UNKNOWN)
+  final String varianceNotes; // v1.0.57 — optional notes for variance context
 
   const TransferItemBatch({
     this.id,
@@ -219,7 +220,8 @@ class TransferItemBatch {
     required this.unitCost,
     this.receivedQty = 0,       // v1.0.56
     this.postbackQty = 0,       // v1.0.56
-    this.shortReason = '',      // v1.0.56
+    this.shortReason = '',      // v1.0.57 — variance reason
+    this.varianceNotes = '',    // v1.0.57 — optional notes
   });
 
   Map<String, dynamic> toMap() => {
@@ -235,7 +237,8 @@ class TransferItemBatch {
     'unitCost': unitCost,
     'receivedQty': receivedQty,       // v1.0.56
     'postbackQty': postbackQty,       // v1.0.56
-    'shortReason': shortReason,       // v1.0.56
+    'shortReason': shortReason,       // v1.0.57
+    'varianceNotes': varianceNotes,   // v1.0.57
   };
 
   factory TransferItemBatch.fromMap(Map<String, dynamic> m) => TransferItemBatch(
@@ -251,7 +254,8 @@ class TransferItemBatch {
     unitCost: (m['unitCost'] as num?)?.toDouble() ?? 0.0,
     receivedQty: (m['receivedQty'] as num?)?.toInt() ?? 0,       // v1.0.56
     postbackQty: (m['postbackQty'] as num?)?.toInt() ?? 0,       // v1.0.56
-    shortReason: (m['shortReason'] ?? '').toString(),            // v1.0.56
+    shortReason: (m['shortReason'] ?? '').toString(),            // v1.0.57
+    varianceNotes: (m['varianceNotes'] ?? '').toString(),        // v1.0.57
   );
 }
 
@@ -341,11 +345,12 @@ class TransferV3Dao {
         await txn.insert(_tItems, item.toMap());
       }
       // v1.0.48 — Save batches
-      await txn.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '')");
-      // v1.0.56 — Safe migrations for existing DBs (idempotent)
+      await txn.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '', varianceNotes TEXT DEFAULT '')");
+      // v1.0.56/57 — Safe migrations for existing DBs (idempotent)
       try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN receivedQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN postbackQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN shortReason TEXT DEFAULT ''"); } catch (_) {}
+      try { await txn.execute("ALTER TABLE transfer_item_batches ADD COLUMN varianceNotes TEXT DEFAULT ''"); } catch (_) {}
       await txn.delete('transfer_item_batches',
           where: 'transferId = ?', whereArgs: [header.transferId]);
       for (final batch in batches) {
@@ -481,11 +486,12 @@ class TransferV3Dao {
   static Future<List<TransferItemBatch>> getBatches(String transferId) async {
     final db = await DatabaseHelper().database;
     try {
-      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '')");
-      // v1.0.56 — safe migrations for existing DBs
+      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '', varianceNotes TEXT DEFAULT '')");
+      // v1.0.56/57 — safe migrations for existing DBs
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN receivedQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN postbackQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN shortReason TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN varianceNotes TEXT DEFAULT ''"); } catch (_) {}
     } catch (_) {}
     final rows = await db.query('transfer_item_batches',
         where: 'transferId = ?', whereArgs: [transferId]);
@@ -511,11 +517,12 @@ class TransferV3Dao {
       String transferId, String productId) async {
     final db = await DatabaseHelper().database;
     try {
-      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '')");
-      // v1.0.56 — safe migrations for existing DBs
+      await db.execute("CREATE TABLE IF NOT EXISTS transfer_item_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, transferId TEXT NOT NULL, productId TEXT NOT NULL, batchId TEXT NOT NULL, batchNumber TEXT DEFAULT '', lotNumber TEXT DEFAULT '', mfgDate TEXT DEFAULT '', expiryDate TEXT DEFAULT '', transferQty INTEGER DEFAULT 0, unitCost REAL DEFAULT 0, receivedQty INTEGER DEFAULT 0, postbackQty INTEGER DEFAULT 0, shortReason TEXT DEFAULT '', varianceNotes TEXT DEFAULT '')");
+      // v1.0.56/57 — safe migrations for existing DBs
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN receivedQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN postbackQty INTEGER DEFAULT 0"); } catch (_) {}
       try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN shortReason TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE transfer_item_batches ADD COLUMN varianceNotes TEXT DEFAULT ''"); } catch (_) {}
     } catch (_) {}
     final rows = await db.query('transfer_item_batches',
         where: 'transferId = ? AND productId = ?',

@@ -55,8 +55,9 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
   void dispose() {
     for (final item in _items) {
       item.receivedCtrl.dispose();
-      for (final rb in item.batches) {         // v1.0.56
+      for (final rb in item.batches) {         // v1.0.56/57
         rb.qtyCtrl.dispose();
+        rb.notesCtrl.dispose();
       }
     }
     super.dispose();
@@ -99,6 +100,16 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
   int get _totalReceived => _items.fold(0, (s, i) => s + i.receivedQty);
   int get _totalShort => _totalIssued - _totalReceived;
   bool get _hasVariance => _totalShort > 0;
+
+  // v1.0.57 — Check all short/overage batches have reasons
+  bool get _allBatchesHaveReasons {
+    for (final ri in _items) {
+      for (final rb in ri.batches) {
+        if (rb.needsReason && !rb.hasReason) return false;
+      }
+    }
+    return true;
+  }
   bool get _allRejected => _totalReceived == 0;
 
   void _showSnack(String msg, {Color? color}) {
@@ -211,13 +222,27 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
         for (final rb in ri.batches) {
           if (rb.receivedQty <= 0) continue;
 
-          // 1. Update transfer_item_batches.receivedQty
+          // 1. Update transfer_item_batches.receivedQty + variance reason (v1.0.57)
           if (rb.source.id != null) {
             try {
               await TransferV3Dao.updateBatchReceivedQty(
                 batchTableId: rb.source.id!,
                 receivedQty: rb.receivedQty,
               );
+              // v1.0.57 — Also save reason + notes
+              final db = await DatabaseHelper().database;
+              await db.update(
+                'transfer_item_batches',
+                {
+                  'shortReason': rb.reason,
+                  'varianceNotes': rb.notesCtrl.text.trim(),
+                },
+                where: 'id = ?',
+                whereArgs: [rb.source.id],
+              );
+              if (rb.reason.isNotEmpty) {
+                debugPrint('[INBOUND-BATCH] Variance: ${rb.reason} qty=${rb.variance} notes="${rb.notesCtrl.text.trim()}"');
+              }
             } catch (e) {
               debugPrint('[INBOUND-BATCH] updateBatchReceivedQty failed: $e');
             }
@@ -737,11 +762,11 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                           setState(() {
                             var n = int.tryParse(v) ?? 0;
                             if (n < 0) n = 0;
-                            if (n > rb.source.transferQty) {
-                              n = rb.source.transferQty;
-                              rb.qtyCtrl.text = n.toString();
-                            }
+                            // v1.0.57 — Allow overage (cap at 999)
+                            if (n > 999) n = 999;
                             rb.receivedQty = n;
+                            // Reset reason if variance became perfect
+                            if (rb.isPerfect) rb.reason = '';
                             // Auto-sum to item level
                             final total = ri.batches.fold<int>(0, (s, x) => s + x.receivedQty);
                             ri.receivedQty = total;
@@ -762,6 +787,7 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                       ),
                     ),
                     const SizedBox(width: 8),
+                    // v1.0.57 — Variance badge
                     if (rb.hasShort)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -772,10 +798,25 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                         child: Text('Short ${rb.short}',
                             style: const TextStyle(color: _yellow, fontSize: 10, fontWeight: FontWeight.bold)),
                       )
+                    else if (rb.hasOverage)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('+${rb.variance} Over',
+                            style: const TextStyle(color: Color(0xFF3B82F6), fontSize: 10, fontWeight: FontWeight.bold)),
+                      )
                     else
                       const Icon(Icons.check_circle_rounded, color: _green, size: 14),
                   ],
                 ),
+                // v1.0.57 — Reason picker (Phase 2A) - shown only if variance
+                if (rb.needsReason) ...[
+                  const SizedBox(height: 6),
+                  _buildReasonPicker(rb, inDialog: inDialog),
+                ],
               ],
             ),
           );
@@ -791,6 +832,89 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
             Text('Short: $subShort',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subShort > 0 ? _yellow : _textSecondary)),
           ],
+        ),
+      ],
+    );
+  }
+
+  // v1.0.57 — Reason picker widget (Phase 2A)
+  Widget _buildReasonPicker(_ReceiveBatch rb, {required bool inDialog}) {
+    final isOverage = rb.hasOverage;
+    final options = isOverage ? _VarianceReasons.overage : _VarianceReasons.short;
+    final labelColor = isOverage ? const Color(0xFF3B82F6) : _yellow;
+    final label = isOverage ? 'Overage Reason (required)' : 'Short Reason (required)';
+    final icon = isOverage ? Icons.info_outline_rounded : Icons.warning_amber_rounded;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 12, color: labelColor),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: labelColor)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: options.map((opt) {
+            final selected = rb.reason == opt.code;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: InkWell(
+                  onTap: () => setState(() => rb.reason = opt.code),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: selected ? opt.color.withValues(alpha: 0.15) : _card,
+                      border: Border.all(
+                        color: selected ? opt.color : _divider,
+                        width: selected ? 1.5 : 1,
+                      ),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(opt.icon, size: 16, color: selected ? opt.color : _textSecondary),
+                        const SizedBox(height: 2),
+                        Text(opt.label,
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: selected ? opt.color : _textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        if (selected)
+                          Icon(Icons.check_circle, size: 10, color: opt.color),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 4),
+        // Optional notes field
+        SizedBox(
+          height: 30,
+          child: TextField(
+            controller: rb.notesCtrl,
+            style: const TextStyle(fontSize: 10),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '📝 Notes (optional)',
+              hintStyle: const TextStyle(fontSize: 10, color: _textSecondary),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: _divider),
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -886,11 +1010,16 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _actionInProgress ? null : _confirmReceipt,
+                    // v1.0.57 — Disable if any variance batch missing reason
+                    onPressed: (_actionInProgress || !_allBatchesHaveReasons) ? null : _confirmReceipt,
                     icon: Icon(_hasVariance ? Icons.warning_rounded : Icons.check_rounded, size: 18),
-                    label: Text(_hasVariance ? 'Confirm Partial' : 'Confirm Full'),
+                    label: Text(!_allBatchesHaveReasons
+                        ? 'Select Reason(s)'
+                        : (_hasVariance ? 'Confirm Partial' : 'Confirm Full')),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _hasVariance ? _yellow : _green,
+                      backgroundColor: !_allBatchesHaveReasons
+                          ? _textSecondary
+                          : (_hasVariance ? _yellow : _green),
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1461,16 +1590,49 @@ class _ReceiveItem {
   }) : batches = batches ?? [];
 }
 
-// v1.0.56 — Per-batch received qty input
+// v1.0.56/57 — Per-batch received qty input with variance reason (Phase 2A)
 class _ReceiveBatch {
   final TransferItemBatch source;
   final TextEditingController qtyCtrl;
+  final TextEditingController notesCtrl;   // v1.0.57
   int receivedQty;
+  String reason;                            // v1.0.57 — RETURN/DAMAGED/MISSING/EXTRA_PACKED/BONUS/UNKNOWN
 
   _ReceiveBatch({required this.source})
       : qtyCtrl = TextEditingController(text: source.transferQty.toString()),
-        receivedQty = source.transferQty;
+        notesCtrl = TextEditingController(text: source.varianceNotes),
+        receivedQty = source.transferQty,
+        reason = source.shortReason;
 
-  int get short => source.transferQty - receivedQty;
-  bool get hasShort => short > 0;
+  int get variance => receivedQty - source.transferQty;  // -N=short, +N=overage, 0=perfect
+  int get short => source.transferQty - receivedQty;      // positive when short
+  bool get hasShort => receivedQty < source.transferQty;
+  bool get hasOverage => receivedQty > source.transferQty;
+  bool get isPerfect => receivedQty == source.transferQty;
+  bool get needsReason => !isPerfect;                     // v1.0.57
+  bool get hasReason => reason.isNotEmpty;                // v1.0.57
+}
+
+// v1.0.57 — Variance reason constants (Phase 2A)
+class _VarianceReasons {
+  // SHORT reasons
+  static const short = <_ReasonOption>[
+    _ReasonOption('RETURN', 'Return', Icons.undo_rounded, Color(0xFF3B82F6)),      // blue
+    _ReasonOption('DAMAGED', 'Damaged', Icons.broken_image_rounded, Color(0xFFEF4444)),  // red
+    _ReasonOption('MISSING', 'Missing', Icons.help_outline_rounded, Color(0xFFF97316)),  // orange
+  ];
+  // OVERAGE reasons
+  static const overage = <_ReasonOption>[
+    _ReasonOption('EXTRA_PACKED', 'Extra', Icons.inventory_2_rounded, Color(0xFF3B82F6)),  // blue
+    _ReasonOption('BONUS', 'Bonus', Icons.card_giftcard_rounded, Color(0xFF10B981)),        // green
+    _ReasonOption('UNKNOWN', 'Unknown', Icons.help_rounded, Color(0xFF6B7280)),             // gray
+  ];
+}
+
+class _ReasonOption {
+  final String code;
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _ReasonOption(this.code, this.label, this.icon, this.color);
 }
