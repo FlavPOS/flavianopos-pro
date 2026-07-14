@@ -1400,10 +1400,30 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
   Future<Uint8List> _generateReceivePdf() async {
     final pdf = pw.Document();
-    final totalIssued = _items.fold<int>(0, (s, i) => s + i.item.issuedQty);
-    final totalReceived = _items.fold<int>(0, (s, i) => s + i.receivedQty);
+    // v1.0.58+118 — Grand Total uses batch sums (matches ITEM SUBTOTAL rows)
+    // Bug: Was using ri.receivedQty (item-level) which didn't match per-batch data,
+    // causing Grand Total Received/Short/Retail to differ from ITEM SUBTOTAL.
+    int totalIssued = 0;
+    int totalReceived = 0;
+    double totalRetail = 0.0;
+    for (final ri in _items) {
+      final batches = _batchesByProduct[ri.item.productId] ?? [];
+      if (batches.isEmpty) {
+        // No batches — fallback to item-level
+        totalIssued += ri.item.issuedQty;
+        totalReceived += ri.receivedQty;
+        totalRetail += ri.receivedQty * ri.item.unitCost;
+      } else {
+        // Sum from batches (variance-aware)
+        for (final b in batches) {
+          final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          totalIssued += b.transferQty;
+          totalReceived += actualReceived;
+          totalRetail += actualReceived * b.unitCost;
+        }
+      }
+    }
     final totalShort = totalIssued - totalReceived;
-    final totalRetail = _items.fold<double>(0.0, (s, i) => s + (i.receivedQty * i.item.unitCost));
 
     final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
     const itemsPerPage = 20;
