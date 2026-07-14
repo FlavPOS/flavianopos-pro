@@ -1254,20 +1254,56 @@ class _TransferListScreenState extends State<TransferListScreen> {
     final pdf = pw.Document();
     final now = DateTime.now();
 
+    // v1.0.58+126 — Aggregate variance per doc (issued, received, short, variance value, reasons)
     final allData = <Map<String, dynamic>>[];
     int grandItems = 0;
-    int grandQty = 0;
+    int grandIssued = 0;
+    int grandReceived = 0;
     double grandRetail = 0;
+    double grandVariance = 0;
 
     for (final doc in _transfers) {
       final items = await TransferV3Dao.getItems(doc.transferId);
-      final docQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
-      final docRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+      final batches = await TransferV3Dao.getBatches(doc.transferId);
+      int docIssued = 0;
+      int docReceived = 0;
+      double docRetail = 0.0;
+      double docVariance = 0.0;
+      final Set<String> docReasons = {};
+
+      if (batches.isEmpty) {
+        // No batches — fallback to item-level (no variance)
+        docIssued = items.fold<int>(0, (s, i) => s + i.issuedQty);
+        docReceived = docIssued;
+        docRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+      } else {
+        for (final b in batches) {
+          final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          docIssued += b.transferQty;
+          docReceived += actualReceived;
+          docRetail += actualReceived * b.unitCost;
+          docVariance += (actualReceived - b.transferQty) * b.unitCost;
+          if (b.shortReason.isNotEmpty) docReasons.add(b.shortReason);
+        }
+      }
       grandItems += items.length;
-      grandQty += docQty;
+      grandIssued += docIssued;
+      grandReceived += docReceived;
       grandRetail += docRetail;
-      allData.add({'doc': doc, 'items': items, 'qty': docQty, 'retail': docRetail});
+      grandVariance += docVariance;
+      allData.add({
+        'doc': doc,
+        'items': items,
+        'qty': docReceived,  // backwards-compat: qty now means received
+        'issued': docIssued,
+        'received': docReceived,
+        'variance': docReceived - docIssued,
+        'retail': docRetail,
+        'varianceValue': docVariance,
+        'reasons': docReasons.join(', '),
+      });
     }
+    final grandQty = grandReceived;
 
     pdf.addPage(
       pw.MultiPage(
@@ -1309,10 +1345,12 @@ class _TransferListScreenState extends State<TransferListScreen> {
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
-                pw.Text('Total Docs: ${_transfers.length}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total Items: $grandItems', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total Qty: $grandQty pcs', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Total Retail: ${grandRetail.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Docs: ${_transfers.length}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Items: $grandItems', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Issued: $grandIssued pcs', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Received: $grandReceived pcs', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Total Retail: ${grandRetail.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Variance: ${grandVariance == 0 ? "-" : grandVariance.toStringAsFixed(2)}', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: grandVariance < 0 ? pdf_pkg.PdfColor.fromInt(0xFFDC2626) : (grandVariance > 0 ? pdf_pkg.PdfColor.fromInt(0xFF16A34A) : pdf_pkg.PdfColor.fromInt(0xFF000000)))),
               ],
             ),
           ),
@@ -1336,20 +1374,32 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   _pdfHCell('From'),
                   _pdfHCell('To'),
                   _pdfHCell('Items'),
-                  _pdfHCell('Qty'),
+                  _pdfHCell('Issued'),
+                  _pdfHCell('Received'),
+                  _pdfHCell('Short +/-'),
                   _pdfHCell('Retail'),
+                  _pdfHCell('Var Value'),
+                  _pdfHCell('Reasons'),
                   _pdfHCell('Status'),
                 ],
               ),
               ...allData.map((row) {
                 final d = row['doc'] as TransferV3;
+                final variance = row['variance'] as int;
+                final varStr = variance == 0 ? '-' : (variance < 0 ? variance.toString() : '+$variance');
+                final varValue = row['varianceValue'] as double;
+                final reasons = row['reasons'] as String;
                 return pw.TableRow(children: [
                   _pdfCell(d.docNumber.isEmpty ? d.transferId : d.docNumber),
                   _pdfCell('${d.issuingBranchId} ${d.issuingBranchName}'),
                   _pdfCell('${d.receivingBranchId} ${d.receivingBranchName}'),
                   _pdfCellR((row['items'] as List).length.toString()),
-                  _pdfCellR((row['qty'] as int).toString()),
+                  _pdfCellR((row['issued'] as int).toString()),
+                  _pdfCellR((row['received'] as int).toString()),
+                  _pdfCellR(varStr),
                   _pdfCellR((row['retail'] as double).toStringAsFixed(2)),
+                  _pdfCellR(varValue == 0 ? '-' : varValue.toStringAsFixed(2)),
+                  _pdfCell(reasons.isEmpty ? '-' : reasons),
                   _pdfCell(d.status),
                 ]);
               }),
