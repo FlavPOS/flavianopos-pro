@@ -365,28 +365,36 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 debugPrint('[POSTBACK] Created new $postbackBatchId at $issuerBranchId qty=$postbackAmount');
               }
 
-              // 3. v1.0.58+113 — Firebase-safe increment for CROSS-BRANCH SOH
-              // Bug: BranchInventoryService.incrementStock() uses LOCAL cache which
-              // is 0 for other branches, causing SOH corruption (128 became 1 in test).
-              // Fix: Read current qty from Firebase directly, then increment there.
+              // 3. v1.0.58+115 — Firebase-safe CROSS-BRANCH SOH with .set() to trigger onChildChanged
+              // v113 used .update() which doesn't reliably trigger listeners.
+              // v115 uses .set() with full payload + deviceId to properly notify other branches.
               try {
                 final fb = FirebaseRealtimeService.instance.db;
                 if (fb != null && companyCode.isNotEmpty) {
                   final sohPath = 'companies/$companyCode/branchInventory/$issuerBranchId/${rb.source.productId}';
                   final snap = await fb.ref(sohPath).get();
-                  int currentSOH = 0;
                   Map<String, dynamic> existingData = {};
                   if (snap.exists && snap.value is Map) {
                     existingData = (snap.value as Map).map((k, v) => MapEntry(k.toString(), v));
-                    currentSOH = (existingData['stockQty'] as num?)?.toInt() ?? 0;
                   }
+                  final currentSOH = (existingData['stockQty'] as num?)?.toInt() ?? 0;
                   final newSOH = currentSOH + postbackAmount;
-                  await fb.ref(sohPath).update({
+                  final myDeviceId = await DeviceIdService().getOrCreate();
+                  final nowIso = DateTime.now().toUtc().toIso8601String();
+                  // Build FULL payload (preserve existing fields + update stockQty)
+                  final fullPayload = <String, dynamic>{
+                    ...existingData,
+                    'branchId': issuerBranchId,
+                    'productId': rb.source.productId,
                     'stockQty': newSOH,
-                    'updatedAt': DateTime.now().toIso8601String(),
-                    'lastUpdated': DateTime.now().toIso8601String(),
-                  });
-                  debugPrint('[POSTBACK-SOH] $issuerBranchId/${rb.source.productId}: $currentSOH + $postbackAmount = $newSOH (Firebase-safe)');
+                    'updatedAt': nowIso,
+                    'lastUpdated': nowIso,
+                    'deviceId': myDeviceId,
+                    'isMigrated': existingData['isMigrated'] ?? true,
+                  };
+                  // Use .set() instead of .update() to trigger onChildChanged listener
+                  await fb.ref(sohPath).set(fullPayload);
+                  debugPrint('[POSTBACK-SOH] $issuerBranchId/${rb.source.productId}: $currentSOH + $postbackAmount = $newSOH (Firebase-safe, .set())');
                 } else {
                   debugPrint('[POSTBACK-SOH] Firebase not available, SKIPPING SOH update for $issuerBranchId');
                 }
