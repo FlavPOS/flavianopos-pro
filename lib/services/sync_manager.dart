@@ -225,7 +225,15 @@ class SyncManager {
     final fbDb = FirebaseRealtimeService.instance.db;
     if (fbDb == null) return;
     final assign = await _assignSvc.read();
-    final branchId = assign['branchId'] ?? '';
+    var branchId = assign['branchId'] ?? '';
+    // v1.0.58+114 — HO users may have empty branchId; default to HO001
+    if (branchId.isEmpty) {
+      final role = (assign['role'] ?? '').toString().toLowerCase().trim();
+      if (role == 'admin' || role == 'companyadmin') {
+        branchId = 'HO001';
+        if (kDebugMode) debugPrint('[SYNC-INV] HO user detected, defaulting branchId=HO001');
+      }
+    }
 
     await _backfillProducts(companyCode);  // 🆕 pull existing products first
     // 📦 Listen for product master (Head Office controls, all branches see)
@@ -291,6 +299,8 @@ class SyncManager {
           .onChildAdded.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
       _rtListeners.add(fbDb.ref('companies/$companyCode/branchInventory/$branchId')
           .onChildChanged.listen((event) => _onInventoryUpdate(event, companyCode, branchId)));
+      // v1.0.58+114 — Debug: confirm listener registered
+      if (kDebugMode) debugPrint('[SYNC-INV] Registered listener for branchInventory/$branchId');
 
       // ═══ INTER-STORE TRANSFERS + BRANCH ADJUSTMENTS ═══
       _rtListeners.add(fbDb.ref('companies/$companyCode/interStoreTransfers')
