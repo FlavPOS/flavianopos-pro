@@ -790,8 +790,28 @@ class _TransferListScreenState extends State<TransferListScreen> {
     final pdf = pw.Document();
     // ignore: unused_local_variable
     final now = DateTime.now();
-    final totalQty = items.fold<int>(0, (s, i) => s + i.issuedQty);
-    final totalRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+    // v1.0.58+125 — Grand Total uses batch sums (matches ITEM SUBTOTAL)
+    int totalIssued = 0;
+    int totalReceived = 0;
+    double totalRetail = 0.0;
+    double totalVariance = 0.0;
+    for (final item in items) {
+      final itemBatches = batchesByProduct[item.productId] ?? [];
+      if (itemBatches.isEmpty) {
+        totalIssued += item.issuedQty;
+        totalReceived += item.issuedQty;
+        totalRetail += item.issuedQty * item.unitCost;
+      } else {
+        for (final b in itemBatches) {
+          final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          totalIssued += b.transferQty;
+          totalReceived += actualReceived;
+          totalRetail += actualReceived * b.unitCost;
+          totalVariance += (actualReceived - b.transferQty) * b.unitCost;
+        }
+      }
+    }
+    final totalQty = totalIssued; // Backwards compat for any other refs
 
     final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
     const itemsPerPage = 20;
@@ -968,17 +988,23 @@ class _TransferListScreenState extends State<TransferListScreen> {
                 }
                 return rows;
               }),
-              // v1.0.58+124 — Grand total (10 cols)
+              // v1.0.58+125 — Grand total uses batch sums (10 cols)
               if (currentPage == totalPagesCount)
                 pw.TableRow(children: [
                   _p4C(''),
                   _p4C('Grand Total', bold: true),
                   _p4CR('-', bold: true),
-                  _p4CR(totalQty.toString(), bold: true),
-                  _p4CR(totalQty.toString(), bold: true),
-                  _p4CR('-', bold: true),
+                  _p4CR(totalIssued.toString(), bold: true),
+                  _p4CR(totalReceived.toString(), bold: true),
+                  _p4CR(
+                    (totalReceived - totalIssued) == 0 ? '-'
+                        : ((totalReceived - totalIssued) < 0
+                            ? (totalReceived - totalIssued).toString()
+                            : '+${totalReceived - totalIssued}'),
+                    bold: true,
+                  ),
                   _p4CR(totalRetail.toStringAsFixed(2), bold: true),
-                  _p4CR('-', bold: true),
+                  _p4CR(totalVariance == 0 ? '-' : totalVariance.toStringAsFixed(2), bold: true),
                   _p4CR('-', bold: true),
                   _p4CR('-', bold: true),
                 ]),
