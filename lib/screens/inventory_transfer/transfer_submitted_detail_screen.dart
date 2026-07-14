@@ -711,24 +711,27 @@ class _TransferSubmittedDetailScreenState
   // ═══ PDF GENERATOR (A4 Landscape) ═══
   Future<Uint8List> _generatePdf() async {
     final pdf = pw.Document();
-    // v1.0.58+120 — Grand Total uses batch sums (matches ITEM SUBTOTAL rows)
-    // Bug: Was using ri.issuedQty which showed 20 instead of received 18
-    // Retail was 4400 instead of 3960
+    // v1.0.58+121 — Grand Total uses batch sums with DEBUG logging
     int totalQty = 0;
     double totalRetail = 0.0;
+    debugPrint('[PDF-DEBUG] Calculating Grand Total for ${_items.length} items');
     for (final ri in _items) {
       final batches = _batchesByProduct[ri.productId] ?? [];
+      debugPrint('[PDF-DEBUG] Item ${ri.sku}: ${batches.length} batches');
       if (batches.isEmpty) {
         totalQty += ri.issuedQty;
         totalRetail += ri.issuedQty * ri.unitCost;
+        debugPrint('[PDF-DEBUG]   No batches, using issuedQty=${ri.issuedQty}');
       } else {
         for (final b in batches) {
           final actualQty = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          debugPrint('[PDF-DEBUG]   Batch ${b.batchNumber}: transferQty=${b.transferQty}, receivedQty=${b.receivedQty}, actualQty=$actualQty');
           totalQty += actualQty;
           totalRetail += actualQty * b.unitCost;
         }
       }
     }
+    debugPrint('[PDF-DEBUG] Grand Total: totalQty=$totalQty, totalRetail=$totalRetail');
 
     final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
     const itemsPerPage = 20;
