@@ -711,8 +711,24 @@ class _TransferSubmittedDetailScreenState
   // ═══ PDF GENERATOR (A4 Landscape) ═══
   Future<Uint8List> _generatePdf() async {
     final pdf = pw.Document();
-    final totalQty = _items.fold<int>(0, (s, i) => s + i.issuedQty);
-    final totalRetail = _items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+    // v1.0.58+120 — Grand Total uses batch sums (matches ITEM SUBTOTAL rows)
+    // Bug: Was using ri.issuedQty which showed 20 instead of received 18
+    // Retail was 4400 instead of 3960
+    int totalQty = 0;
+    double totalRetail = 0.0;
+    for (final ri in _items) {
+      final batches = _batchesByProduct[ri.productId] ?? [];
+      if (batches.isEmpty) {
+        totalQty += ri.issuedQty;
+        totalRetail += ri.issuedQty * ri.unitCost;
+      } else {
+        for (final b in batches) {
+          final actualQty = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          totalQty += actualQty;
+          totalRetail += actualQty * b.unitCost;
+        }
+      }
+    }
 
     final pageFormat = pdf_pkg.PdfPageFormat.a4.landscape;
     const itemsPerPage = 20;
