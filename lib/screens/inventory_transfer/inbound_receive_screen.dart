@@ -1496,24 +1496,30 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
           pw.Table(
             border: pw.TableBorder.all(width: 0.5),
             columnWidths: {
-              0: const pw.FixedColumnWidth(70),
-              1: const pw.FlexColumnWidth(3),
-              2: const pw.FixedColumnWidth(50),
-              3: const pw.FixedColumnWidth(60),
-              4: const pw.FixedColumnWidth(65),
-              5: const pw.FixedColumnWidth(55),
-              6: const pw.FixedColumnWidth(75),
-              5: const pw.FixedColumnWidth(85),
+              // v1.0.58+122 — 10-column enterprise variance layout
+              0: const pw.FixedColumnWidth(50),   // SKU
+              1: const pw.FlexColumnWidth(2),     // Product Name
+              2: const pw.FixedColumnWidth(50),   // Unit Retail
+              3: const pw.FixedColumnWidth(40),   // Issued
+              4: const pw.FixedColumnWidth(45),   // Received
+              5: const pw.FixedColumnWidth(45),   // Short +/-
+              6: const pw.FixedColumnWidth(60),   // Retail Value
+              7: const pw.FixedColumnWidth(60),   // Variance Value
+              8: const pw.FixedColumnWidth(55),   // Reason
+              9: const pw.FixedColumnWidth(75),   // Notes
             },
             children: [
               pw.TableRow(children: [
                 _rc4H('SKU'),
                 _rc4H('Product Name'),
+                _rc4H('Unit Retail'),
                 _rc4H('Issued'),
                 _rc4H('Received'),
-                _rc4H('Short'),
-                _rc4H('Unit Retail'),
+                _rc4H('Short +/-'),
                 _rc4H('Retail Value'),
+                _rc4H('Variance Value'),
+                _rc4H('Reason'),
+                _rc4H('Notes'),
               ]),
               ...pageItems.expand<pw.TableRow>((ri) {
                 final item = ri.item;
@@ -1522,70 +1528,69 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
 
                 if (batches.isEmpty) {
                   final sh = item.issuedQty - ri.receivedQty;
+                  final variance = ri.receivedQty - item.issuedQty;
                   final retail = ri.receivedQty * item.unitCost;
+                  final varianceValue = variance * item.unitCost;
                   rows.add(pw.TableRow(children: [
                     _rc4C(item.sku),
                     _rc4C(item.productName),
+                    _rc4CR(item.unitCost.toStringAsFixed(2)),
                     _rc4CR(item.issuedQty.toString()),
                     _rc4CR(ri.receivedQty.toString()),
-                    _rc4CR(sh > 0 ? sh.toString() : '-'),
+                    _rc4CR(sh > 0 ? '-${sh}' : (sh < 0 ? '+${-sh}' : '-')),
                     _rc4CR(retail.toStringAsFixed(2)),
+                    _rc4CR(variance == 0 ? '-' : varianceValue.toStringAsFixed(2)),
+                    _rc4CR('-'),
+                    _rc4CR('-'),
                   ]));
                 } else {
-                  // Product header row (bold)
+                  // Product header row (bold, 10 cols)
                   rows.add(pw.TableRow(children: [
                     _rc4C(item.sku, bold: true),
                     _rc4C(item.productName, bold: true),
-                    _rc4C(''),
-                    _rc4C(''),
-                    _rc4C(''),
-                    _rc4C(''),
+                    _rc4C(''), _rc4C(''), _rc4C(''), _rc4C(''),
+                    _rc4C(''), _rc4C(''), _rc4C(''), _rc4C(''),
                   ]));
 
                   int itemIssued = 0;
                   double itemTotal = 0;
+                  double itemVariance = 0;
                   for (final b in batches) {
-                    // v1.0.58+116 — Variance-aware auto-print PDF
-                    // Show actual received qty, short/overage, and reason
+                    // v1.0.58+122 — 10-column layout with separate Reason/Notes/Variance Value
                     final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
-                    final actualShort = b.transferQty - actualReceived;
-                    final bTotal = actualReceived * b.unitCost;  // Value based on RECEIVED
+                    final variance = actualReceived - b.transferQty;  // -N=short, +N=overage
+                    final bTotal = actualReceived * b.unitCost;
+                    final varianceValue = variance * b.unitCost;  // Financial impact
                     itemIssued += b.transferQty;
                     itemTotal += bTotal;
+                    itemVariance += varianceValue;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    // Variance suffix (short/overage with reason)
-                    String varSuffix = '';
-                    if (actualShort > 0) {
-                      varSuffix = '  |  Short ${actualShort}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
-                    } else if (actualShort < 0) {
-                      varSuffix = '  |  Overage ${-actualShort}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
-                    }
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
-                    // Short col shows actual short with reason
-                    final shortCol = actualShort > 0
-                        ? '${actualShort}${b.shortReason.isNotEmpty ? " (${b.shortReason})" : ""}'
-                        : actualShort < 0
-                            ? '+${-actualShort}${b.shortReason.isNotEmpty ? " (${b.shortReason})" : ""}'
-                            : '-';
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    // Short +/- column: -1 for short, +2 for overage, - for match
+                    final shortStr = variance == 0 ? '-' : (variance < 0 ? variance.toString() : '+$variance');
                     rows.add(pw.TableRow(children: [
                       _rc4C(''),
                       _rc4C(info),
+                      _rc4CR(b.unitCost.toStringAsFixed(2)),
                       _rc4CR(b.transferQty.toString()),
                       _rc4CR(actualReceived.toString()),
-                      _rc4CR(shortCol),
-                      _rc4CR(b.unitCost.toStringAsFixed(2)),
+                      _rc4CR(shortStr),
                       _rc4CR(bTotal.toStringAsFixed(2)),
+                      _rc4CR(variance == 0 ? '-' : varianceValue.toStringAsFixed(2)),
+                      _rc4CR(b.shortReason.isEmpty ? '-' : b.shortReason),
+                      _rc4CR(b.varianceNotes.isEmpty ? '-' : b.varianceNotes),
                     ]));
                   }
 
-                  // v1.0.58+117 — ITEM SUBTOTAL uses SUM of batch received (matches batch rows)
+                  // v1.0.58+122 — ITEM SUBTOTAL 10 cols with Variance Value
                   int itemReceived = 0;
                   for (final b in batches) {
                     final ar = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
                     itemReceived += ar;
                   }
-                  final itemShort = itemIssued - itemReceived;
+                  final itemVarQty = itemReceived - itemIssued;
+                  final itemShortStr = itemVarQty == 0 ? '-' : (itemVarQty < 0 ? itemVarQty.toString() : '+$itemVarQty');
                   rows.add(pw.TableRow(
                     decoration: const pw.BoxDecoration(
                       color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
@@ -1593,11 +1598,14 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                     children: [
                       _rc4C(''),
                       _rc4C('ITEM SUBTOTAL', bold: true),
+                      _rc4CR('-', bold: true),
                       _rc4CR(itemIssued.toString(), bold: true),
                       _rc4CR(itemReceived.toString(), bold: true),
-                      _rc4CR(itemShort > 0 ? itemShort.toString() : (itemShort < 0 ? '+${-itemShort}' : '-'), bold: true),
-                      _rc4CR('-', bold: true),
+                      _rc4CR(itemShortStr, bold: true),
                       _rc4CR(itemTotal.toStringAsFixed(2), bold: true),
+                      _rc4CR(itemVariance == 0 ? '-' : itemVariance.toStringAsFixed(2), bold: true),
+                      _rc4CR('-', bold: true),
+                      _rc4CR('-', bold: true),
                     ],
                   ));
                 }
@@ -1607,21 +1615,20 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 pw.TableRow(children: [
                   _rc4C(''),
                   _rc4C('Grand Total', bold: true),
+                  _rc4CR('-', bold: true),
                   _rc4CR(totalIssued.toString(), bold: true),
                   _rc4CR(totalReceived.toString(), bold: true),
-                  _rc4CR(totalShort > 0 ? totalShort.toString() : '-', bold: true),
-                  _rc4CR('-', bold: true),
+                  _rc4CR(totalShort == 0 ? '-' : (totalShort > 0 ? '-$totalShort' : '+${-totalShort}'), bold: true),
                   _rc4CR(totalRetail.toStringAsFixed(2), bold: true),
+                  _rc4CR('-', bold: true),   // v1.0.58+122 Grand Total variance value shown below
+                  _rc4CR('-', bold: true),
+                  _rc4CR('-', bold: true),
                 ]),
+              // v1.0.58+122 — Empty rows now 10 cols
               for (int i = 0; i < 6; i++)
                 pw.TableRow(children: [
-                  _rc4Empty(),
-                  _rc4Empty(),
-                  _rc4Empty(),
-                  _rc4Empty(),
-                  _rc4Empty(),
-                  _rc4Empty(),
-                  _rc4Empty(),
+                  _rc4Empty(), _rc4Empty(), _rc4Empty(), _rc4Empty(), _rc4Empty(),
+                  _rc4Empty(), _rc4Empty(), _rc4Empty(), _rc4Empty(), _rc4Empty(),
                 ]),
             ],
           ),
