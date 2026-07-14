@@ -803,19 +803,30 @@ class _TransferSubmittedDetailScreenState
           pw.Table(
             border: pw.TableBorder.all(width: 0.5),
             columnWidths: {
-              0: const pw.FixedColumnWidth(70),
-              1: const pw.FlexColumnWidth(3),
-              2: const pw.FixedColumnWidth(55),
-              3: const pw.FixedColumnWidth(75),
-              4: const pw.FixedColumnWidth(85),
+              // v1.0.58+123 — 10-column enterprise variance layout (matches auto-print)
+              0: const pw.FixedColumnWidth(50),   // SKU
+              1: const pw.FlexColumnWidth(2),     // Product Name
+              2: const pw.FixedColumnWidth(50),   // Unit Retail
+              3: const pw.FixedColumnWidth(40),   // Issued
+              4: const pw.FixedColumnWidth(45),   // Received
+              5: const pw.FixedColumnWidth(45),   // Short +/-
+              6: const pw.FixedColumnWidth(60),   // Retail Value
+              7: const pw.FixedColumnWidth(60),   // Variance Value
+              8: const pw.FixedColumnWidth(55),   // Reason
+              9: const pw.FixedColumnWidth(75),   // Notes
             },
             children: [
               pw.TableRow(children: [
                 _sd4H('SKU'),
                 _sd4H('Product Name'),
-                _sd4H('Qty'),
                 _sd4H('Unit Retail'),
+                _sd4H('Issued'),
+                _sd4H('Received'),
+                _sd4H('Short +/-'),
                 _sd4H('Retail Value'),
+                _sd4H('Variance Value'),
+                _sd4H('Reason'),
+                _sd4H('Notes'),
               ]),
               ...pageItems.expand<pw.TableRow>((item) {
                 final batches = _batchesByProduct[item.productId] ?? [];
@@ -826,49 +837,59 @@ class _TransferSubmittedDetailScreenState
                   rows.add(pw.TableRow(children: [
                     _sd4C(item.sku),
                     _sd4C(item.productName),
-                    _sd4CR(item.issuedQty.toString()),
                     _sd4CR(item.unitCost.toStringAsFixed(2)),
+                    _sd4CR(item.issuedQty.toString()),
+                    _sd4CR(item.issuedQty.toString()),
+                    _sd4CR('-'),
                     _sd4CR(retail.toStringAsFixed(2)),
+                    _sd4CR('-'),
+                    _sd4CR('-'),
+                    _sd4CR('-'),
                   ]));
                 } else {
-                  // Product header row (bold)
+                  // Product header row (bold, 10 cols)
                   rows.add(pw.TableRow(children: [
                     _sd4C(item.sku, bold: true),
                     _sd4C(item.productName, bold: true),
-                    _sd4C(''),
-                    _sd4C(''),
-                    _sd4C(''),
+                    _sd4C(''), _sd4C(''), _sd4C(''), _sd4C(''),
+                    _sd4C(''), _sd4C(''), _sd4C(''), _sd4C(''),
                   ]));
 
-                  // v1.0.58+122 — Use received qty for variance-aware display
-                  int itemQty = 0;
+                  // v1.0.58+123 — 10-column batch loop with Variance Value
+                  int itemIssued = 0;
+                  int itemReceived = 0;
                   double itemTotal = 0;
+                  double itemVariance = 0;
                   for (final b in batches) {
-                    final actualQty = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
-                    final bTotal = actualQty * b.unitCost;
-                    itemQty += actualQty;
+                    final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+                    final variance = actualReceived - b.transferQty;  // -N=short, +N=overage
+                    final bTotal = actualReceived * b.unitCost;
+                    final varianceValue = variance * b.unitCost;
+                    itemIssued += b.transferQty;
+                    itemReceived += actualReceived;
                     itemTotal += bTotal;
+                    itemVariance += varianceValue;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    // Include variance info if there's a difference
-                    final variance = b.receivedQty - b.transferQty;
-                    String varSuffix = '';
-                    if (variance < 0) {
-                      varSuffix = '  |  Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
-                    } else if (variance > 0) {
-                      varSuffix = '  |  Issued ${b.transferQty} · +${variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
-                    }
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    final shortStr = variance == 0 ? '-' : (variance < 0 ? variance.toString() : '+$variance');
                     rows.add(pw.TableRow(children: [
                       _sd4C(''),
                       _sd4C(info),
-                      _sd4CR(actualQty.toString()),
                       _sd4CR(b.unitCost.toStringAsFixed(2)),
+                      _sd4CR(b.transferQty.toString()),
+                      _sd4CR(actualReceived.toString()),
+                      _sd4CR(shortStr),
                       _sd4CR(bTotal.toStringAsFixed(2)),
+                      _sd4CR(variance == 0 ? '-' : varianceValue.toStringAsFixed(2)),
+                      _sd4CR(b.shortReason.isEmpty ? '-' : b.shortReason),
+                      _sd4CR(b.varianceNotes.isEmpty ? '-' : b.varianceNotes),
                     ]));
                   }
 
-                  // ITEM SUBTOTAL row (light-blue)
+                  // ITEM SUBTOTAL row (10 cols with Variance Value)
+                  final itemVarQty = itemReceived - itemIssued;
+                  final itemShortStr = itemVarQty == 0 ? '-' : (itemVarQty < 0 ? itemVarQty.toString() : '+$itemVarQty');
                   rows.add(pw.TableRow(
                     decoration: const pw.BoxDecoration(
                       color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
@@ -876,9 +897,14 @@ class _TransferSubmittedDetailScreenState
                     children: [
                       _sd4C(''),
                       _sd4C('ITEM SUBTOTAL', bold: true),
-                      _sd4CR(itemQty.toString(), bold: true),
-                      _sd4CR('-'),
+                      _sd4CR('-', bold: true),
+                      _sd4CR(itemIssued.toString(), bold: true),
+                      _sd4CR(itemReceived.toString(), bold: true),
+                      _sd4CR(itemShortStr, bold: true),
                       _sd4CR(itemTotal.toStringAsFixed(2), bold: true),
+                      _sd4CR(itemVariance == 0 ? '-' : itemVariance.toStringAsFixed(2), bold: true),
+                      _sd4CR('-', bold: true),
+                      _sd4CR('-', bold: true),
                     ],
                   ));
                 }
@@ -888,17 +914,20 @@ class _TransferSubmittedDetailScreenState
                 pw.TableRow(children: [
                   _sd4C(''),
                   _sd4C('Grand Total', bold: true),
+                  _sd4CR('-', bold: true),
                   _sd4CR(totalQty.toString(), bold: true),
-                  _sd4C(''),
+                  _sd4CR(totalQty.toString(), bold: true),
+                  _sd4CR('-', bold: true),
                   _sd4CR(totalRetail.toStringAsFixed(2), bold: true),
+                  _sd4CR('-', bold: true),
+                  _sd4CR('-', bold: true),
+                  _sd4CR('-', bold: true),
                 ]),
+              // v1.0.58+123 — Empty rows now 10 cols
               for (int i = 0; i < 6; i++)
                 pw.TableRow(children: [
-                  _sd4Empty(),
-                  _sd4Empty(),
-                  _sd4Empty(),
-                  _sd4Empty(),
-                  _sd4Empty(),
+                  _sd4Empty(), _sd4Empty(), _sd4Empty(), _sd4Empty(), _sd4Empty(),
+                  _sd4Empty(), _sd4Empty(), _sd4Empty(), _sd4Empty(), _sd4Empty(),
                 ]),
             ],
           ),
