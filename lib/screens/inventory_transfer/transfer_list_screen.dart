@@ -876,9 +876,14 @@ class _TransferListScreenState extends State<TransferListScreen> {
               pw.TableRow(children: [
                 _p4H('SKU'),
                 _p4H('Product Name'),
-                _p4H('Qty'),
                 _p4H('Unit Retail'),
+                _p4H('Issued'),
+                _p4H('Received'),
+                _p4H('Short +/-'),
                 _p4H('Retail Value'),
+                _p4H('Variance Value'),
+                _p4H('Reason'),
+                _p4H('Notes'),
               ]),
               // Data rows — v1.0.55 with batch sub-rows
               ...pageItems.expand<pw.TableRow>((item) {
@@ -890,51 +895,59 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   rows.add(pw.TableRow(children: [
                     _p4C(item.sku),
                     _p4C(item.productName),
-                    _p4CR(item.issuedQty.toString()),
                     _p4CR(item.unitCost.toStringAsFixed(2)),
+                    _p4CR(item.issuedQty.toString()),
+                    _p4CR(item.issuedQty.toString()),
+                    _p4CR('-'),
                     _p4CR(retail.toStringAsFixed(2)),
+                    _p4CR('-'),
+                    _p4CR('-'),
+                    _p4CR('-'),
                   ]));
                 } else {
-                  // Product header row (bold)
+                  // Product header row (bold, 10 cols)
                   rows.add(pw.TableRow(children: [
                     _p4C(item.sku, bold: true),
                     _p4C(item.productName, bold: true),
-                    _p4C(''),
-                    _p4C(''),
-                    _p4C(''),
+                    _p4C(''), _p4C(''), _p4C(''), _p4C(''),
+                    _p4C(''), _p4C(''), _p4C(''), _p4C(''),
                   ]));
 
-                  int itemQty = 0;
+                  // v1.0.58+124 — 10-column batch loop with Variance Value
+                  int itemIssued = 0;
+                  int itemReceived = 0;
                   double itemTotal = 0;
+                  double itemVariance = 0;
                   for (final b in batches) {
-                    // v1.0.57+109 — Show received qty when variance recorded
-                    final hasVariance = b.receivedQty != b.transferQty || b.shortReason.isNotEmpty;
-                    final qtyToShow = hasVariance ? b.receivedQty : b.transferQty;
-                    final bTotal = qtyToShow * b.unitCost;
-                    itemQty += qtyToShow;
+                    final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+                    final variance = actualReceived - b.transferQty;
+                    final bTotal = actualReceived * b.unitCost;
+                    final varianceValue = variance * b.unitCost;
+                    itemIssued += b.transferQty;
+                    itemReceived += actualReceived;
                     itemTotal += bTotal;
+                    itemVariance += varianceValue;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    String varSuffix = '';
-                    if (hasVariance) {
-                      final variance = b.receivedQty - b.transferQty;
-                      varSuffix = variance < 0
-                          ? '  |  Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
-                          : variance > 0
-                              ? '  |  Issued ${b.transferQty} · +$variance${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}'
-                              : '';
-                    }
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    final shortStr = variance == 0 ? '-' : (variance < 0 ? variance.toString() : '+$variance');
                     rows.add(pw.TableRow(children: [
                       _p4C(''),
                       _p4C(info),
-                      _p4CR(qtyToShow.toString()),
                       _p4CR(b.unitCost.toStringAsFixed(2)),
+                      _p4CR(b.transferQty.toString()),
+                      _p4CR(actualReceived.toString()),
+                      _p4CR(shortStr),
                       _p4CR(bTotal.toStringAsFixed(2)),
+                      _p4CR(variance == 0 ? '-' : varianceValue.toStringAsFixed(2)),
+                      _p4CR(b.shortReason.isEmpty ? '-' : b.shortReason),
+                      _p4CR(b.varianceNotes.isEmpty ? '-' : b.varianceNotes),
                     ]));
                   }
 
-                  // ITEM SUBTOTAL (light-blue)
+                  // ITEM SUBTOTAL (light-blue, 10 cols)
+                  final itemVarQty = itemReceived - itemIssued;
+                  final itemShortStr = itemVarQty == 0 ? '-' : (itemVarQty < 0 ? itemVarQty.toString() : '+$itemVarQty');
                   rows.add(pw.TableRow(
                     decoration: const pw.BoxDecoration(
                       color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
@@ -942,31 +955,38 @@ class _TransferListScreenState extends State<TransferListScreen> {
                     children: [
                       _p4C(''),
                       _p4C('ITEM SUBTOTAL', bold: true),
-                      _p4CR(itemQty.toString(), bold: true),
-                      _p4CR('-'),
+                      _p4CR('-', bold: true),
+                      _p4CR(itemIssued.toString(), bold: true),
+                      _p4CR(itemReceived.toString(), bold: true),
+                      _p4CR(itemShortStr, bold: true),
                       _p4CR(itemTotal.toStringAsFixed(2), bold: true),
+                      _p4CR(itemVariance == 0 ? '-' : itemVariance.toStringAsFixed(2), bold: true),
+                      _p4CR('-', bold: true),
+                      _p4CR('-', bold: true),
                     ],
                   ));
                 }
                 return rows;
               }),
-              // Grand total (only on last page)
+              // v1.0.58+124 — Grand total (10 cols)
               if (currentPage == totalPagesCount)
                 pw.TableRow(children: [
                   _p4C(''),
                   _p4C('Grand Total', bold: true),
+                  _p4CR('-', bold: true),
                   _p4CR(totalQty.toString(), bold: true),
-                  _p4C(''),
+                  _p4CR(totalQty.toString(), bold: true),
+                  _p4CR('-', bold: true),
                   _p4CR(totalRetail.toStringAsFixed(2), bold: true),
+                  _p4CR('-', bold: true),
+                  _p4CR('-', bold: true),
+                  _p4CR('-', bold: true),
                 ]),
-              // Empty rows for space (approximately 6 empty rows to fill page)
+              // Empty rows (10 cols)
               for (int i = 0; i < 6; i++)
                 pw.TableRow(children: [
-                  _p4Empty(),
-                  _p4Empty(),
-                  _p4Empty(),
-                  _p4Empty(),
-                  _p4Empty(),
+                  _p4Empty(), _p4Empty(), _p4Empty(), _p4Empty(), _p4Empty(),
+                  _p4Empty(), _p4Empty(), _p4Empty(), _p4Empty(), _p4Empty(),
                 ]),
             ],
           ),
