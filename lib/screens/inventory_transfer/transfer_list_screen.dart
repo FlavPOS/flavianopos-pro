@@ -1413,14 +1413,23 @@ class _TransferListScreenState extends State<TransferListScreen> {
           pw.SizedBox(height: 8),
           pw.Table(
             border: pw.TableBorder.all(color: pdf_pkg.PdfColor.fromInt(0xFF6B7280), width: 0.5),
+            // v1.0.58+130 — All 15 columns have fixed widths to prevent text-wrap
             columnWidths: {
-              0: const pw.FixedColumnWidth(90),
-              1: const pw.FlexColumnWidth(2),
-              2: const pw.FlexColumnWidth(2),
-              3: const pw.FixedColumnWidth(40),
-              4: const pw.FixedColumnWidth(50),
-              5: const pw.FixedColumnWidth(70),
-              6: const pw.FixedColumnWidth(70),
+              0: const pw.FixedColumnWidth(85),   // IST No.
+              1: const pw.FixedColumnWidth(70),   // From (fits BR006 Cebu Branch)
+              2: const pw.FixedColumnWidth(70),   // To (fits HO001 Head Office)
+              3: const pw.FixedColumnWidth(30),   // Items
+              4: const pw.FixedColumnWidth(30),   // Iss
+              5: const pw.FixedColumnWidth(30),   // Rcv
+              6: const pw.FixedColumnWidth(30),   // +/-
+              7: const pw.FixedColumnWidth(50),   // Retail
+              8: const pw.FixedColumnWidth(50),   // Var
+              9: const pw.FixedColumnWidth(65),   // Reasons
+              10: const pw.FixedColumnWidth(45),  // Prep By
+              11: const pw.FixedColumnWidth(55),  // Prep Date
+              12: const pw.FixedColumnWidth(45),  // Rcv By
+              13: const pw.FixedColumnWidth(55),  // Rcv Date
+              14: const pw.FixedColumnWidth(55),  // Status
             },
             children: [
               // v1.0.58+128 — 16-col with dates + received by
