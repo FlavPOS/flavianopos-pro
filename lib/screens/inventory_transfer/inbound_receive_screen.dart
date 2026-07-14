@@ -310,9 +310,10 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
       if (issuerBranchId.isNotEmpty) {
         for (final ri in _items) {
           for (final rb in ri.batches) {
-            // Only postback if SHORT with reason RETURN
+            // v1.0.58+113 — Postback ALL shorts (reason kept for audit trail)
+            // Business logic: sender books say N left warehouse, receiver got M,
+            // difference must be reconciled — reason is WHY (audit only)
             if (!rb.hasShort) continue;
-            if (rb.reason != 'RETURN') continue;
 
             final postbackAmount = rb.short;
 
@@ -364,12 +365,34 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 debugPrint('[POSTBACK] Created new $postbackBatchId at $issuerBranchId qty=$postbackAmount');
               }
 
-              // 3. Increment ISSUER's SOH (Stock On Hand)
-              await BranchInventoryService.incrementStock(
-                issuerBranchId,
-                rb.source.productId,
-                postbackAmount,
-              );
+              // 3. v1.0.58+113 — Firebase-safe increment for CROSS-BRANCH SOH
+              // Bug: BranchInventoryService.incrementStock() uses LOCAL cache which
+              // is 0 for other branches, causing SOH corruption (128 became 1 in test).
+              // Fix: Read current qty from Firebase directly, then increment there.
+              try {
+                final fb = FirebaseRealtimeService.instance.db;
+                if (fb != null && companyCode.isNotEmpty) {
+                  final sohPath = 'companies/$companyCode/branchInventory/$issuerBranchId/${rb.source.productId}';
+                  final snap = await fb.ref(sohPath).get();
+                  int currentSOH = 0;
+                  Map<String, dynamic> existingData = {};
+                  if (snap.exists && snap.value is Map) {
+                    existingData = (snap.value as Map).map((k, v) => MapEntry(k.toString(), v));
+                    currentSOH = (existingData['stockQty'] as num?)?.toInt() ?? 0;
+                  }
+                  final newSOH = currentSOH + postbackAmount;
+                  await fb.ref(sohPath).update({
+                    'stockQty': newSOH,
+                    'updatedAt': DateTime.now().toIso8601String(),
+                    'lastUpdated': DateTime.now().toIso8601String(),
+                  });
+                  debugPrint('[POSTBACK-SOH] $issuerBranchId/${rb.source.productId}: $currentSOH + $postbackAmount = $newSOH (Firebase-safe)');
+                } else {
+                  debugPrint('[POSTBACK-SOH] Firebase not available, SKIPPING SOH update for $issuerBranchId');
+                }
+              } catch (e) {
+                debugPrint('[POSTBACK-SOH] Firebase update failed: $e');
+              }
 
               // 4. Log to stock_movements at ISSUER's branch (BIR audit)
               try {
