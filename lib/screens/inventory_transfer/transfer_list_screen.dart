@@ -619,11 +619,14 @@ class _TransferListScreenState extends State<TransferListScreen> {
       // Delete default Sheet1 if it exists (empty tab)
       excel.delete('Sheet1');
 
+      // v1.0.58+128 — 16-col with Prepared/Received dates
       final headers = [
         'Date', 'IST No.', 'From Branch', 'To Branch',
         'Items', 'Issued', 'Received', 'Short +/-',
         'Retail Value', 'Var Value', 'Reasons',
-        'Prepared By', 'Approved By', 'Status',
+        'Prepared By', 'Prepared Date',
+        'Received By', 'Received Date',
+        'Status',
       ];
 
       // Write header row with styling
@@ -680,6 +683,17 @@ class _TransferListScreenState extends State<TransferListScreen> {
         final varStr = varQty == 0 ? '-' : (varQty < 0 ? varQty.toString() : '+$varQty');
         final reasonsStr = docReasons.isEmpty ? '-' : docReasons.join(', ');
 
+        // v1.0.58+128 — Format dates safely
+        String prepDate = doc.preparedDate;
+        try {
+          final dt = DateTime.parse(doc.preparedDate);
+          prepDate = '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+        } catch (_) {}
+        String recDate = doc.receivedDate;
+        try {
+          final dt = DateTime.parse(doc.receivedDate);
+          recDate = '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+        } catch (_) {}
         final row = [
           date,
           ref,
@@ -692,8 +706,10 @@ class _TransferListScreenState extends State<TransferListScreen> {
           docRetail.toStringAsFixed(2),
           docVariance == 0 ? '-' : docVariance.toStringAsFixed(2),
           reasonsStr,
-          doc.preparedBy,
-          approvedBy.isEmpty ? '—' : approvedBy,
+          doc.preparedBy.isEmpty ? '—' : doc.preparedBy,
+          prepDate.isEmpty ? '—' : prepDate,
+          doc.receivedBy.isEmpty ? '—' : doc.receivedBy,
+          recDate.isEmpty ? '—' : recDate,
           doc.status,
         ];
 
@@ -1407,6 +1423,7 @@ class _TransferListScreenState extends State<TransferListScreen> {
               6: const pw.FixedColumnWidth(70),
             },
             children: [
+              // v1.0.58+128 — 16-col with dates + received by
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: pdf_pkg.PdfColor.fromInt(0xFFF3F4F6)),
                 children: [
@@ -1414,21 +1431,37 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   _pdfHCell('From'),
                   _pdfHCell('To'),
                   _pdfHCell('Items'),
-                  _pdfHCell('Issued'),
-                  _pdfHCell('Received'),
-                  _pdfHCell('Short +/-'),
+                  _pdfHCell('Iss'),
+                  _pdfHCell('Rcv'),
+                  _pdfHCell('+/-'),
                   _pdfHCell('Retail'),
-                  _pdfHCell('Var Value'),
+                  _pdfHCell('Var'),
                   _pdfHCell('Reasons'),
+                  _pdfHCell('Prep By'),
+                  _pdfHCell('Prep Date'),
+                  _pdfHCell('Rcv By'),
+                  _pdfHCell('Rcv Date'),
                   _pdfHCell('Status'),
                 ],
               ),
+              // v1.0.58+128 — 15-col rows with dates
               ...allData.map((row) {
                 final d = row['doc'] as TransferV3;
                 final variance = row['variance'] as int;
                 final varStr = variance == 0 ? '-' : (variance < 0 ? variance.toString() : '+$variance');
                 final varValue = row['varianceValue'] as double;
                 final reasons = row['reasons'] as String;
+                // Format dates
+                String prepDate = d.preparedDate;
+                try {
+                  final dt = DateTime.parse(d.preparedDate);
+                  prepDate = '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+                } catch (_) {}
+                String recDate = d.receivedDate;
+                try {
+                  final dt = DateTime.parse(d.receivedDate);
+                  recDate = '${dt.year}-${dt.month.toString().padLeft(2, "0")}-${dt.day.toString().padLeft(2, "0")}';
+                } catch (_) {}
                 return pw.TableRow(children: [
                   _pdfCell(d.docNumber.isEmpty ? d.transferId : d.docNumber),
                   _pdfCell('${d.issuingBranchId} ${d.issuingBranchName}'),
@@ -1440,6 +1473,10 @@ class _TransferListScreenState extends State<TransferListScreen> {
                   _pdfCellR((row['retail'] as double).toStringAsFixed(2)),
                   _pdfCellR(varValue == 0 ? '-' : varValue.toStringAsFixed(2)),
                   _pdfCell(reasons.isEmpty ? '-' : reasons),
+                  _pdfCell(d.preparedBy.isEmpty ? '-' : d.preparedBy),
+                  _pdfCell(prepDate.isEmpty ? '-' : prepDate),
+                  _pdfCell(d.receivedBy.isEmpty ? '-' : d.receivedBy),
+                  _pdfCell(recDate.isEmpty ? '-' : recDate),
                   _pdfCell(d.status),
                 ]);
               }),
