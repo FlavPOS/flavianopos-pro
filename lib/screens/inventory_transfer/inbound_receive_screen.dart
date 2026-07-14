@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/branch_inventory_service.dart';
 import '../../services/device_assignment_service.dart';
+import '../../services/device_id_service.dart'; // v1.0.58+115
 import '../../services/firebase_realtime_service.dart';
 import '../../services/firebase_config_service.dart';
 import '../../helpers/database_helper.dart';
