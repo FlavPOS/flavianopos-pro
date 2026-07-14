@@ -840,19 +840,29 @@ class _TransferSubmittedDetailScreenState
                     _sd4C(''),
                   ]));
 
+                  // v1.0.58+122 — Use received qty for variance-aware display
                   int itemQty = 0;
                   double itemTotal = 0;
                   for (final b in batches) {
-                    final bTotal = b.transferQty * b.unitCost;
-                    itemQty += b.transferQty;
+                    final actualQty = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+                    final bTotal = actualQty * b.unitCost;
+                    itemQty += actualQty;
                     itemTotal += bTotal;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    // Include variance info if there's a difference
+                    final variance = b.receivedQty - b.transferQty;
+                    String varSuffix = '';
+                    if (variance < 0) {
+                      varSuffix = '  |  Issued ${b.transferQty} · Short ${-variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
+                    } else if (variance > 0) {
+                      varSuffix = '  |  Issued ${b.transferQty} · +${variance}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
+                    }
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
                     rows.add(pw.TableRow(children: [
                       _sd4C(''),
                       _sd4C(info),
-                      _sd4CR(b.transferQty.toString()),
+                      _sd4CR(actualQty.toString()),
                       _sd4CR(b.unitCost.toStringAsFixed(2)),
                       _sd4CR(bTotal.toStringAsFixed(2)),
                     ]));
