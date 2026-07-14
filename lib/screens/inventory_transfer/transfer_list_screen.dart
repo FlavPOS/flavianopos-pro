@@ -614,11 +614,15 @@ class _TransferListScreenState extends State<TransferListScreen> {
     try {
       // Create Excel — use default Sheet1 to avoid conflicts
       final excel = xl.Excel.createExcel();
-      final sheet = excel['Sheet1'];
+      // v1.0.58+127 — Renamed Sheet1 → SUMMARY (doc-level, matches PDF summary)
+      final sheet = excel['SUMMARY'];
+      // Delete default Sheet1 if it exists (empty tab)
+      excel.delete('Sheet1');
 
       final headers = [
         'Date', 'IST No.', 'From Branch', 'To Branch',
-        'SKU', 'Product Name', 'Qty', 'Retail Value',
+        'Items', 'Issued', 'Received', 'Short +/-',
+        'Retail Value', 'Var Value', 'Reasons',
         'Prepared By', 'Approved By', 'Status',
       ];
 
@@ -634,9 +638,34 @@ class _TransferListScreenState extends State<TransferListScreen> {
         );
       }
 
+      // v1.0.58+127 — Doc-level rows with batch-summed variance (matches PDF summary)
       int rowIndex = 1;
       for (final doc in _transfers) {
         final items = await TransferV3Dao.getItems(doc.transferId);
+        final batches = await TransferV3Dao.getBatches(doc.transferId);
+
+        // Aggregate batch variance data per doc
+        int docIssued = 0;
+        int docReceived = 0;
+        double docRetail = 0.0;
+        double docVariance = 0.0;
+        final Set<String> docReasons = {};
+
+        if (batches.isEmpty) {
+          docIssued = items.fold<int>(0, (s, i) => s + i.issuedQty);
+          docReceived = docIssued;
+          docRetail = items.fold<double>(0.0, (s, i) => s + (i.issuedQty * i.unitCost));
+        } else {
+          for (final b in batches) {
+            final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+            docIssued += b.transferQty;
+            docReceived += actualReceived;
+            docRetail += actualReceived * b.unitCost;
+            docVariance += (actualReceived - b.transferQty) * b.unitCost;
+            if (b.shortReason.isNotEmpty) docReasons.add(b.shortReason);
+          }
+        }
+
         String date = doc.createdAt;
         try {
           final dt = DateTime.parse(doc.createdAt);
@@ -647,27 +676,38 @@ class _TransferListScreenState extends State<TransferListScreen> {
         final approvedBy = doc.approvedByRole.isNotEmpty
             ? '${doc.approvedBy} (${doc.approvedByRole})'
             : doc.approvedBy;
+        final varQty = docReceived - docIssued;
+        final varStr = varQty == 0 ? '-' : (varQty < 0 ? varQty.toString() : '+$varQty');
+        final reasonsStr = docReasons.isEmpty ? '-' : docReasons.join(', ');
 
-        for (final item in items) {
-          final retail = item.issuedQty * item.unitCost;
-          final row = [
-            date, ref,
-            '${doc.issuingBranchId} (${doc.issuingBranchName})',
-            '${doc.receivingBranchId} (${doc.receivingBranchName})',
-            item.sku, item.productName,
-            item.issuedQty.toString(),
-            retail.toStringAsFixed(2),
-            doc.preparedBy,
-            approvedBy.isEmpty ? '—' : approvedBy,
-            doc.status,
-          ];
+        final row = [
+          date,
+          ref,
+          '${doc.issuingBranchId} (${doc.issuingBranchName})',
+          '${doc.receivingBranchId} (${doc.receivingBranchName})',
+          items.length.toString(),
+          docIssued.toString(),
+          docReceived.toString(),
+          varStr,
+          docRetail.toStringAsFixed(2),
+          docVariance == 0 ? '-' : docVariance.toStringAsFixed(2),
+          reasonsStr,
+          doc.preparedBy,
+          approvedBy.isEmpty ? '—' : approvedBy,
+          doc.status,
+        ];
 
-          for (var c = 0; c < row.length; c++) {
-            sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex))
-                .value = xl.TextCellValue(row[c]);
+        for (var c = 0; c < row.length; c++) {
+          final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: rowIndex));
+          cell.value = xl.TextCellValue(row[c]);
+          // Color-code variance rows
+          if (varQty < 0) {
+            cell.cellStyle = xl.CellStyle(backgroundColorHex: xl.ExcelColor.fromHexString('#FEF3C7'));
+          } else if (varQty > 0) {
+            cell.cellStyle = xl.CellStyle(backgroundColorHex: xl.ExcelColor.fromHexString('#DBEAFE'));
           }
-          rowIndex++;
         }
+        rowIndex++;
       }
 
       for (var i = 0; i < headers.length; i++) {
