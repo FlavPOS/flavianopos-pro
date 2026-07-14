@@ -1478,9 +1478,11 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
             columnWidths: {
               0: const pw.FixedColumnWidth(70),
               1: const pw.FlexColumnWidth(3),
-              2: const pw.FixedColumnWidth(55),
-              3: const pw.FixedColumnWidth(65),
-              4: const pw.FixedColumnWidth(55),
+              2: const pw.FixedColumnWidth(50),
+              3: const pw.FixedColumnWidth(60),
+              4: const pw.FixedColumnWidth(65),
+              5: const pw.FixedColumnWidth(55),
+              6: const pw.FixedColumnWidth(75),
               5: const pw.FixedColumnWidth(85),
             },
             children: [
@@ -1490,6 +1492,7 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                 _rc4H('Issued'),
                 _rc4H('Received'),
                 _rc4H('Short'),
+                _rc4H('Unit Retail'),
                 _rc4H('Retail Value'),
               ]),
               ...pageItems.expand<pw.TableRow>((ri) {
@@ -1551,12 +1554,18 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                       _rc4CR(b.transferQty.toString()),
                       _rc4CR(actualReceived.toString()),
                       _rc4CR(shortCol),
+                      _rc4CR(b.unitCost.toStringAsFixed(2)),
                       _rc4CR(bTotal.toStringAsFixed(2)),
                     ]));
                   }
 
-                  // ITEM SUBTOTAL row (light-blue)
-                  final itemShort = itemIssued - ri.receivedQty;
+                  // v1.0.58+117 — ITEM SUBTOTAL uses SUM of batch received (matches batch rows)
+                  int itemReceived = 0;
+                  for (final b in batches) {
+                    final ar = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+                    itemReceived += ar;
+                  }
+                  final itemShort = itemIssued - itemReceived;
                   rows.add(pw.TableRow(
                     decoration: const pw.BoxDecoration(
                       color: pdf_pkg.PdfColor.fromInt(0xFFE3F2FD),
@@ -1565,8 +1574,9 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                       _rc4C(''),
                       _rc4C('ITEM SUBTOTAL', bold: true),
                       _rc4CR(itemIssued.toString(), bold: true),
-                      _rc4CR(ri.receivedQty.toString(), bold: true),
-                      _rc4CR(itemShort > 0 ? itemShort.toString() : '-', bold: true),
+                      _rc4CR(itemReceived.toString(), bold: true),
+                      _rc4CR(itemShort > 0 ? itemShort.toString() : (itemShort < 0 ? '+${-itemShort}' : '-'), bold: true),
+                      _rc4CR('-', bold: true),
                       _rc4CR(itemTotal.toStringAsFixed(2), bold: true),
                     ],
                   ));
@@ -1580,10 +1590,12 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                   _rc4CR(totalIssued.toString(), bold: true),
                   _rc4CR(totalReceived.toString(), bold: true),
                   _rc4CR(totalShort > 0 ? totalShort.toString() : '-', bold: true),
+                  _rc4CR('-', bold: true),
                   _rc4CR(totalRetail.toStringAsFixed(2), bold: true),
                 ]),
               for (int i = 0; i < 6; i++)
                 pw.TableRow(children: [
+                  _rc4Empty(),
                   _rc4Empty(),
                   _rc4Empty(),
                   _rc4Empty(),
