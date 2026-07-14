@@ -301,6 +301,122 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
       }
       debugPrint('[INBOUND-BATCH] Summary: $batchesSaved merged, $batchesCreated created');
 
+      // v1.0.58+112 — POSTBACK LOGIC (Phase 2B)
+      // Return RETURN-reasoned short qtys back to issuing branch inventory
+      int postbacksCreated = 0;
+      final issuerBranchId = _doc?.issuingBranchId ?? '';
+      final issuerBranchName = _doc?.issuingBranchName ?? '';
+
+      if (issuerBranchId.isNotEmpty) {
+        for (final ri in _items) {
+          for (final rb in ri.batches) {
+            // Only postback if SHORT with reason RETURN
+            if (!rb.hasShort) continue;
+            if (rb.reason != 'RETURN') continue;
+
+            final postbackAmount = rb.short;
+
+            try {
+              // 1. Update transfer_item_batches.postbackQty
+              if (rb.source.id != null) {
+                final db = await DatabaseHelper().database;
+                await db.update(
+                  'transfer_item_batches',
+                  {'postbackQty': postbackAmount},
+                  where: 'id = ?',
+                  whereArgs: [rb.source.id],
+                );
+              }
+
+              // 2. Merge into ISSUER's ProductBatch (find or create)
+              final existingAtIssuer = await ProductBatch.findExistingBatch(
+                productId: rb.source.productId,
+                batchNumber: rb.source.batchNumber,
+                lotNumber: rb.source.lotNumber,
+                branchId: issuerBranchId,
+              );
+
+              if (existingAtIssuer != null) {
+                await ProductBatch.addQuantityToBatch(existingAtIssuer.id, postbackAmount);
+                debugPrint('[POSTBACK] Returned +$postbackAmount to $issuerBranchId batch ${existingAtIssuer.id}');
+              } else {
+                final postbackBatchId = 'POSTBACK-${DateTime.now().millisecondsSinceEpoch}-${rb.source.batchId}';
+                final postbackBatch = ProductBatch(
+                  id: postbackBatchId,
+                  productId: rb.source.productId,
+                  productName: ri.item.productName,
+                  productSku: ri.item.sku,
+                  batchNumber: rb.source.batchNumber,
+                  lotNumber: rb.source.lotNumber,
+                  manufacturedDate: rb.source.mfgDate,
+                  expiryDate: rb.source.expiryDate,
+                  quantity: postbackAmount,
+                  originalQty: postbackAmount,
+                  costPrice: rb.source.unitCost,
+                  branchId: issuerBranchId,
+                  branchName: issuerBranchName,
+                  source: 'POSTBACK',
+                  sourceDocId: widget.transferId,
+                  notes: 'Postback from $realBranchId (${_doc?.receivingBranchName ?? ""}) IST-${_doc?.docNumber ?? widget.transferId}',
+                  dateAdded: DateTime.now(),
+                );
+                ProductBatch.addBatch(postbackBatch);
+                debugPrint('[POSTBACK] Created new $postbackBatchId at $issuerBranchId qty=$postbackAmount');
+              }
+
+              // 3. Increment ISSUER's SOH (Stock On Hand)
+              await BranchInventoryService.incrementStock(
+                issuerBranchId,
+                rb.source.productId,
+                postbackAmount,
+              );
+
+              // 4. Log to stock_movements at ISSUER's branch (BIR audit)
+              try {
+                final db = await DatabaseHelper().database;
+                final postbackMovId = 'MOV-POSTBACK-${widget.transferId}-${rb.source.batchId}';
+                await db.insert('stock_movements', {
+                  'movement_id': postbackMovId,
+                  'movement_type': 'POSTBACK_IN',
+                  'sku': ri.item.sku,
+                  'product_id': rb.source.productId,
+                  'product_name': ri.item.productName,
+                  'barcode': '',
+                  'qty_before': 0,
+                  'qty_change': postbackAmount.toDouble(),
+                  'qty_after': 0,
+                  'unit_cost': rb.source.unitCost,
+                  'reason_code': 'POSTBACK',
+                  'reason_note': 'Returned from $realBranchId (${_doc?.receivingBranchName ?? ""}) IST-${_doc?.docNumber ?? ""}',
+                  'reference_no': widget.transferId,
+                  'batch_no': rb.source.batchNumber,
+                  'branch_code': issuerBranchId,
+                  'branch_name': issuerBranchName,
+                  'user_pin': result.userPin,
+                  'user_name': result.userName,
+                  'approved_by_pin': result.userPin,
+                  'approved_by_name': result.userName,
+                  'local_timestamp': nowMs,
+                  'sync_status': 'SYNCED',
+                  'z_report_id': '',
+                  'created_at': now,
+                  'updated_at': now,
+                });
+              } catch (e) {
+                debugPrint('[POSTBACK] Ledger insert failed: $e');
+              }
+
+              postbacksCreated++;
+            } catch (e) {
+              debugPrint('[POSTBACK] Failed for batch ${rb.source.batchNumber}: $e');
+            }
+          }
+        }
+        if (postbacksCreated > 0) {
+          debugPrint('[POSTBACK] Summary: $postbacksCreated batches returned to $issuerBranchId');
+        }
+      }
+
       // v1.0.57+111 — Reload updated batches for Firebase sync (variance-aware)
       List<Map<String, dynamic>> batchesPayload = [];
       try {
