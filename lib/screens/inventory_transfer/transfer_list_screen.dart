@@ -676,9 +676,12 @@ class _TransferListScreenState extends State<TransferListScreen> {
 
       // v1.0.55 — Add BATCHES sheet (Option B)
       final batchSheet = excel['BATCHES'];
+      // v1.0.58+119 — Full variance tracking in BATCHES sheet
       final batchHeaders = [
         'IST No.', 'From Branch', 'To Branch', 'SKU', 'Product Name',
-        'Batch #', 'Lot #', 'MFG Date', 'EXP Date', 'Batch Qty', 'Unit Cost', 'Total @ Retail', 'Status',
+        'Batch #', 'Lot #', 'MFG Date', 'EXP Date',
+        'Issued Qty', 'Received Qty', 'Short/Overage', 'Reason', 'Notes', 'Postback Qty',
+        'Unit Cost', 'Total @ Retail', 'Status',
       ];
       for (var i = 0; i < batchHeaders.length; i++) {
         final cell = batchSheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
@@ -705,7 +708,15 @@ class _TransferListScreenState extends State<TransferListScreen> {
           if (it == null) continue;
           final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
           final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-          final total = b.transferQty * b.unitCost;
+          // v1.0.58+119 — Variance-aware Excel row (uses receivedQty when available)
+          final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+          final variance = actualReceived - b.transferQty; // -N=short, +N=overage
+          final total = actualReceived * b.unitCost; // Retail based on RECEIVED
+          final varianceStr = variance == 0
+              ? '-'
+              : variance < 0
+                  ? '${variance}'  // negative sign for short
+                  : '+${variance}'; // + prefix for overage
           final brow = [
             ref,
             '${doc.issuingBranchId} (${doc.issuingBranchName})',
@@ -713,14 +724,27 @@ class _TransferListScreenState extends State<TransferListScreen> {
             it.sku, it.productName,
             b.batchNumber, b.lotNumber,
             mfgStr, expStr,
-            b.transferQty.toString(),
+            b.transferQty.toString(),           // Issued Qty
+            actualReceived.toString(),          // Received Qty
+            varianceStr,                        // Short/Overage
+            b.shortReason,                      // Reason
+            b.varianceNotes,                    // Notes
+            b.postbackQty > 0 ? b.postbackQty.toString() : '',  // Postback Qty
             b.unitCost.toStringAsFixed(2),
             total.toStringAsFixed(2),
             doc.status,
           ];
           for (var c = 0; c < brow.length; c++) {
-            batchSheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: batchRow))
-                .value = xl.TextCellValue(brow[c]);
+            final cell = batchSheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: batchRow));
+            cell.value = xl.TextCellValue(brow[c]);
+            // v1.0.58+119 — Color code by variance type
+            if (variance < 0) {
+              // Short — yellow tint
+              cell.cellStyle = xl.CellStyle(backgroundColorHex: xl.ExcelColor.fromHexString('#FEF3C7'));
+            } else if (variance > 0) {
+              // Overage — blue tint
+              cell.cellStyle = xl.CellStyle(backgroundColorHex: xl.ExcelColor.fromHexString('#DBEAFE'));
+            }
           }
           batchRow++;
         }
