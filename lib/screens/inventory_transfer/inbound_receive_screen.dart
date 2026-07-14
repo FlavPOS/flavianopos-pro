@@ -1522,18 +1522,35 @@ class _InboundReceiveScreenState extends State<InboundReceiveScreen> {
                   int itemIssued = 0;
                   double itemTotal = 0;
                   for (final b in batches) {
-                    final bTotal = b.transferQty * b.unitCost;
+                    // v1.0.58+116 — Variance-aware auto-print PDF
+                    // Show actual received qty, short/overage, and reason
+                    final actualReceived = b.receivedQty > 0 ? b.receivedQty : b.transferQty;
+                    final actualShort = b.transferQty - actualReceived;
+                    final bTotal = actualReceived * b.unitCost;  // Value based on RECEIVED
                     itemIssued += b.transferQty;
                     itemTotal += bTotal;
                     final mfgStr = '${b.mfgDate.year.toString().padLeft(4,'0')}-${b.mfgDate.month.toString().padLeft(2,'0')}-${b.mfgDate.day.toString().padLeft(2,'0')}';
                     final expStr = '${b.expiryDate.year.toString().padLeft(4,'0')}-${b.expiryDate.month.toString().padLeft(2,'0')}-${b.expiryDate.day.toString().padLeft(2,'0')}';
-                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr';
+                    // Variance suffix (short/overage with reason)
+                    String varSuffix = '';
+                    if (actualShort > 0) {
+                      varSuffix = '  |  Short ${actualShort}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
+                    } else if (actualShort < 0) {
+                      varSuffix = '  |  Overage ${-actualShort}${b.shortReason.isNotEmpty ? " · ${b.shortReason}" : ""}';
+                    }
+                    final info = '   Batch: ${b.batchNumber}  Lot: ${b.lotNumber}  MFG: $mfgStr  EXP: $expStr$varSuffix';
+                    // Short col shows actual short with reason
+                    final shortCol = actualShort > 0
+                        ? '${actualShort}${b.shortReason.isNotEmpty ? " (${b.shortReason})" : ""}'
+                        : actualShort < 0
+                            ? '+${-actualShort}${b.shortReason.isNotEmpty ? " (${b.shortReason})" : ""}'
+                            : '-';
                     rows.add(pw.TableRow(children: [
                       _rc4C(''),
                       _rc4C(info),
                       _rc4CR(b.transferQty.toString()),
-                      _rc4CR(b.transferQty.toString()),
-                      _rc4CR('-'),
+                      _rc4CR(actualReceived.toString()),
+                      _rc4CR(shortCol),
                       _rc4CR(bTotal.toStringAsFixed(2)),
                     ]));
                   }
