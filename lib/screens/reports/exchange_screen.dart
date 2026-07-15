@@ -207,6 +207,13 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         // ignore: avoid_print
         print('Transaction update warning: $e');
       }
+      // v1.0.60+138.1 - Reload Transaction cache so Sales History shows new items + total
+      try {
+        await Transaction.loadFromDB();
+        debugPrint('[EXCHANGE-REFRESH] Reloaded Transaction cache after exchange');
+      } catch (e) {
+        debugPrint('[EXCHANGE-REFRESH] Failed to reload: $e');
+      }
       setState(() => _processing = false);
       if (mounted) {
         _showReceiptAndPrint(exchange);
