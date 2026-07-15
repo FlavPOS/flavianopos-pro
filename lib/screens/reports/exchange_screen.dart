@@ -273,9 +273,18 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         _receiptLine('Date', exc.exchangeDate),
       ])),
       actions: [
-        TextButton(onPressed: () { Navigator.pop(ctx); Navigator.pop(context, true); }, child: const Text('Close')),
+        // v1.0.60+141 - Return true to trigger parent refresh
+        TextButton(onPressed: () { 
+          Navigator.pop(ctx); // Close receipt dialog
+          Navigator.pop(context, true); // Return to Sales History with refresh signal
+        }, child: const Text('Close')),
         ElevatedButton.icon(icon: const Icon(Icons.print, size: 16), label: const Text('Print PDF'),
-          onPressed: () async { Navigator.pop(ctx); await _printPdf(exc); if (mounted) Navigator.pop(context, true); }),
+          // v1.0.60+141 - Return true after PDF print to refresh parent
+          onPressed: () async { 
+            Navigator.pop(ctx); 
+            await _printPdf(exc); 
+            if (mounted) Navigator.pop(context, true); 
+          }),
       ],
     ));
   }

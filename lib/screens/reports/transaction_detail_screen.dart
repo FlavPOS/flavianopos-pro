@@ -17,7 +17,13 @@ class TransactionDetailScreen extends StatefulWidget {
 }
 
 class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
-  Transaction get t => widget.transaction;
+  // v1.0.60+141 - Always get fresh transaction from cache (survives exchange updates)
+  Transaction get t {
+    final freshTxn = Transaction.allTransactions
+        .firstWhere((tx) => tx.id == widget.transaction.id, 
+                    orElse: () => widget.transaction);
+    return freshTxn;
+  }
 
   String _formatDate(DateTime dt) {
     final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
