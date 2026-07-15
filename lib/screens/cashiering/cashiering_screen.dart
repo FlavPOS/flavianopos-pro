@@ -842,7 +842,9 @@ class _CashieringScreenState extends State<CashieringScreen> {
             id: txnId, items: txnItems, subtotal: _cartSubtotal,
             totalDiscount: disc, tax: AppSettings.vatEnabled ? (total - (total / (1 + AppSettings.vatRate / 100))) : 0, total: total,
             paymentMethod: method, amountPaid: amountPaid, change: amountPaid - total,
-            cashier: widget.userName, branch: widget.branch, dateTime: now,
+            cashier: widget.userName, 
+            branch: _binvBranchId.isNotEmpty ? _binvBranchId : widget.branch, // v1.0.60+134 prefer branchId
+            dateTime: now,
           ));
 
           // ═══════════════════════════════════════════════════════════════

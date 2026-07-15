@@ -107,25 +107,31 @@ class Transaction {
     return _allTransactions;
   }
 
-  // v1.0.59+132 — Every branch sees ONLY own data (including HO001)
-  // Strict per-branch isolation - no cross-branch visibility
+  // v1.0.60+134 — Strict per-branch, accepts branchId OR branchName (backwards compat)
+  // Legacy transactions saved 'Main Branch' (name), new saves use 'BR006' (id)
   static Future<List<Transaction>> get branchScopedTransactions async {
     try {
       final assign = await DeviceAssignmentService().read();
       final branchId = (assign['branchId'] ?? '').toString().trim();
+      final branchName = (assign['branchName'] ?? '').toString().trim();
       
-      // Debug logging (helps troubleshoot filtering)
-      print('[BRANCH-SCOPE] Filtering for branchId=$branchId total=${allTransactions.length}');
+      print('[BRANCH-SCOPE] Filtering for branchId="$branchId" branchName="$branchName" total=${allTransactions.length}');
       
-      // Empty branchId = show nothing (safety - shouldn't happen normally)
-      if (branchId.isEmpty) {
-        print('[BRANCH-SCOPE] Empty branchId - returning empty list');
+      if (branchId.isEmpty && branchName.isEmpty) {
+        print('[BRANCH-SCOPE] Both empty - returning empty list');
         return <Transaction>[];
       }
       
-      // Filter to own branch only
-      final filtered = allTransactions.where((t) => t.branch == branchId).toList();
-      print('[BRANCH-SCOPE] $branchId sees ${filtered.length} own transactions');
+      // Match by branchId OR branchName (case-insensitive) for backwards compat
+      final filtered = allTransactions.where((t) {
+        final txnBranch = t.branch.trim();
+        if (txnBranch.isEmpty) return false;
+        // Match id (preferred) OR name (legacy)
+        return txnBranch.toLowerCase() == branchId.toLowerCase() ||
+               txnBranch.toLowerCase() == branchName.toLowerCase();
+      }).toList();
+      
+      print('[BRANCH-SCOPE] "$branchId" sees ${filtered.length} own transactions');
       return filtered;
     } catch (e) {
       print('[BRANCH-SCOPE] Error: $e');
