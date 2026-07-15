@@ -38,20 +38,26 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
   final List<_ReturnEntry> _returnedItems = [];
   final List<_ReplacementEntry> _replacements = [];
   final _reasonCtrl = TextEditingController();
+  // v1.0.61+145 - Additional cash received field
+  final _cashCtrl = TextEditingController();
+  double _cashReceived = 0;
   final _pinCtrl = TextEditingController();
   String _reason = 'Damaged';
   bool _processing = false;
   static const _reasons = ['Damaged', 'Defective', 'Wrong Size', 'Wrong Item', 'Wrong Color', 'Other'];
 
   @override
-  void dispose() { _reasonCtrl.dispose(); _pinCtrl.dispose(); super.dispose(); }
+  void dispose() { _reasonCtrl.dispose(); _pinCtrl.dispose(); _cashCtrl.dispose(); super.dispose(); }
 
   double get _replacementTotal => _replacements.fold<double>(0, (sum, r) => sum + r.total);
   // v1.0.61+143 - Sum of all selected returned items
   double get _originalPrice => _returnedItems.fold<double>(0, (sum, r) => sum + (r.item.price * r.item.qty));
   double get _priceDiff => _replacementTotal - _originalPrice;
+  // v1.0.61+145 - Change calculation for customer
+  double get _change => _cashReceived - _priceDiff;
   // v1.0.61+143 - Multi-item validation
-  bool get _canProcess => _returnedItems.isNotEmpty && _replacements.isNotEmpty && _replacementTotal >= _originalPrice;
+  // v1.0.61+145 - Also require sufficient cash if difference > 0
+  bool get _canProcess => _returnedItems.isNotEmpty && _replacements.isNotEmpty && _replacementTotal >= _originalPrice && (_priceDiff <= 0 || _cashReceived >= _priceDiff);
   int get _totalQty => _replacements.fold<int>(0, (sum, r) => sum + r.quantity);
 
   void _addReplacementItem() async {
@@ -214,7 +220,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         originalTxnId: widget.transaction.id, exchangeDate: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
         returnedItemName: returnedNames, returnedItemSku: returnedSkus, returnedQty: returnedQtyTotal, returnedPrice: _originalPrice,
         newItemName: allNames, newItemSku: allSkus, newQty: _totalQty, newPrice: _replacementTotal,
-        priceDifference: diff, amountPaid: diff > 0 ? diff : 0, reason: combinedReasons.isEmpty ? reason : combinedReasons,
+        priceDifference: diff, amountPaid: _cashReceived, reason: combinedReasons.isEmpty ? reason : combinedReasons,
         processedBy: widget.currentUser, approvedBy: mgr.name, branch: widget.branch,
         dateCreated: now.toIso8601String());
       await Exchange.create(exchange);
