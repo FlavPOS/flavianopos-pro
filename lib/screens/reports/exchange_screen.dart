@@ -244,6 +244,18 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
       } catch (e) {
         debugPrint('[EXCHANGE-REFRESH] Failed to reload: $e');
       }
+
+      // v1.0.60+142 - Sync updated transaction to Firebase
+      try {
+        final updatedTxn = Transaction.allTransactions
+            .firstWhere((tx) => tx.id == widget.transaction.id,
+                        orElse: () => widget.transaction);
+        Transaction.updateTransaction(widget.transaction.id, updatedTxn);
+        debugPrint('[EXCHANGE-SYNC] Transaction updated for Firebase sync');
+      } catch (e) {
+        debugPrint('[EXCHANGE-SYNC] Failed: $e');
+      }
+
       setState(() => _processing = false);
       if (mounted) {
         _showReceiptAndPrint(exchange);
