@@ -309,12 +309,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)))),
             if (t.status == 'completed') ...[
               const SizedBox(width: 8),
-              Expanded(child: OutlinedButton.icon(
-                onPressed: _voidTxn,
-                icon: const Icon(Icons.block, size: 18, color: Colors.red),
-                label: const Text('Void', style: TextStyle(fontSize: 12, color: Colors.red)),
-                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)))),
-              const SizedBox(width: 8),
+              // v1.0.60+135 — Void removed (belongs in POS module for real-time cancel)
+              // Only Refund + Exchange available in Sales History
               Expanded(child: ElevatedButton.icon(
                 onPressed: _refundTxn,
                 icon: const Icon(Icons.undo, size: 18), label: const Text('Refund', style: TextStyle(fontSize: 12)),

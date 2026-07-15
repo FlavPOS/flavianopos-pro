@@ -435,7 +435,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                           }, itemBuilder: (context) => [
                             const PopupMenuItem(value: 'detail', child: Text('View Receipt')),
                             if (t.status == 'completed')
-                              const PopupMenuItem(value: 'void', child: Text('Void', style: TextStyle(color: Colors.red))),
+                              // v1.0.60+135 — Void removed (moved to POS module)
                             if (t.status == 'completed')
                               const PopupMenuItem(value: 'refund', child: Text('Refund', style: TextStyle(color: Colors.orange))),
                             if (t.status == 'completed')
