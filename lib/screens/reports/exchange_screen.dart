@@ -7,6 +7,8 @@ import '../../models/transaction_model.dart';
 import '../../models/product_model.dart';
 import '../../models/user_model.dart';
 import '../../helpers/database_helper.dart';
+import '../../services/branch_inventory_service.dart'; // v1.0.60+138
+import '../../services/device_assignment_service.dart'; // v1.0.60+138
 
 // Helper class for replacement items list
 class _ReplacementEntry {
@@ -111,25 +113,45 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
       final excNum = await Exchange.generateExchangeNumber();
       final diff = _priceDiff;
 
-      // Return old item stock
-      final oldIdx = Product.allProducts.indexWhere((p) => p.sku == _selectedItem!.sku);
-      if (oldIdx >= 0) {
-        final old = Product.allProducts[oldIdx];
-        Product.updateProduct(old.id, Product(id: old.id, name: old.name, sku: old.sku, category: old.category,
-          sellingPrice: old.sellingPrice, costPrice: old.costPrice, stockQty: old.stockQty + 1,
-          reorderLevel: old.reorderLevel, barcode: old.barcode, imagePath: old.imagePath, imageUrl: old.imageUrl, unit: old.unit));
-      }
-
-      // Deduct ALL new items stock
-      for (final entry in _replacements) {
-        final newP = entry.product;
-        final freshIdx = Product.allProducts.indexWhere((p) => p.sku == newP.sku);
-        if (freshIdx >= 0) {
-          final fresh = Product.allProducts[freshIdx];
-          Product.updateProduct(fresh.id, Product(id: fresh.id, name: fresh.name, sku: fresh.sku, category: fresh.category,
-            sellingPrice: fresh.sellingPrice, costPrice: fresh.costPrice, stockQty: fresh.stockQty - entry.quantity,
-            reorderLevel: fresh.reorderLevel, barcode: fresh.barcode, imagePath: fresh.imagePath, imageUrl: fresh.imageUrl, unit: fresh.unit));
+      // v1.0.60+138 - Use BranchInventoryService (per-branch + Firebase sync)
+      final assign = await DeviceAssignmentService().read();
+      final branchId = (assign['branchId'] ?? '').toString();
+      if (branchId.isEmpty) {
+        debugPrint('[EXCHANGE-STOCK] No branchId - skipping inventory changes');
+      } else {
+        // Return old item stock (increment branch inventory)
+        final oldIdx = Product.allProducts.indexWhere((p) => p.sku == _selectedItem!.sku);
+        if (oldIdx >= 0) {
+          final old = Product.allProducts[oldIdx];
+          final ok = await BranchInventoryService.incrementStock(branchId, old.id, 1);
+          if (ok) {
+            debugPrint('[EXCHANGE-STOCK] Returned 1 x ${old.name} to $branchId');
+          } else {
+            debugPrint('[EXCHANGE-STOCK] Failed to return ${old.name} to $branchId');
+          }
+        } else {
+          debugPrint('[EXCHANGE-STOCK] Old product not found for SKU: ${_selectedItem!.sku}');
         }
+
+        // Deduct ALL new items stock (decrement branch inventory)
+        int deducted = 0;
+        for (final entry in _replacements) {
+          final newP = entry.product;
+          final freshIdx = Product.allProducts.indexWhere((p) => p.sku == newP.sku);
+          if (freshIdx < 0) {
+            debugPrint('[EXCHANGE-STOCK] New product not found for SKU: ${newP.sku}');
+            continue;
+          }
+          final fresh = Product.allProducts[freshIdx];
+          final ok = await BranchInventoryService.decrementStock(branchId, fresh.id, entry.quantity);
+          if (ok) {
+            deducted++;
+            debugPrint('[EXCHANGE-STOCK] Deducted ${entry.quantity} x ${fresh.name} from $branchId');
+          } else {
+            debugPrint('[EXCHANGE-STOCK] Failed to deduct ${fresh.name} from $branchId');
+          }
+        }
+        debugPrint('[EXCHANGE-STOCK] Summary: 1 returned, $deducted deducted at $branchId');
       }
 
       // Combine items into pipe-separated strings for storage
