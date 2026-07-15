@@ -107,6 +107,36 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
     final reason = _reason == 'Other' ? _reasonCtrl.text.trim() : _reason;
     if (reason.isEmpty) { _snack('Enter reason'); return; }
 
+    // v1.0.60+140 - PRE-FLIGHT stock check to prevent partial failures
+    // Verify ALL replacement items have sufficient stock BEFORE making any changes
+    try {
+      final assignCheck = await DeviceAssignmentService().read();
+      final branchIdCheck = (assignCheck['branchId'] ?? '').toString();
+      if (branchIdCheck.isNotEmpty) {
+        final insufficientItems = <String>[];
+        for (final entry in _replacements) {
+          final current = await BranchInventoryService.getStock(
+            branchIdCheck, entry.product.id,
+          );
+          if (current < entry.quantity) {
+            insufficientItems.add(
+              '${entry.product.name}: need ${entry.quantity}, have $current'
+            );
+          }
+        }
+        if (insufficientItems.isNotEmpty) {
+          debugPrint('[EXCHANGE-PREFLIGHT] Blocked: ${insufficientItems.join("; ")}');
+          _snack('Insufficient stock: ${insufficientItems.first}');
+          return;  // BLOCK entire exchange
+        }
+        debugPrint('[EXCHANGE-PREFLIGHT] All replacement items have sufficient stock');
+      }
+    } catch (e) {
+      debugPrint('[EXCHANGE-PREFLIGHT] Check failed: $e');
+      _snack('Stock check failed - please try again');
+      return;
+    }
+
     setState(() => _processing = true);
     try {
       final now = DateTime.now();
