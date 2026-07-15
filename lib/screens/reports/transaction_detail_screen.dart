@@ -1,5 +1,7 @@
 // lib/screens/reports/transaction_detail_screen.dart
 import 'package:flutter/material.dart';
+import '../../services/branch_inventory_service.dart'; // v1.0.60+133
+import '../../services/device_assignment_service.dart'; // v1.0.60+133
 import '../../models/user_model.dart';
 import '../../models/transaction_model.dart';
 import '../../models/settings_model.dart';
@@ -28,18 +30,34 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       default: return Colors.green; }
   }
 
-  void _restoreStock() {
-    for (final item in t.items) {
-      final pIdx = Product.allProducts.indexWhere((p) => p.sku == item.sku);
-      if (pIdx >= 0) {
-        final p = Product.allProducts[pIdx];
-        Product.updateProduct(p.id, Product(
-          id: p.id, name: p.name, sku: p.sku, category: p.category,
-          sellingPrice: p.sellingPrice, costPrice: p.costPrice,
-          stockQty: p.stockQty + item.qty,
-          reorderLevel: p.reorderLevel, barcode: p.barcode,
-        ));
+  // v1.0.60+133 — Use BranchInventoryService (per-branch + Firebase sync)
+  Future<void> _restoreStock() async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final branchId = (assign['branchId'] ?? '').toString();
+      if (branchId.isEmpty) {
+        debugPrint('[VOID-REFUND-STOCK] No branchId, skipping restore');
+        return;
       }
+      int restored = 0;
+      for (final item in t.items) {
+        final pIdx = Product.allProducts.indexWhere((p) => p.sku == item.sku);
+        if (pIdx < 0) {
+          debugPrint('[VOID-REFUND-STOCK] Product not found for SKU: ${item.sku}');
+          continue;
+        }
+        final p = Product.allProducts[pIdx];
+        final ok = await BranchInventoryService.incrementStock(
+          branchId, p.id, item.qty,
+        );
+        if (ok) {
+          restored++;
+          debugPrint('[VOID-REFUND-STOCK] Restored ${item.qty} × ${item.name} to $branchId');
+        }
+      }
+      debugPrint('[VOID-REFUND-STOCK] Summary: $restored items restored to $branchId');
+    } catch (e) {
+      debugPrint('[VOID-REFUND-STOCK] Error: $e');
     }
   }
 
@@ -59,12 +77,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        ElevatedButton(onPressed: () {
+        ElevatedButton(onPressed: () async {
           if (reasonCtrl.text.trim().isEmpty) { _snack('Enter reason'); return; }
           final mgrV = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
           if (AppSettings.requirePinVoid && mgrV == null) { _snack('Invalid Manager PIN'); return; }
           setState(() { t.status = 'voided'; t.voidReason = reasonCtrl.text.trim();
-            t.voidedBy = mgrV?.name ?? 'admin'; t.voidedAt = DateTime.now(); }); _restoreStock();
+            t.voidedBy = mgrV?.name ?? 'admin'; t.voidedAt = DateTime.now(); });
+          await _restoreStock(); // v1.0.60+133 async
           widget.onUpdate(); Navigator.pop(ctx); _snack('Transaction voided');
         }, style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             child: const Text('Void')),
@@ -100,11 +119,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () {
+          ElevatedButton(onPressed: () async {
             final mgrR = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
             if (AppSettings.requirePinVoid && mgrR == null) { _snack('Invalid Manager PIN'); return; }
             setState(() { t.status = 'refunded'; t.refundAmount = t.total;
-              t.refundMethod = method; t.refundedBy = mgrR?.name ?? 'admin'; t.refundedAt = DateTime.now(); }); _restoreStock();
+              t.refundMethod = method; t.refundedBy = mgrR?.name ?? 'admin'; t.refundedAt = DateTime.now(); });
+            await _restoreStock(); // v1.0.60+133 async
             widget.onUpdate(); Navigator.pop(ctx); _snack('Refunded ${t.total.toStringAsFixed(2)}');
           }, style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
               child: const Text('Refund')),
