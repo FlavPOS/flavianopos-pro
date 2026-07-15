@@ -6,6 +6,8 @@ import 'exchange_screen.dart';
 import '../../models/user_model.dart';
 import '../../models/product_model.dart';
 import 'package:flutter/material.dart';
+import '../../services/branch_inventory_service.dart'; // v1.0.60+136
+import '../../services/device_assignment_service.dart'; // v1.0.60+136
 import '../../models/transaction_model.dart';
 import 'transaction_detail_screen.dart';
 import 'sales_analytics_screen.dart';
@@ -152,22 +154,45 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () {
+          ElevatedButton(onPressed: () async {
             final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == pinCtrl.text.trim()).firstOrNull;
             if (mgr == null) { _snack('Invalid Manager PIN'); return; }
+            // v1.0.60+136 - Fixed inventory restore via BranchInventoryService
             setState(() {
               txn.status = 'refunded'; txn.refundAmount = txn.total;
               txn.refundMethod = refundMethod; txn.refundedBy = mgr.name;
               txn.refundedAt = DateTime.now();
-              for (final item in txn.items) {
-                final pIdx = Product.allProducts.indexWhere((p) => p.sku == item.sku);
-                if (pIdx >= 0) {
-                  final p = Product.allProducts[pIdx];
-                  Product.updateProduct(p.id, Product(id: p.id, name: p.name, sku: p.sku, category: p.category, sellingPrice: p.sellingPrice, costPrice: p.costPrice, stockQty: p.stockQty + item.qty, reorderLevel: p.reorderLevel, barcode: p.barcode, imagePath: p.imagePath, imageUrl: p.imageUrl, unit: p.unit));
-                }
-              }
             });
+            // Restore inventory per branch via BranchInventoryService
+            try {
+              final assign = await DeviceAssignmentService().read();
+              final branchId = (assign['branchId'] ?? '').toString();
+              if (branchId.isNotEmpty) {
+                int restored = 0;
+                for (final item in txn.items) {
+                  final pIdx = Product.allProducts.indexWhere((p) => p.sku == item.sku);
+                  if (pIdx < 0) {
+                    debugPrint('[REFUND-HIST-STOCK] Product not found for SKU: ${item.sku}');
+                    continue;
+                  }
+                  final p = Product.allProducts[pIdx];
+                  final ok = await BranchInventoryService.incrementStock(
+                    branchId, p.id, item.qty,
+                  );
+                  if (ok) {
+                    restored++;
+                    debugPrint('[REFUND-HIST-STOCK] Restored ${item.qty} x ${item.name} to $branchId');
+                  }
+                }
+                debugPrint('[REFUND-HIST-STOCK] Summary: $restored items restored to $branchId');
+              } else {
+                debugPrint('[REFUND-HIST-STOCK] No branchId - skipping inventory restore');
+              }
+            } catch (e) {
+              debugPrint('[REFUND-HIST-STOCK] Error: $e');
+            }
             Transaction.updateTransaction(txn.id, txn);
+            if (!mounted) return;
             Navigator.pop(ctx);
             _printRefundReceipt(txn, mgr.name, refundMethod);
           }, style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
