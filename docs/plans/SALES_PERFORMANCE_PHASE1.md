@@ -182,3 +182,120 @@ Start Date: 2026-07-15
 Estimated Completion: 2026-08-05
 
 Ready to start Week 1, Day 1: v1.0.60+136 (Fix Void/Refund Inventory)
+
+
+PROGRESS LOG
+===================================================
+
+WEEK 1 - DAY 1 - 2026-07-15 - COMPLETE
+---------------------------------------------------
+
+v1.0.60+136 - Fix Refund Inventory Restore - SHIPPED
+
+Root Cause Discovered:
+Two refund paths existed in the codebase:
+1. transaction_detail_screen.dart - had v133 fix (working)
+2. sales_history_screen.dart - had inline old code (BROKEN)
+
+The sales_history_screen path used:
+- Product.updateProduct (global master stock) - WRONG
+- Not per-branch via BranchInventoryService - WRONG
+- Not async - no Firebase sync - WRONG
+- No debug logs - hard to diagnose
+
+Fix Applied:
+- Added imports for BranchInventoryService and DeviceAssignmentService
+- Rewrote inline stock restore to use BranchInventoryService.incrementStock
+- Made onPressed async to properly await inventory restore
+- Reads branchId from DeviceAssignmentService
+- Added debug logs [REFUND-HIST-STOCK]
+- Firebase auto-syncs via BranchInventoryService
+
+Verification:
+Console logs confirm success:
+- [VOID-REFUND-STOCK] Restored 1 x Coca-Cola 1.5L to HO001
+- [VOID-REFUND-STOCK] Summary: 1 items restored to HO001
+- [BINV-SYNC] SUCCESS: companies/101/branchInventory/HO001
+- Branch stock increased correctly after refund
+
+Lessons Learned:
+- Comprehensive grep across ALL files needed for feature audit
+- Two paths for same action = double the bug surface
+- Function names not enough - also search for inline logic
+- Cache clear valuable to rule out client-side issues first
+
+
+NEXT: WEEK 1 - DAY 2 - 2026-07-16
+---------------------------------------------------
+
+Objectives:
+- Additional v136 testing (multi-item refunds, multi-branch)
+- Prepare v137 diagnostic for duplicate transactions bug
+- Optionally start v137 investigation
+
+Duplicate Transactions Bug (v137 target):
+- Console shows total=8 doubling to 16
+- Same TXN-ID appearing twice in Sales History
+- Possible causes to investigate:
+  * Firebase sync adds duplicate to _allTransactions
+  * initState calling loadFromDB multiple times
+  * Multiple Sales History screens in navigation stack
+
+
+REMAINING WEEK 1 SCHEDULE
+---------------------------------------------------
+
+- Day 2 (2026-07-16): Test v136 + prepare v137
+- Day 3 (2026-07-17): v137 - Fix duplicate transactions
+- Days 4-5 (2026-07-18 to 07-19): v138 - Fix Exchange screen
+- Days 6-7 (2026-07-20 to 07-21): v139 - Cleanup + Week 1 wrap
+
+Week 1 goal: Foundation solid, all inventory bugs fixed
+
+
+VERSION TRACKING
+---------------------------------------------------
+
+Shipped so far in Phase 1:
+- v1.0.60+136 (Day 1) - SUCCESS
+
+Remaining Phase 1 ships:
+- v1.0.60+137 - duplicate transactions
+- v1.0.60+138 - exchange screen fix
+- v1.0.60+139 - cleanup
+- v1.0.61+140 - rename module to Sales Performance
+- v1.0.61+141 - Current Sales sub-module
+- v1.0.61+142 - Transaction History sub-module
+- v1.0.62+143 - Daily Performance sub-module
+- v1.0.62+144 - Weekly Performance sub-module
+- v1.0.62+145 - Exports and Polish
+
+
+PHASE 1 SUCCESS METRICS - CURRENT STATUS
+---------------------------------------------------
+
+Bugs Fixed:
+- [x] Refund from Sales History LIST - inventory restore (v136)
+- [ ] Void from Transaction Detail - inventory restore
+- [ ] Duplicate transactions in list
+- [ ] Exchange screen inventory API
+
+Sub-modules Complete:
+- [ ] Sales Performance module renamed
+- [ ] Current Sales sub-module
+- [ ] Transaction History sub-module
+- [ ] Daily Performance sub-module
+- [ ] Weekly Performance sub-module
+
+Exports Working:
+- [ ] CSV
+- [ ] Excel
+- [ ] PDF
+
+Foundation Solid:
+- [x] Branch isolation (v131-132)
+- [x] Refund inventory (v136)
+- [ ] Void inventory (v137)
+- [ ] Exchange inventory (v138)
+- [ ] No duplicates (v137)
+
