@@ -10,6 +10,13 @@ import '../../helpers/database_helper.dart';
 import '../../services/branch_inventory_service.dart'; // v1.0.60+138
 import '../../services/device_assignment_service.dart'; // v1.0.60+138
 
+// v1.0.61+143 - Return entry with per-item reason
+class _ReturnEntry {
+  final TransactionItem item;
+  String reason;
+  _ReturnEntry({required this.item, this.reason = 'Damaged'});
+}
+
 // Helper class for replacement items list
 class _ReplacementEntry {
   final Product product;
@@ -27,7 +34,8 @@ class ExchangeScreen extends StatefulWidget {
 }
 
 class _ExchangeScreenState extends State<ExchangeScreen> {
-  TransactionItem? _selectedItem;
+  // v1.0.61+143 - Multi-item exchange support
+  final List<_ReturnEntry> _returnedItems = [];
   final List<_ReplacementEntry> _replacements = [];
   final _reasonCtrl = TextEditingController();
   final _pinCtrl = TextEditingController();
@@ -39,14 +47,18 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
   void dispose() { _reasonCtrl.dispose(); _pinCtrl.dispose(); super.dispose(); }
 
   double get _replacementTotal => _replacements.fold<double>(0, (sum, r) => sum + r.total);
-  double get _originalPrice => _selectedItem?.price ?? 0;
+  // v1.0.61+143 - Sum of all selected returned items
+  double get _originalPrice => _returnedItems.fold<double>(0, (sum, r) => sum + (r.item.price * r.item.qty));
   double get _priceDiff => _replacementTotal - _originalPrice;
-  bool get _canProcess => _selectedItem != null && _replacements.isNotEmpty && _replacementTotal >= _originalPrice;
+  // v1.0.61+143 - Multi-item validation
+  bool get _canProcess => _returnedItems.isNotEmpty && _replacements.isNotEmpty && _replacementTotal >= _originalPrice;
   int get _totalQty => _replacements.fold<int>(0, (sum, r) => sum + r.quantity);
 
   void _addReplacementItem() async {
+    // v1.0.61+143 - Exclude all returned items SKUs
     final existingSkus = _replacements.map((r) => r.product.sku).toSet();
-    final products = Product.allProducts.where((p) => p.stockQty > 0 && p.sku != (_selectedItem?.sku ?? '') && !existingSkus.contains(p.sku)).toList();
+    final returnedSkus = _returnedItems.map((r) => r.item.sku).toSet();
+    final products = Product.allProducts.where((p) => p.stockQty > 0 && !returnedSkus.contains(p.sku) && !existingSkus.contains(p.sku)).toList();
     final searchCtrl = TextEditingController();
     final result = await showModalBottomSheet<Product>(context: context, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -149,19 +161,24 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
       if (branchId.isEmpty) {
         debugPrint('[EXCHANGE-STOCK] No branchId - skipping inventory changes');
       } else {
-        // Return old item stock (increment branch inventory)
-        final oldIdx = Product.allProducts.indexWhere((p) => p.sku == _selectedItem!.sku);
-        if (oldIdx >= 0) {
+        // v1.0.61+143 - Return stock for ALL returned items
+        int returnedCount = 0;
+        for (final returnEntry in _returnedItems) {
+          final oldIdx = Product.allProducts.indexWhere((p) => p.sku == returnEntry.item.sku);
+          if (oldIdx < 0) {
+            debugPrint('[EXCHANGE-STOCK] Old product not found for SKU: ${returnEntry.item.sku}');
+            continue;
+          }
           final old = Product.allProducts[oldIdx];
-          final ok = await BranchInventoryService.incrementStock(branchId, old.id, 1);
+          final ok = await BranchInventoryService.incrementStock(branchId, old.id, returnEntry.item.qty);
           if (ok) {
-            debugPrint('[EXCHANGE-STOCK] Returned 1 x ${old.name} to $branchId');
+            returnedCount++;
+            debugPrint('[EXCHANGE-STOCK] Returned ${returnEntry.item.qty} x ${old.name} (${returnEntry.reason}) to $branchId');
           } else {
             debugPrint('[EXCHANGE-STOCK] Failed to return ${old.name} to $branchId');
           }
-        } else {
-          debugPrint('[EXCHANGE-STOCK] Old product not found for SKU: ${_selectedItem!.sku}');
         }
+        debugPrint('[EXCHANGE-STOCK] Returned $returnedCount items total');
 
         // Deduct ALL new items stock (decrement branch inventory)
         int deducted = 0;
@@ -184,16 +201,20 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         debugPrint('[EXCHANGE-STOCK] Summary: 1 returned, $deducted deducted at $branchId');
       }
 
-      // Combine items into pipe-separated strings for storage
+      // v1.0.61+143 - Multi-item exchange records (JSON in existing fields)
+      final returnedNames = _returnedItems.map((r) => '${r.item.name} x${r.item.qty} (${r.reason})').join(' | ');
+      final returnedSkus = _returnedItems.map((r) => r.item.sku).join(' | ');
+      final returnedQtyTotal = _returnedItems.fold<int>(0, (sum, r) => sum + r.item.qty);
+      final combinedReasons = _returnedItems.map((r) => r.reason).toSet().join(', ');
       final allNames = _replacements.map((r) => '${r.product.name} x${r.quantity}').join(' | ');
       final allSkus = _replacements.map((r) => r.product.sku).join(' | ');
 
-      // Save exchange record (multi-item stored as concatenated string)
+      // Save exchange record (multi-item stored as concatenated string with reasons)
       final exchange = Exchange(id: 'EXC-${now.millisecondsSinceEpoch}', exchangeNumber: excNum,
         originalTxnId: widget.transaction.id, exchangeDate: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
-        returnedItemName: _selectedItem!.name, returnedItemSku: _selectedItem!.sku, returnedQty: 1, returnedPrice: _selectedItem!.price,
+        returnedItemName: returnedNames, returnedItemSku: returnedSkus, returnedQty: returnedQtyTotal, returnedPrice: _originalPrice,
         newItemName: allNames, newItemSku: allSkus, newQty: _totalQty, newPrice: _replacementTotal,
-        priceDifference: diff, amountPaid: diff > 0 ? diff : 0, reason: reason,
+        priceDifference: diff, amountPaid: diff > 0 ? diff : 0, reason: combinedReasons.isEmpty ? reason : combinedReasons,
         processedBy: widget.currentUser, approvedBy: mgr.name, branch: widget.branch,
         dateCreated: now.toIso8601String());
       await Exchange.create(exchange);
@@ -201,8 +222,10 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
 
       // === UPDATE ORIGINAL TRANSACTION ITEMS ===
       try {
-        // 1. Delete the exchanged item from transaction
-        await DatabaseHelper().deleteTransactionItem(widget.transaction.id, _selectedItem!.sku);
+        // v1.0.61+143 - Delete ALL returned items from transaction
+        for (final returnEntry in _returnedItems) {
+          await DatabaseHelper().deleteTransactionItem(widget.transaction.id, returnEntry.item.sku);
+        }
 
         // 2. Insert all replacement items
         for (final entry in _replacements) {
@@ -396,13 +419,66 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
             Row(children: [const Icon(Icons.receipt_long, size: 18, color: Colors.blue), const SizedBox(width: 8),
               Text('Original Transaction: ${widget.transaction.id}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))]),
             const Divider(),
-            const Text('Select item to exchange:', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ...widget.transaction.items.map((item) => RadioListTile<TransactionItem>(
-              title: Text(item.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-              subtitle: Text('SKU: ${item.sku} | Qty: ${item.qty} | ${item.price.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-              value: item, groupValue: _selectedItem, dense: true, visualDensity: VisualDensity.compact,
-              activeColor: Colors.blue[700],
-              onChanged: (v) => setState(() { _selectedItem = v; _replacements.clear(); }))),
+            const Text('Select items to exchange (check multiple):', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 4),
+            // v1.0.61+143 - Multi-select with per-item reason
+            ...widget.transaction.items.map((item) {
+              final existingIdx = _returnedItems.indexWhere((r) => r.item.sku == item.sku);
+              final isSelected = existingIdx >= 0;
+              final currentReason = isSelected ? _returnedItems[existingIdx].reason : 'Damaged';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.blue[50] : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? Colors.blue[300]! : Colors.grey[300]!,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    CheckboxListTile(
+                      value: isSelected,
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      activeColor: Colors.blue[700],
+                      title: Text(item.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                      subtitle: Text('SKU: ${item.sku} | Qty: ${item.qty} | ${item.price.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      onChanged: (v) => setState(() {
+                        if (v == true) {
+                          _returnedItems.add(_ReturnEntry(item: item));
+                        } else {
+                          _returnedItems.removeWhere((r) => r.item.sku == item.sku);
+                          if (_returnedItems.isEmpty) _replacements.clear();
+                        }
+                      }),
+                    ),
+                    if (isSelected) Padding(
+                      padding: const EdgeInsets.fromLTRB(56, 0, 12, 8),
+                      child: DropdownButtonFormField<String>(
+                        initialValue: currentReason,
+                        isDense: true,
+                        decoration: InputDecoration(
+                          labelText: 'Reason for exchange',
+                          labelStyle: const TextStyle(fontSize: 11),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          isDense: true,
+                        ),
+                        style: const TextStyle(fontSize: 12, color: Colors.black87),
+                        items: _reasons.map((r) => DropdownMenuItem(
+                          value: r,
+                          child: Text(r, style: const TextStyle(fontSize: 12)),
+                        )).toList(),
+                        onChanged: (v) => setState(() {
+                          _returnedItems[existingIdx].reason = v ?? 'Damaged';
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ])),
         const SizedBox(height: 16),
 
@@ -425,12 +501,13 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
             Row(children: [const Icon(Icons.swap_horiz, size: 18, color: Colors.green), const SizedBox(width: 8),
               const Text('Replacement Items', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const Spacer(),
-              if (_selectedItem != null) TextButton.icon(
+              // v1.0.61+143 - Multi-item check
+              if (_returnedItems.isNotEmpty) TextButton.icon(
                 icon: const Icon(Icons.add_circle, size: 18, color: Colors.green),
                 label: Text(_replacements.isEmpty ? 'Select' : 'Add Item', style: const TextStyle(fontSize: 12)),
                 onPressed: _addReplacementItem)]),
-            if (_selectedItem == null)
-              Padding(padding: const EdgeInsets.all(12), child: Text('Select an item to exchange first', style: TextStyle(color: Colors.grey[400], fontSize: 12)))
+            if (_returnedItems.isEmpty)
+              Padding(padding: const EdgeInsets.all(12), child: Text('Select item(s) to exchange first', style: TextStyle(color: Colors.grey[400], fontSize: 12)))
             else if (_replacements.isEmpty)
               Padding(padding: const EdgeInsets.all(12), child: Text('No replacement items added. Tap "Select" to add.', style: TextStyle(color: Colors.grey[400], fontSize: 12)))
             else ...[
