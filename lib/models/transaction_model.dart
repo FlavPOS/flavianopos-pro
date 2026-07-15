@@ -139,24 +139,44 @@ class Transaction {
     }
   }
 
+  // v1.0.60+137 - Deduplicated loadFromDB (prevents 8 to 16 doubling)
   static Future<void> loadFromDB() async {
     final db = DatabaseHelper();
     final txnRows = await db.getAllTransactions();
-    if (txnRows.isEmpty) {
-      _allTransactions = [];
-    } else {
-      _allTransactions = [];
-      for (final row in txnRows) {
-        final itemRows = await db.getTransactionItems(row['id']);
-        final items = itemRows.map((r) => TransactionItem.fromMap(r)).toList();
-        _allTransactions.add(Transaction.fromMap(row, items));
+    final Set<String> seenIds = {};
+    final tempList = <Transaction>[];
+    for (final row in txnRows) {
+      final id = row['id']?.toString() ?? '';
+      if (id.isEmpty) {
+        print('[TXN-LOAD] Skipping row with empty ID');
+        continue;
       }
+      if (seenIds.contains(id)) {
+        print('[TXN-LOAD] Skipping duplicate ID: $id');
+        continue;
+      }
+      seenIds.add(id);
+      final itemRows = await db.getTransactionItems(id);
+      final items = itemRows.map((r) => TransactionItem.fromMap(r)).toList();
+      tempList.add(Transaction.fromMap(row, items));
     }
+    _allTransactions = tempList;  // Atomic replace
     _loaded = true;
+    print('[TXN-LOAD] Loaded ${_allTransactions.length} unique transactions');
   }
 
+  // v1.0.60+137 - Deduplicated addTransaction
   static void addTransaction(Transaction txn) {
     _allTransactions = allTransactions;
+    // Check if transaction already exists in memory (prevent duplicates)
+    final existingIdx = _allTransactions.indexWhere((t) => t.id == txn.id);
+    if (existingIdx >= 0) {
+      print('[TXN-DEDUP] Updating existing ${txn.id} instead of adding duplicate');
+      _allTransactions[existingIdx] = txn;
+      DatabaseHelper().updateTransaction(txn.id, txn.toMap()).catchError((_) => null);
+      SyncBridge.enqueueTransaction(txn, op: SyncOp.update);
+      return;
+    }
     _allTransactions.insert(0, txn);
     DatabaseHelper().insertTransactionWithItems(txn.toMap(), txn.items.map((i) => i.toMap()).toList()).catchError((_) => null);
     SyncBridge.enqueueTransaction(txn, op: SyncOp.create);
