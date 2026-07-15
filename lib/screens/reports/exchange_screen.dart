@@ -482,17 +482,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
           ])),
         const SizedBox(height: 16),
 
-        // Reason for Exchange
-        Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [Icon(Icons.notes, size: 18, color: Colors.orange), SizedBox(width: 8),
-              Text('Reason for Exchange', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))]),
-            const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: _reasons.map((r) => ChoiceChip(label: Text(r, style: TextStyle(fontSize: 11, color: _reason == r ? Colors.white : Colors.grey[700])),
-              selected: _reason == r, selectedColor: Colors.orange, onSelected: (_) => setState(() => _reason = r))).toList()),
-            if (_reason == 'Other') ...[const SizedBox(height: 8),
-              TextField(controller: _reasonCtrl, decoration: InputDecoration(hintText: 'Enter reason...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true))],
-          ])),
+        // v1.0.61+144 - Reason chips removed (per-item reasons in checkboxes above)
         const SizedBox(height: 16),
 
         // Replacement Items (MULTI!)
