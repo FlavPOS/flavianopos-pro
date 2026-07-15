@@ -29,7 +29,13 @@ class ZReportScreen extends StatefulWidget {
 class _ZReportScreenState extends State<ZReportScreen> {
   bool _viewerAuthorized = false;
   bool _checkingLock = true;
-  final List<Transaction> _transactions = Transaction.allTransactions;
+  // v1.0.59+131 — Branch-scoped for data isolation
+  List<Transaction> _transactions = [];
+
+  Future<void> _loadBranchScoped() async {
+    final txns = await Transaction.branchScopedTransactions;
+    if (mounted) setState(() => _transactions = txns);
+  }
   final _beginningCashController = TextEditingController();
   final _endingCashController = TextEditingController(text: '');
   final Map<double, TextEditingController> _denomCtrls = {};
@@ -54,6 +60,7 @@ class _ZReportScreenState extends State<ZReportScreen> {
   @override
   void initState() {
     super.initState();
+    _loadBranchScoped(); // v1.0.59+131 — branch isolation
     // 🛡️ ACTIVE SESSION FIRST GUARD — must run BEFORE Cash Declaration popup
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;

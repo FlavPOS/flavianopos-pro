@@ -109,7 +109,13 @@ class _TrendRow {
 class _SalesAnalyticsScreenState extends State<SalesAnalyticsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
-  final List<Transaction> _transactions = Transaction.allTransactions;
+  // v1.0.59+131 — Branch-scoped for data isolation
+  List<Transaction> _transactions = [];
+
+  Future<void> _loadBranchScoped() async {
+    final txns = await Transaction.branchScopedTransactions;
+    if (mounted) setState(() => _transactions = txns);
+  }
 
   String _dateFilter = AppSettings.defaultReportPeriod;
   String _trendView = 'Daily';
@@ -179,6 +185,7 @@ class _SalesAnalyticsScreenState extends State<SalesAnalyticsScreen>
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 3, vsync: this);
+    _loadBranchScoped(); // v1.0.59+131 — branch isolation
   }
 
   @override

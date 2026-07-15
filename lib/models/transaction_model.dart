@@ -1,4 +1,5 @@
 // lib/models/transaction_model.dart
+import '../services/device_assignment_service.dart'; // v1.0.59+131
 import '../helpers/database_helper.dart';
 import '../helpers/sync_bridge.dart';
 import 'sync_queue_model.dart';
@@ -104,6 +105,25 @@ class Transaction {
       _allTransactions = [];
     }
     return _allTransactions;
+  }
+
+  // v1.0.59+131 — Branch-scoped transactions for data isolation
+  // HO users (admin/companyadmin) see all branches
+  // Branch users see only their own branch's transactions
+  static Future<List<Transaction>> get branchScopedTransactions async {
+    try {
+      final assign = await DeviceAssignmentService().read();
+      final role = (assign['role'] ?? '').toString().toLowerCase().trim();
+      final branchId = (assign['branchId'] ?? '').toString();
+      final isHO = role == 'admin' || role == 'companyadmin';
+      if (isHO || branchId.isEmpty) {
+        return List<Transaction>.from(allTransactions);
+      }
+      return allTransactions.where((t) => t.branch == branchId).toList();
+    } catch (e) {
+      // On error, fallback to empty for safety
+      return <Transaction>[];
+    }
   }
 
   static Future<void> loadFromDB() async {

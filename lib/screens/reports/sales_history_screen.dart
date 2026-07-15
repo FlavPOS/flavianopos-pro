@@ -19,7 +19,19 @@ class SalesHistoryScreen extends StatefulWidget {
 }
 
 class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
-  List<Transaction> get _transactions => Transaction.allTransactions;
+  // v1.0.59+131 — Branch-scoped for data isolation
+  List<Transaction> _transactions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBranchScoped();
+  }
+
+  Future<void> _loadBranchScoped() async {
+    final txns = await Transaction.branchScopedTransactions;
+    if (mounted) setState(() => _transactions = txns);
+  }
   final _searchCtrl = TextEditingController();
   String _query = '';
   String _dateFilter = 'Today';
