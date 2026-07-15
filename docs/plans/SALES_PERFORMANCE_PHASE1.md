@@ -299,3 +299,64 @@ Foundation Solid:
 - [ ] Exchange inventory (v138)
 - [ ] No duplicates (v137)
 
+
+
+WEEK 1 - DAY 2 - 2026-07-15 - COMPLETE
+---------------------------------------------------
+
+v1.0.60+137 - Fix Duplicate Transactions - SHIPPED
+
+Root Cause Discovered:
+Exchange screen (exchange_screen.dart) uses DatabaseHelper directly
+to update SQLite (bypasses Transaction model). Sales History uses
+Transaction.branchScopedTransactions from _allTransactions list.
+
+When cache reloaded (via CacheReloadHelper or app operations),
+loadFromDB was called multiple times. Original code did:
+1. _allTransactions = []
+2. Loop and add rows
+But subsequent calls didn't have full deduplication guard.
+
+Fix Applied:
+1. loadFromDB now uses Set to track seen IDs during load
+2. Uses temp list, then atomic replacement (no partial state)
+3. addTransaction checks for existing ID before insert
+4. Debug logs [TXN-LOAD] and [TXN-DEDUP] for verification
+5. Defense in depth - fixes any current or future caller
+
+Verification:
+Console logs confirm success:
+- [TXN-LOAD] Loaded 13 unique transactions (called 2x, still 13)
+- Sales History count stays consistent: 4 own transactions
+- No more 8-to-16 doubling behavior
+
+Lessons Learned:
+- Multiple screens/services call loadFromDB indirectly
+- Defense in depth better than finding single root cause
+- Set-based dedup is efficient and reliable
+- Debug logs help verify fix works in production
+
+PROGRESS FOR TODAY (2026-07-15):
+- Ships: 2 (v136 refund + v137 duplicates)
+- Bugs fixed: 2 of 4 Week 1 bugs
+- Time invested: ~4 hours focused work
+- Pace: AHEAD of schedule
+
+
+REMAINING WEEK 1
+---------------------------------------------------
+
+- Day 3 (2026-07-16): v138 - Exchange screen inventory API
+- Day 4 (2026-07-17): v138 testing + polish
+- Day 5 (2026-07-18): v139 - Cleanup + Week 1 wrap
+
+PHASE 1 SUCCESS METRICS - UPDATED
+---------------------------------------------------
+
+Bugs Fixed:
+- [x] Refund from Sales History LIST - inventory restore (v136)
+- [x] Duplicate transactions in list (v137)
+- [ ] Void from Transaction Detail - inventory restore
+- [ ] Exchange screen inventory API
+
+Progress: 2 of 4 = 50% Week 1 bugs fixed
