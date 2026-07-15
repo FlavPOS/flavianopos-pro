@@ -360,3 +360,26 @@ Bugs Fixed:
 - [ ] Exchange screen inventory API
 
 Progress: 2 of 4 = 50% Week 1 bugs fixed
+
+
+CORRECTION - 2026-07-15
+---------------------------------------------------
+
+Original plan listed 4 Week 1 bugs. Correction:
+
+Void from Transaction Detail bug is NOT applicable because Void
+functionality was REMOVED from Sales History in v1.0.60+135.
+
+Only Refund + Exchange remain in Sales History. Void will be
+added to POS module in Week 3 (v143+) as a separate feature.
+
+REVISED WEEK 1 SCOPE (3 bugs, not 4):
+- [x] v136 - Refund inventory restore
+- [x] v137 - Duplicate transactions
+- [ ] v138 - Exchange screen inventory API
+
+Progress: 2 of 3 = 67% Week 1 bugs FIXED
+
+Time saved: ~1 day (skip void fix)
+Buffer for v138 testing or ahead of schedule.
+
