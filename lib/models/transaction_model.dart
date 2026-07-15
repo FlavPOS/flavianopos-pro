@@ -107,21 +107,28 @@ class Transaction {
     return _allTransactions;
   }
 
-  // v1.0.59+131 — Branch-scoped transactions for data isolation
-  // HO users (admin/companyadmin) see all branches
-  // Branch users see only their own branch's transactions
+  // v1.0.59+132 — Every branch sees ONLY own data (including HO001)
+  // Strict per-branch isolation - no cross-branch visibility
   static Future<List<Transaction>> get branchScopedTransactions async {
     try {
       final assign = await DeviceAssignmentService().read();
-      final role = (assign['role'] ?? '').toString().toLowerCase().trim();
-      final branchId = (assign['branchId'] ?? '').toString();
-      final isHO = role == 'admin' || role == 'companyadmin';
-      if (isHO || branchId.isEmpty) {
-        return List<Transaction>.from(allTransactions);
+      final branchId = (assign['branchId'] ?? '').toString().trim();
+      
+      // Debug logging (helps troubleshoot filtering)
+      print('[BRANCH-SCOPE] Filtering for branchId=$branchId total=${allTransactions.length}');
+      
+      // Empty branchId = show nothing (safety - shouldn't happen normally)
+      if (branchId.isEmpty) {
+        print('[BRANCH-SCOPE] Empty branchId - returning empty list');
+        return <Transaction>[];
       }
-      return allTransactions.where((t) => t.branch == branchId).toList();
+      
+      // Filter to own branch only
+      final filtered = allTransactions.where((t) => t.branch == branchId).toList();
+      print('[BRANCH-SCOPE] $branchId sees ${filtered.length} own transactions');
+      return filtered;
     } catch (e) {
-      // On error, fallback to empty for safety
+      print('[BRANCH-SCOPE] Error: $e');
       return <Transaction>[];
     }
   }
