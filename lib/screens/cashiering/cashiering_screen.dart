@@ -1084,7 +1084,17 @@ class _CashieringScreenState extends State<CashieringScreen> {
           ),
         );
       } else if (mode == 'EXCHANGE') {
-        _showSnackBar('🚧 Exchange Mode coming in v149');
+        // v151: Route to existing ExchangeScreen (reuses v143-v146 logic)
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ExchangeScreen(
+              transaction: originalTxn,
+              currentUser: originalTxn.cashier,
+              branch: originalTxn.branch,
+            ),
+          ),
+        );
       }
     } catch (e) {
       _showSnackBar('❌ Error loading receipt: \$e');
