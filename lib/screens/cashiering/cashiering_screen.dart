@@ -12,8 +12,10 @@ import '../../widgets/product_card_widget.dart';
 import '../../widgets/cart_item_widget.dart';
 import 'payment_dialog.dart';
 import 'receipt_screen.dart';
+import 'refund_mode_screen.dart';  // v148
 import '../../models/discount_record_model.dart';
 import '../../models/transaction_model.dart';
+import '../../helpers/database_helper.dart';  // v148
 import "../../services/branch_inventory_service.dart";
 import "../../services/device_assignment_service.dart";
 
@@ -1027,12 +1029,65 @@ class _CashieringScreenState extends State<CashieringScreen> {
     );
   }
 
-  /// Load original transaction from DB and route to Refund/Exchange handler
+  /// v148: Load original transaction from DB and route to Refund/Exchange handler
   Future<void> _loadOriginalTransaction(String receiptNo, String mode) async {
-    // TODO v148: Implement DB lookup via TransactionModel.findByReceiptNo()
-    // TODO v148: Route to _openRefundMode() or _openExchangeMode()
-    _showSnackBar('🔍 Looking up: $receiptNo (v148 will complete this)');
-    print('[v147] $mode lookup requested for: $receiptNo');
+    try {
+      // Import DatabaseHelper via top-level import (already exists in this file's scope)
+      final dbHelper = DatabaseHelper();
+      final txnMap = await dbHelper.getTransactionById(receiptNo);
+      if (txnMap == null) {
+        _showSnackBar('❌ Receipt not found: $receiptNo');
+        return;
+      }
+
+      // Guard: cannot refund/exchange already-refunded or voided transactions
+      final status = (txnMap['status'] ?? 'completed').toString();
+      if (status == 'refunded' || status == 'voided' || status == 'partial_refund') {
+        _showSnackBar('⚠️ Cannot process: already \$status');
+        return;
+      }
+
+      final itemMaps = await dbHelper.getTransactionItems(receiptNo);
+      final items = itemMaps.map((m) => TransactionItem.fromMap(m)).toList();
+      if (items.isEmpty) {
+        _showSnackBar('❌ No items found for receipt: $receiptNo');
+        return;
+      }
+
+      final originalTxn = Transaction(
+        id: txnMap['id']?.toString() ?? receiptNo,
+        items: items,
+        subtotal: (txnMap['subtotal'] ?? 0).toDouble(),
+        totalDiscount: (txnMap['totalDiscount'] ?? 0).toDouble(),
+        tax: (txnMap['tax'] ?? 0).toDouble(),
+        total: (txnMap['total'] ?? 0).toDouble(),
+        paymentMethod: txnMap['paymentMethod']?.toString() ?? 'Cash',
+        amountPaid: (txnMap['amountPaid'] ?? 0).toDouble(),
+        change: (txnMap['changeAmount'] ?? 0).toDouble(),
+        cashier: txnMap['cashier']?.toString() ?? '',
+        branch: txnMap['branch']?.toString() ?? '',
+        dateTime: DateTime.tryParse(txnMap['dateTime']?.toString() ?? '') ?? DateTime.now(),
+        status: status,
+      );
+
+      if (!mounted) return;
+
+      if (mode == 'REFUND') {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RefundModeScreen(
+              originalTransaction: originalTxn,
+              originalItems: items,
+            ),
+          ),
+        );
+      } else if (mode == 'EXCHANGE') {
+        _showSnackBar('🚧 Exchange Mode coming in v149');
+      }
+    } catch (e) {
+      _showSnackBar('❌ Error loading receipt: \$e');
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
