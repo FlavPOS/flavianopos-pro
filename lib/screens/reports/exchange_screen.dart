@@ -579,7 +579,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 Text('*', style: TextStyle(color: Colors.red[700], fontSize: 14, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 6),
-              Text('Difference to collect: \${_priceDiff.toStringAsFixed(2)}',
+              Text('Difference to collect: ${_priceDiff.toStringAsFixed(2)}',
                   style: TextStyle(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500)),
               const SizedBox(height: 10),
               TextField(
@@ -604,7 +604,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 child: Row(children: [
                   const Icon(Icons.check_circle, size: 16, color: Colors.green),
                   const SizedBox(width: 8),
-                  Text('Change: \${_change.toStringAsFixed(2)}',
+                  Text('Change: ${_change.toStringAsFixed(2)}',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green[800])),
                 ]),
               ),
@@ -615,7 +615,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 child: Row(children: [
                   const Icon(Icons.warning, size: 16, color: Colors.red),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('Insufficient - need \${(_priceDiff - _cashReceived).toStringAsFixed(2)} more',
+                  Expanded(child: Text('Insufficient - need ${(_priceDiff - _cashReceived).toStringAsFixed(2)} more',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800]))),
                 ]),
               ),
@@ -641,7 +641,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 Text('*', style: TextStyle(color: Colors.red[700], fontSize: 14, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 6),
-              Text('Difference: \${_priceDiff.toStringAsFixed(2)}',
+              Text('Difference: ${_priceDiff.toStringAsFixed(2)}',
                   style: TextStyle(fontSize: 11, color: Colors.orange[800], fontWeight: FontWeight.w500)),
               const SizedBox(height: 10),
               TextField(
@@ -666,7 +666,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 child: Row(children: [
                   const Icon(Icons.check_circle, size: 16, color: Colors.green),
                   const SizedBox(width: 8),
-                  Text('Change: \${_change.toStringAsFixed(2)}',
+                  Text('Change: ${_change.toStringAsFixed(2)}',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green[800])),
                 ]),
               ),
@@ -677,7 +677,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
                 child: Row(children: [
                   const Icon(Icons.warning, size: 16, color: Colors.red),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('Need \${(_priceDiff - _cashReceived).toStringAsFixed(2)} more',
+                  Expanded(child: Text('Need ${(_priceDiff - _cashReceived).toStringAsFixed(2)} more',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.red[800]))),
                 ]),
               ),

@@ -928,6 +928,117 @@ class _CashieringScreenState extends State<CashieringScreen> {
     );
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // 🆕 v147: REFUND / EXCHANGE Entry Points (moved from Sales History)
+  // ═══════════════════════════════════════════════════════════
+
+  /// Show receipt lookup dialog for REFUND
+  void _showRefundLookup() async {
+    await _showReceiptLookupDialog(mode: 'REFUND');
+  }
+
+  /// Show receipt lookup dialog for EXCHANGE
+  void _showExchangeLookup() async {
+    await _showReceiptLookupDialog(mode: 'EXCHANGE');
+  }
+
+  /// Unified receipt lookup dialog
+  Future<void> _showReceiptLookupDialog({required String mode}) async {
+    final Color accentColor = mode == 'REFUND' ? Colors.red[700]! : Colors.orange[700]!;
+    final IconData icon = mode == 'REFUND' ? Icons.undo : Icons.swap_horiz;
+    final TextEditingController receiptCtrl = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(icon, color: accentColor),
+            const SizedBox(width: 8),
+            Text('$mode - Find Original Receipt',
+              style: TextStyle(color: accentColor, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the original receipt number to process this transaction.',
+              style: TextStyle(fontSize: 13, color: Colors.black54)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: receiptCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Receipt Number',
+                hintText: 'e.g. R-20260716-001',
+                prefixIcon: Icon(Icons.receipt_long, color: accentColor),
+                border: const OutlineInputBorder(),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: accentColor.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: accentColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      mode == 'REFUND'
+                        ? 'Refund will restore inventory in real-time.'
+                        : 'Exchange allows item replacement with price diff.',
+                      style: TextStyle(fontSize: 11, color: accentColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              final receiptNo = receiptCtrl.text.trim();
+              if (receiptNo.isEmpty) {
+                _showSnackBar('⚠️ Please enter receipt number');
+                return;
+              }
+              Navigator.pop(ctx);
+              await _loadOriginalTransaction(receiptNo, mode);
+            },
+            icon: const Icon(Icons.search),
+            label: Text('FIND & OPEN $mode'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentColor,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Load original transaction from DB and route to Refund/Exchange handler
+  Future<void> _loadOriginalTransaction(String receiptNo, String mode) async {
+    // TODO v148: Implement DB lookup via TransactionModel.findByReceiptNo()
+    // TODO v148: Route to _openRefundMode() or _openExchangeMode()
+    _showSnackBar('🔍 Looking up: $receiptNo (v148 will complete this)');
+    print('[v147] $mode lookup requested for: $receiptNo');
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // End v147 additions
+  // ═══════════════════════════════════════════════════════════
+
   void _showSnackBar(String message) { SoundHelper.click();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message), behavior: SnackBarBehavior.floating,
@@ -971,6 +1082,34 @@ class _CashieringScreenState extends State<CashieringScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             decoration: BoxDecoration(color: Colors.white.withAlpha(50), borderRadius: BorderRadius.circular(12)),
             child: Center(child: Text('TXN: $_transactionCount', style: const TextStyle(fontSize: 12)))),
+          // 🆕 v147: REFUND button - opens receipt lookup dialog
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: ElevatedButton.icon(
+              onPressed: _showRefundLookup,
+              icon: const Icon(Icons.undo, size: 18),
+              label: const Text('REFUND', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          ),
+          // 🆕 v147: EXCHANGE button - opens receipt lookup dialog
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: ElevatedButton.icon(
+              onPressed: _showExchangeLookup,
+              icon: const Icon(Icons.swap_horiz, size: 18),
+              label: const Text('EXCHANGE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          ),
           IconButton(icon: const Icon(Icons.delete_sweep), onPressed: _clearCart, tooltip: 'Clear Cart'),
         ],
       ),
