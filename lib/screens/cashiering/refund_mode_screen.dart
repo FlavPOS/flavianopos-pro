@@ -3,6 +3,9 @@
 import 'package:flutter/material.dart';
 import '../../models/transaction_model.dart';
 import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../services/branch_inventory_service.dart';
+import '../../utils/approver_pin_dialog.dart';
 
 class RefundModeScreen extends StatefulWidget {
   final Transaction originalTransaction;
@@ -58,8 +61,31 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
       );
       return;
     }
+
+    // v149 STEP 1: Threshold check - Manager PIN if refund > 500
+    const double pinThreshold = 500.0;
+    String approver = 'admin';
+    if (_refundTotal > pinThreshold) {
+      final pinResult = await showApproverPinDialog(
+        context,
+        themeColor: Colors.red.shade700,
+        title: 'Manager Approval Required',
+        subtitle: 'Refund exceeds PHP ' + pinThreshold.toStringAsFixed(0) + '. Enter Supervisor/Manager PIN.',
+        actionLabel: 'Approve Refund',
+        actionIcon: Icons.check_circle_outline,
+      );
+      if (pinResult == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Refund cancelled - approval not provided')),
+        );
+        return;
+      }
+      approver = (pinResult['name'] ?? pinResult['username'] ?? 'manager').toString();
+    }
+
     setState(() => _processing = true);
 
+    // Determine full vs partial refund
     bool isFull = true;
     for (int i = 0; i < widget.originalItems.length; i++) {
       final origQ = widget.originalItems[i].qty;
@@ -74,26 +100,60 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
     txn.status = isFull ? 'refunded' : 'partial_refund';
     txn.refundAmount = _refundTotal;
     txn.refundMethod = txn.paymentMethod;
-    txn.refundedBy = 'admin';
+    txn.refundedBy = approver;
     txn.refundedAt = DateTime.now();
 
     try {
+      // v149 STEP 3: Real-time inventory increment (v134 BUG FIX)
+      int itemsRestored = 0;
+      for (int i = 0; i < widget.originalItems.length; i++) {
+        if (_selected[i] == true) {
+          final it = widget.originalItems[i];
+          final refQ = _qtyToRefund[i] ?? 0;
+          if (refQ > 0 && it.sku.isNotEmpty) {
+            final ok = await BranchInventoryService.incrementStock(
+              txn.branch,
+              it.sku,
+              refQ,
+            );
+            if (ok) itemsRestored++;
+          }
+        }
+      }
+
+      // v149 STEP 4: DB update
       await DatabaseHelper().updateTransaction(txn.id, txn.toMap());
+
+      // v149 STEP 5: Firebase sync
+      try {
+        await SyncBridge.enqueueTransaction(txn, op: 'refund');
+      } catch (e) {
+        debugPrint('[v149] Sync enqueue warning: ' + e.toString());
+      }
+
+      if (!mounted) return;
+      setState(() => _processing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Refund processed: PHP ' + _refundTotal.toStringAsFixed(2) +
+            ' - Inventory restored (' + itemsRestored.toString() + ' items)',
+          ),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _processing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Refund failed: ' + e.toString())),
+        SnackBar(
+          content: Text('Refund failed: ' + e.toString()),
+          backgroundColor: Colors.red.shade700,
+        ),
       );
-      return;
     }
-
-    if (!mounted) return;
-    setState(() => _processing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Refund processed: PHP ' + _refundTotal.toStringAsFixed(2))),
-    );
-    Navigator.pop(context, true);
   }
 
   @override
