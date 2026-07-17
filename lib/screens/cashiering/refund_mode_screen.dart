@@ -7,6 +7,7 @@ import '../../helpers/sync_bridge.dart';
 import '../../services/branch_inventory_service.dart';
 import '../../services/cashier_session_service.dart';
 import '../../utils/approver_pin_dialog.dart';
+import 'refund_receipt_screen.dart';
 
 class RefundModeScreen extends StatefulWidget {
   final Transaction originalTransaction;
@@ -159,17 +160,37 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
 
       if (!mounted) return;
       setState(() => _processing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Refund PHP ' + _refundTotal.toStringAsFixed(2) +
-            ' - Inventory +' + itemsRestored.toString() + drawerNote,
+
+      // v150b: Generate refund number and navigate to receipt screen
+      final now = DateTime.now();
+      final refundNumber = 'RFN-' +
+        now.year.toString() +
+        now.month.toString().padLeft(2, '0') +
+        now.day.toString().padLeft(2, '0') +
+        '-' + (now.millisecondsSinceEpoch % 10000).toString().padLeft(4, '0');
+
+      final Map<int, int> refundQtyMap = {};
+      for (int i = 0; i < widget.originalItems.length; i++) {
+        if (_selected[i] == true) {
+          refundQtyMap[i] = _qtyToRefund[i] ?? 0;
+        }
+      }
+
+      await Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RefundReceiptScreen(
+            originalTransaction: txn,
+            refundedItems: widget.originalItems,
+            refundQuantities: refundQtyMap,
+            refundTotal: _refundTotal,
+            refundReason: _reason,
+            approvedBy: approver,
+            refundNumber: refundNumber,
+            refundDateTime: now,
           ),
-          backgroundColor: Colors.green.shade700,
-          duration: const Duration(seconds: 4),
         ),
       );
-      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _processing = false);
