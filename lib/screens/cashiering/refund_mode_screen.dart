@@ -5,6 +5,7 @@ import '../../models/transaction_model.dart';
 import '../../helpers/database_helper.dart';
 import '../../helpers/sync_bridge.dart';
 import '../../services/branch_inventory_service.dart';
+import '../../services/cashier_session_service.dart';
 import '../../utils/approver_pin_dialog.dart';
 
 class RefundModeScreen extends StatefulWidget {
@@ -124,6 +125,31 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
       // v149 STEP 4: DB update
       await DatabaseHelper().updateTransaction(txn.id, txn.toMap());
 
+      // v150 STEP 5.5: Cash drawer deduction (via active session)
+      String drawerNote = '';
+      try {
+        final activeSessions = await CashierSessionService.getAllActiveShifts();
+        if (activeSessions.isNotEmpty) {
+          final s = activeSessions.first;
+          final Map<String, dynamic> updates = {
+            'totalRefunds': s.totalRefunds + _refundTotal,
+          };
+          // Q3=A: only deduct cash drawer if original payment was cash
+          if (txn.paymentMethod.toLowerCase() == 'cash') {
+            updates['cashSales'] = (s.cashSales - _refundTotal).clamp(0, double.infinity);
+            drawerNote = ' | Cash drawer: -PHP ' + _refundTotal.toStringAsFixed(2);
+          } else {
+            drawerNote = ' | Logged to totalRefunds (non-cash)';
+          }
+          await CashierSessionService.updateSessionTotals(s.id, updates);
+        } else {
+          drawerNote = ' | WARN: no active session';
+        }
+      } catch (e) {
+        debugPrint('[v150] Cash drawer update failed: ' + e.toString());
+        drawerNote = ' | WARN: drawer update skipped';
+      }
+
       // v149 STEP 5: Firebase sync
       try {
         await SyncBridge.enqueueTransaction(txn, op: 'refund');
@@ -136,8 +162,8 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Refund processed: PHP ' + _refundTotal.toStringAsFixed(2) +
-            ' - Inventory restored (' + itemsRestored.toString() + ' items)',
+            'Refund PHP ' + _refundTotal.toStringAsFixed(2) +
+            ' - Inventory +' + itemsRestored.toString() + drawerNote,
           ),
           backgroundColor: Colors.green.shade700,
           duration: const Duration(seconds: 4),
