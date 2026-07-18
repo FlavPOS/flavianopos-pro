@@ -9,6 +9,7 @@ import '../../models/user_model.dart';
 import '../../helpers/database_helper.dart';
 import '../../services/branch_inventory_service.dart'; // v1.0.60+138
 import '../../services/device_assignment_service.dart'; // v1.0.60+138
+import '../cashiering/exchange_receipt_screen.dart'; // v151.2
 
 // v1.0.61+143 - Return entry with per-item reason
 class _ReturnEntry {
@@ -293,42 +294,34 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
   }
 
   void _showReceiptAndPrint(Exchange exc) {
-    showDialog(context: context, barrierDismissible: false, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(children: [const Icon(Icons.check_circle, color: Colors.green), const SizedBox(width: 8),
-        const Text('Exchange Complete!', style: TextStyle(fontSize: 16))]),
-      content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        _receiptLine('Exchange #', exc.exchangeNumber),
-        _receiptLine('Date', exc.exchangeDate),
-        const Divider(),
-        _receiptLine('Returned', exc.returnedItemName),
-        _receiptLine('Price', exc.returnedPrice.toStringAsFixed(2)),
-        const Divider(),
-        const Text('New Item(s):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        const SizedBox(height: 4),
-        ..._replacements.map((r) => _receiptLine('  ${r.product.name} x${r.quantity}', r.total.toStringAsFixed(2))),
-        const Divider(),
-        _receiptLine('Total Replacement', exc.newPrice.toStringAsFixed(2)),
-        if (exc.priceDifference > 0) _receiptLine('Price Difference', '+${exc.priceDifference.toStringAsFixed(2)}'),
-        _receiptLine('Approved By', exc.approvedBy),
-        _receiptLine('Date', exc.exchangeDate),
-      ])),
-      actions: [
-        // v1.0.60+141 - Return true to trigger parent refresh
-        TextButton(onPressed: () { 
-          Navigator.pop(ctx); // Close receipt dialog
-          Navigator.pop(context, true); // Return to Sales History with refresh signal
-        }, child: const Text('Close')),
-        ElevatedButton.icon(icon: const Icon(Icons.print, size: 16), label: const Text('Print PDF'),
-          // v1.0.60+141 - Return true after PDF print to refresh parent
-          onPressed: () async { 
-            Navigator.pop(ctx); 
-            await _printPdf(exc); 
-            if (mounted) Navigator.pop(context, true); 
-          }),
-      ],
-    ));
+    // v151.2: Navigate to full-screen ExchangeReceiptScreen (mirrors refund receipt UX)
+    final returnedItemsData = _returnedItems.map((r) => {
+      'name': r.item.name,
+      'sku': r.item.sku,
+      'qty': r.item.qty,
+      'price': r.item.price,
+      'reason': r.reason,
+    }).toList();
+    final takenItemsData = _replacements.map((r) => {
+      'name': r.product.name,
+      'sku': r.product.sku,
+      'qty': r.quantity,
+      'price': r.product.sellingPrice,
+    }).toList();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExchangeReceiptScreen(
+          exchange: exc,
+          returnedItems: returnedItemsData,
+          takenItems: takenItemsData,
+          cashReceived: _cashReceived,
+          changeGiven: _cashReceived > _priceDiff ? _cashReceived - _priceDiff : 0,
+        ),
+      ),
+    );
   }
+
 
   Widget _receiptLine(String l, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 2),
     child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
