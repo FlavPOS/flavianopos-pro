@@ -286,12 +286,23 @@ class SyncManager {
             .onChildChanged.listen((event) => _onZReportUpdate(event, companyCode, branchId)));
       }
 
-      // v156: HOLD TRANSACTIONS - Real-time multi-device sync (today-only filter)
-      await _backfillHeldTransactions(companyCode);
-      _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
-          .onChildAdded.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
-      _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
-          .onChildChanged.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+      // v157: HOLD TRANSACTIONS - Branch-scoped real-time sync (today-only filter)
+      // Role-based: Admin sees all branches, Cashier sees own branch only
+      if (viewerRole == "admin" || viewerRole == "companyadmin") {
+        // Head Office: listen to ALL branches
+        await _backfillAllHeldTransactions(companyCode);
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
+            .onChildAdded.listen((event) => _onHeldBranchUpdate(event, companyCode)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
+            .onChildChanged.listen((event) => _onHeldBranchUpdate(event, companyCode)));
+      } else {
+        // Branch: listen to OWN branch only
+        await _backfillHeldTransactions(companyCode, branchId);
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
+            .onChildAdded.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
+            .onChildChanged.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+      }
 
 
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
@@ -764,7 +775,7 @@ class SyncManager {
 
 
   // ═══════════════════ v156: HOLD TRANSACTIONS (real-time multi-device sync) ═══════════════════
-  Future<void> _backfillHeldTransactions(String companyCode) async {
+  Future<void> _backfillHeldTransactions(String companyCode, String branchId) async {
     try {
       final db = FirebaseRealtimeService.instance.db;
       if (db == null) return;
@@ -774,7 +785,7 @@ class SyncManager {
       final todayStart = DateTime(now.year, now.month, now.day);
       final todayStartIso = todayStart.toIso8601String();
       
-      final snap = await db.ref('companies/$companyCode/holdTransactions')
+      final snap = await db.ref('companies/$companyCode/holdTransactions/$branchId')
           .orderByChild('heldAt')
           .startAt(todayStartIso)
           .get()
@@ -808,6 +819,88 @@ class SyncManager {
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[v156] Backfill error: $e');
+    }
+  }
+
+  // v157: Admin backfill - fetches ALL branches' holds
+  Future<void> _backfillAllHeldTransactions(String companyCode) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayStartIso = todayStart.toIso8601String();
+      
+      // For admin, we need to fetch all branches
+      // Firebase path: companies/{code}/holdTransactions/{branchId}/{uuid}
+      final snap = await db.ref('companies/\$companyCode/holdTransactions')
+          .get()
+          .timeout(const Duration(seconds: 20));
+      
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final branchesMap = raw.map((k, v) => MapEntry(k.toString(), v));
+      
+      int totalCount = 0;
+      for (final branchEntry in branchesMap.entries) {
+        if (branchEntry.value is! Map) continue;
+        final branchHolds = (branchEntry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+        
+        for (final holdEntry in branchHolds.entries) {
+          if (holdEntry.value is! Map) continue;
+          final data = (holdEntry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+          
+          final status = (data['status'] ?? '').toString();
+          if (status != 'HOLD') continue;
+          
+          final heldAtStr = (data['heldAt'] ?? '').toString();
+          final heldAt = DateTime.tryParse(heldAtStr);
+          if (heldAt == null || heldAt.isBefore(todayStart)) continue;
+          
+          await _upsertHeldTransaction(holdEntry.key, data);
+          totalCount++;
+        }
+      }
+      if (kDebugMode) debugPrint('[v157] Admin backfill: \$totalCount HOLDs synced from all branches');
+      if (totalCount > 0) {
+        _showSnackBar?.call('📥 Pulled \$totalCount active hold\${totalCount == 1 ? "" : "s"} from all branches');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v157] Admin backfill error: \$e');
+    }
+  }
+
+  // v157: Admin listener - handles hold updates from ANY branch
+  Future<void> _onHeldBranchUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      // event.snapshot has a branchId as key (e.g. "HO001") and holds as children
+      final data = event.snapshot.value;
+      if (data == null) return;
+      if (data is! Map) return;
+      
+      // Iterate through holds within this branch
+      final holdsInBranch = (data).map((k, v) => MapEntry(k.toString(), v));
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      
+      for (final entry in holdsInBranch.entries) {
+        if (entry.value is! Map) continue;
+        final holdData = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+        
+        final status = (holdData['status'] ?? '').toString();
+        final heldAtStr = (holdData['heldAt'] ?? '').toString();
+        final heldAt = DateTime.tryParse(heldAtStr);
+        
+        if (status == 'HOLD' && heldAt != null && !heldAt.isBefore(todayStart)) {
+          await _upsertHeldTransaction(entry.key, holdData);
+        } else {
+          await _updateHeldStatus(entry.key, status, holdData);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v157] Branch update error: \$e');
     }
   }
 
