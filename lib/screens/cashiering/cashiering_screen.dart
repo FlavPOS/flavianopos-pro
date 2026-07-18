@@ -15,6 +15,7 @@ import 'receipt_screen.dart';
 import 'refund_mode_screen.dart';
 import '../../models/held_transaction_model.dart';
 import 'hold_receipt_screen.dart';
+import 'held_list_screen.dart';
 import 'package:uuid/uuid.dart';
 import '../../utils/approver_pin_dialog.dart';  // v148
 import '../reports/exchange_screen.dart';  // v151
@@ -78,7 +79,29 @@ class CashieringScreen extends StatefulWidget {
 }
 
 class _CashieringScreenState extends State<CashieringScreen> {
-  // v151.3: Captured Manager approver name from PIN gate
+  // v153.1: HELD count for AppBar badge
+  int _heldCount = 0;
+
+  Future<void> _refreshHeldCount() async {
+    try {
+      final rows = await DatabaseHelper().getActiveHeldTransactions(widget.branch);
+      if (mounted) setState(() => _heldCount = rows.length);
+    } catch (_) {}
+  }
+
+  Future<void> _openHeldList() async {
+    final resumed = await Navigator.push<HeldTransaction?>(
+      context,
+      MaterialPageRoute(builder: (_) => HeldListScreen(branch: widget.branch)),
+    );
+    if (resumed != null) {
+      if (!mounted) return;
+      await _showResumeDialog(resumed);
+    }
+    _refreshHeldCount();
+  }
+
+    // v151.3: Captured Manager approver name from PIN gate
   String? _approvedBy;
 
   // ═══ PHASE B1.2: Branch-Aware Stock Cache ═══
@@ -1260,6 +1283,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
 
       if (!mounted) return;
       _showSnackBar('Transaction held: ' + heldNumber);
+      _refreshHeldCount();
     } catch (e) {
       _showSnackBar('Hold failed: ' + e.toString());
     }
@@ -1376,6 +1400,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
 
       if (!mounted) return;
       _showSnackBar('Resumed ' + held.heldNumber + ' (' + held.items.length.toString() + ' items)');
+      _refreshHeldCount();
     } catch (e) {
       _showSnackBar('Resume failed: ' + e.toString());
     }
@@ -1449,6 +1474,21 @@ class _CashieringScreenState extends State<CashieringScreen> {
               label: const Text('EXCHANGE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+          ),
+          // v153.1: HELD button with count badge
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            child: ElevatedButton.icon(
+              onPressed: _openHeldList,
+              icon: const Icon(Icons.pause_circle, size: 18),
+              label: Text('HELD (' + _heldCount.toString() + ')',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple[700],
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
@@ -1737,11 +1777,19 @@ class _CashieringScreenState extends State<CashieringScreen> {
                             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
                         ]),
                         const Spacer(),
+                        // v153.1: HOLD button on mobile bottom sheet
+                        ElevatedButton.icon(
+                          onPressed: () { Navigator.pop(ctx); _holdTransaction(); },
+                          icon: const Icon(Icons.pause_circle, size: 18), label: const Text('HOLD'),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+                        const SizedBox(width: 8),
                         ElevatedButton.icon(
                           onPressed: () { Navigator.pop(ctx); _processPayment(); },
                           icon: const Icon(Icons.payment), label: const Text('PAY NOW'),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
                       ]),
                     ]),
