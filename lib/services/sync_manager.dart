@@ -286,6 +286,13 @@ class SyncManager {
             .onChildChanged.listen((event) => _onZReportUpdate(event, companyCode, branchId)));
       }
 
+      // v156: HOLD TRANSACTIONS - Real-time multi-device sync (today-only filter)
+      await _backfillHeldTransactions(companyCode);
+      _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
+          .onChildAdded.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+      _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
+          .onChildChanged.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+
 
       _rtListeners.add(fbDb.ref('companies/$companyCode/usersByBranch/$branchId')
           .onChildAdded.listen((event) => _onUserUpdate(event, branchId)));
@@ -752,6 +759,142 @@ class SyncManager {
       }
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ branch backfill error: $e');
+    }
+  }
+
+
+  // ═══════════════════ v156: HOLD TRANSACTIONS (real-time multi-device sync) ═══════════════════
+  Future<void> _backfillHeldTransactions(String companyCode) async {
+    try {
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      
+      // v156: Today-only filter - fetch only records with heldAt >= today midnight
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayStartIso = todayStart.toIso8601String();
+      
+      final snap = await db.ref('companies/$companyCode/holdTransactions')
+          .orderByChild('heldAt')
+          .startAt(todayStartIso)
+          .get()
+          .timeout(const Duration(seconds: 20));
+      
+      if (!snap.exists) return;
+      final raw = snap.value;
+      if (raw is! Map) return;
+      final holdsMap = raw.map((k, v) => MapEntry(k.toString(), v));
+      
+      int count = 0;
+      int skipped = 0;
+      for (final entry in holdsMap.entries) {
+        if (entry.value is! Map) continue;
+        final data = (entry.value as Map).map((k, v) => MapEntry(k.toString(), v));
+        
+        // Double-check filters (belt + suspenders)
+        final status = (data['status'] ?? '').toString();
+        if (status != 'HOLD') { skipped++; continue; }
+        
+        final heldAtStr = (data['heldAt'] ?? '').toString();
+        final heldAt = DateTime.tryParse(heldAtStr);
+        if (heldAt == null || heldAt.isBefore(todayStart)) { skipped++; continue; }
+        
+        await _upsertHeldTransaction(entry.key, data);
+        count++;
+      }
+      if (kDebugMode) debugPrint('[v156] Backfill: $count synced, $skipped skipped (today-only filter)');
+      if (count > 0) {
+        _showSnackBar?.call('📥 Pulled $count active hold${count == 1 ? "" : "s"} from cloud');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v156] Backfill error: $e');
+    }
+  }
+
+  Future<void> _onHeldTransactionUpdate(DatabaseEvent event, String companyCode) async {
+    try {
+      final data = event.snapshot.value;
+      if (data == null) return;
+      if (data is! Map) return;
+      
+      final map = (data).map((k, v) => MapEntry(k.toString(), v));
+      final holdId = event.snapshot.key ?? '';
+      if (holdId.isEmpty) return;
+      
+      final status = (map['status'] ?? '').toString();
+      
+      // Status changed to COMPLETED/CANCELLED/EXPIRED - just update local
+      if (status != 'HOLD') {
+        await _updateHeldStatus(holdId, status, map);
+        return;
+      }
+      
+      // Today-only filter for new HOLDs
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final heldAt = DateTime.tryParse((map['heldAt'] ?? '').toString());
+      if (heldAt == null || heldAt.isBefore(todayStart)) {
+        if (kDebugMode) debugPrint('[v156] Ignoring old hold: $holdId');
+        return;
+      }
+      
+      await _upsertHeldTransaction(holdId, map);
+      if (kDebugMode) debugPrint('[v156] Synced hold: $holdId');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v156] Update error: $e');
+    }
+  }
+
+  Future<void> _upsertHeldTransaction(String id, Map<String, dynamic> data) async {
+    try {
+      final db = await DatabaseHelper().database;
+      await db.insert('held_transactions', {
+        'id': id,
+        'heldNumber': (data['heldNumber'] ?? '').toString(),
+        'branch': (data['branch'] ?? '').toString(),
+        'cashierId': (data['cashierId'] ?? '').toString(),
+        'cashierName': (data['cashierName'] ?? '').toString(),
+        'customerName': (data['customerName'] ?? '').toString(),
+        'note': (data['note'] ?? '').toString(),
+        'itemsJson': (data['itemsJson'] ?? '[]').toString(),
+        'subtotal': (data['subtotal'] as num?)?.toDouble() ?? 0,
+        'totalDiscount': (data['totalDiscount'] as num?)?.toDouble() ?? 0,
+        'total': (data['total'] as num?)?.toDouble() ?? 0,
+        'heldAt': (data['heldAt'] ?? '').toString(),
+        'status': 'HOLD',
+        'shiftId': (data['shiftId'] ?? '').toString(),
+        'completedAt': (data['completedAt'] ?? '').toString(),
+        'completedBy': (data['completedBy'] ?? '').toString(),
+        'cancelledAt': (data['cancelledAt'] ?? '').toString(),
+        'cancelledBy': (data['cancelledBy'] ?? '').toString(),
+        'cancelReason': (data['cancelReason'] ?? '').toString(),
+        'expiredAt': (data['expiredAt'] ?? '').toString(),
+        'salesTransactionId': (data['salesTransactionId'] ?? '').toString(),
+        'deviceId': (data['deviceId'] ?? '').toString(),
+        'modifiedAt': (data['modifiedAt'] ?? '').toString(),
+        'modifiedBy': (data['modifiedBy'] ?? '').toString(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v156] Upsert failed: $e');
+    }
+  }
+
+  Future<void> _updateHeldStatus(String id, String newStatus, Map<String, dynamic> data) async {
+    try {
+      final db = await DatabaseHelper().database;
+      await db.update('held_transactions', {
+        'status': newStatus,
+        'completedAt': (data['completedAt'] ?? '').toString(),
+        'completedBy': (data['completedBy'] ?? '').toString(),
+        'cancelledAt': (data['cancelledAt'] ?? '').toString(),
+        'cancelledBy': (data['cancelledBy'] ?? '').toString(),
+        'cancelReason': (data['cancelReason'] ?? '').toString(),
+        'expiredAt': (data['expiredAt'] ?? '').toString(),
+        'salesTransactionId': (data['salesTransactionId'] ?? '').toString(),
+        'modifiedAt': DateTime.now().toIso8601String(),
+      }, where: 'id = ?', whereArgs: [id]);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[v156] Status update failed: $e');
     }
   }
 
