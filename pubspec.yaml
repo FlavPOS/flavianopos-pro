@@ -1,7 +1,7 @@
 name: myapp
 description: "QuickPOS Pro - POS, Inventory & Sales Management System"
 publish_to: 'none'
-version: 1.0.74+160
+version: 1.0.75+161
 
 environment:
   sdk: ^3.7.0

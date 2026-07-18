@@ -1457,7 +1457,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             child: ElevatedButton.icon(
               onPressed: _showRefundLookup,
               icon: const Icon(Icons.undo, size: 18),
-              label: const Text('REFUND', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              label: Text(MediaQuery.of(context).size.width < 600 ? 'R' : 'REFUND', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red[700],
                 foregroundColor: Colors.white,
@@ -1471,7 +1471,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             child: ElevatedButton.icon(
               onPressed: _showExchangeLookup,
               icon: const Icon(Icons.swap_horiz, size: 18),
-              label: const Text('EXCHANGE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              label: Text(MediaQuery.of(context).size.width < 600 ? 'E' : 'EXCHANGE', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange[700],
                 foregroundColor: Colors.white,
@@ -1485,7 +1485,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             child: ElevatedButton.icon(
               onPressed: _openHeldList,
               icon: const Icon(Icons.pause_circle, size: 18),
-              label: Text('HELD (' + _heldCount.toString() + ')',
+              label: Text((MediaQuery.of(context).size.width < 600 ? 'H (' : 'HELD (') + _heldCount.toString() + ')',
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.purple[700],
