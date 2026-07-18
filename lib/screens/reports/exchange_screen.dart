@@ -29,7 +29,8 @@ class _ReplacementEntry {
 class ExchangeScreen extends StatefulWidget {
   final Transaction transaction;
   final String currentUser, branch;
-  const ExchangeScreen({super.key, required this.transaction, required this.currentUser, required this.branch});
+  final String? preApprovedBy;
+  const ExchangeScreen({super.key, required this.transaction, required this.currentUser, required this.branch, this.preApprovedBy});
   @override
   State<ExchangeScreen> createState() => _ExchangeScreenState();
 }
@@ -42,13 +43,12 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
   // v1.0.61+145 - Additional cash received field
   final _cashCtrl = TextEditingController();
   double _cashReceived = 0;
-  final _pinCtrl = TextEditingController();
   String _reason = 'Damaged';
   bool _processing = false;
   static const _reasons = ['Damaged', 'Defective', 'Wrong Size', 'Wrong Item', 'Wrong Color', 'Other'];
 
   @override
-  void dispose() { _reasonCtrl.dispose(); _pinCtrl.dispose(); _cashCtrl.dispose(); super.dispose(); }
+  void dispose() { _reasonCtrl.dispose(); _cashCtrl.dispose(); super.dispose(); }
 
   double get _replacementTotal => _replacements.fold<double>(0, (sum, r) => sum + r.total);
   // v1.0.61+143 - Sum of all selected returned items
@@ -120,9 +120,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
 
   Future<void> _processExchange() async {
     if (!_canProcess) return;
-    if (_pinCtrl.text.trim().isEmpty) { _snack('Enter Manager PIN'); return; }
-    final mgr = AppUser.allUsers.where((u) => (u.role == 'Admin' || u.role == 'Manager') && u.pin == _pinCtrl.text.trim()).firstOrNull;
-    if (mgr == null) { _snack('Invalid Manager PIN'); return; }
+    // v151.3: PIN gate now at Cashiering entry - approver already validated
     final reason = _reason == 'Other' ? _reasonCtrl.text.trim() : _reason;
     if (reason.isEmpty) { _snack('Enter reason'); return; }
 
@@ -222,7 +220,7 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         returnedItemName: returnedNames, returnedItemSku: returnedSkus, returnedQty: returnedQtyTotal, returnedPrice: _originalPrice,
         newItemName: allNames, newItemSku: allSkus, newQty: _totalQty, newPrice: _replacementTotal,
         priceDifference: diff, amountPaid: _cashReceived, reason: combinedReasons.isEmpty ? reason : combinedReasons,
-        processedBy: widget.currentUser, approvedBy: mgr.name, branch: widget.branch,
+        processedBy: widget.currentUser, approvedBy: (widget.preApprovedBy ?? widget.currentUser), branch: widget.branch,
         dateCreated: now.toIso8601String());
       await Exchange.create(exchange);
 
@@ -616,16 +614,6 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
           ),
         
 
-        // Manager Approval
-        Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6)]),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [Icon(Icons.lock, size: 18, color: Colors.red), SizedBox(width: 8),
-              Text('Manager Approval', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))]),
-            const SizedBox(height: 8),
-            TextField(controller: _pinCtrl, obscureText: true, keyboardType: TextInputType.number,
-              decoration: InputDecoration(hintText: 'Manager PIN *', prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
-          ])),
         const SizedBox(height: 16),
 
         // Process Exchange Button

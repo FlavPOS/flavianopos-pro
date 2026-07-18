@@ -12,7 +12,8 @@ import '../../widgets/product_card_widget.dart';
 import '../../widgets/cart_item_widget.dart';
 import 'payment_dialog.dart';
 import 'receipt_screen.dart';
-import 'refund_mode_screen.dart';  // v148
+import 'refund_mode_screen.dart';
+import '../../utils/approver_pin_dialog.dart';  // v148
 import '../reports/exchange_screen.dart';  // v151
 import '../../models/discount_record_model.dart';
 import '../../models/transaction_model.dart';
@@ -74,6 +75,9 @@ class CashieringScreen extends StatefulWidget {
 }
 
 class _CashieringScreenState extends State<CashieringScreen> {
+  // v151.3: Captured Manager approver name from PIN gate
+  String? _approvedBy;
+
   // ═══ PHASE B1.2: Branch-Aware Stock Cache ═══
   Map<String, int> _branchStock = {};
   String _binvBranchId = "";
@@ -937,11 +941,41 @@ class _CashieringScreenState extends State<CashieringScreen> {
 
   /// Show receipt lookup dialog for REFUND
   void _showRefundLookup() async {
+    // v151.3: PIN gate BEFORE opening refund flow
+    final result = await showApproverPinDialog(
+      context,
+      themeColor: Colors.red.shade700,
+      title: 'Manager Approval Required',
+      subtitle: 'REFUND operations require manager authorization. Enter Supervisor/Manager PIN.',
+      actionLabel: 'Authorize Refund',
+      actionIcon: Icons.lock_open,
+    );
+    if (result == null) {
+      _showSnackBar('Refund cancelled - manager authorization required');
+      return;
+    }
+    _approvedBy = (result['name'] ?? result['username'] ?? 'manager').toString();
+    if (!mounted) return;
     await _showReceiptLookupDialog(mode: 'REFUND');
   }
 
   /// Show receipt lookup dialog for EXCHANGE
   void _showExchangeLookup() async {
+    // v151.3: PIN gate BEFORE opening exchange flow
+    final result = await showApproverPinDialog(
+      context,
+      themeColor: Colors.orange.shade700,
+      title: 'Manager Approval Required',
+      subtitle: 'EXCHANGE operations require manager authorization. Enter Supervisor/Manager PIN.',
+      actionLabel: 'Authorize Exchange',
+      actionIcon: Icons.lock_open,
+    );
+    if (result == null) {
+      _showSnackBar('Exchange cancelled - manager authorization required');
+      return;
+    }
+    _approvedBy = (result['name'] ?? result['username'] ?? 'manager').toString();
+    if (!mounted) return;
     await _showReceiptLookupDialog(mode: 'EXCHANGE');
   }
 
@@ -1080,6 +1114,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
             builder: (_) => RefundModeScreen(
               originalTransaction: originalTxn,
               originalItems: items,
+              preApprovedBy: _approvedBy,
             ),
           ),
         );
@@ -1092,6 +1127,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
               transaction: originalTxn,
               currentUser: originalTxn.cashier,
               branch: originalTxn.branch,
+              preApprovedBy: _approvedBy,
             ),
           ),
         );

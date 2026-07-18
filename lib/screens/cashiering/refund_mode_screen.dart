@@ -12,10 +12,12 @@ import 'refund_receipt_screen.dart';
 class RefundModeScreen extends StatefulWidget {
   final Transaction originalTransaction;
   final List<TransactionItem> originalItems;
+  final String? preApprovedBy; // v151.3: Manager PIN captured at entry gate
   const RefundModeScreen({
     super.key,
     required this.originalTransaction,
     required this.originalItems,
+    this.preApprovedBy,
   });
 
   @override
@@ -64,26 +66,8 @@ class _RefundModeScreenState extends State<RefundModeScreen> {
       return;
     }
 
-    // v149 STEP 1: Threshold check - Manager PIN if refund > 500
-    const double pinThreshold = 500.0;
-    String approver = 'admin';
-    if (_refundTotal > pinThreshold) {
-      final pinResult = await showApproverPinDialog(
-        context,
-        themeColor: Colors.red.shade700,
-        title: 'Manager Approval Required',
-        subtitle: 'Refund exceeds PHP ' + pinThreshold.toStringAsFixed(0) + '. Enter Supervisor/Manager PIN.',
-        actionLabel: 'Approve Refund',
-        actionIcon: Icons.check_circle_outline,
-      );
-      if (pinResult == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Refund cancelled - approval not provided')),
-        );
-        return;
-      }
-      approver = (pinResult['name'] ?? pinResult['username'] ?? 'manager').toString();
-    }
+    // v151.3: PIN gate now at Cashiering entry - use preApprovedBy from widget
+    final String approver = widget.preApprovedBy ?? 'admin';
 
     setState(() => _processing = true);
 
