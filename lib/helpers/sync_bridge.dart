@@ -541,14 +541,14 @@ class SyncBridge {
     };
     final path = 'companies/$companyCode/holdTransactions/${h.heldNumber}';
     await _queue.enqueue(
-      entityType: 'held_transaction', entityId: h.heldNumber, operation: op,
+      entityType: 'held_transaction', entityId: h.id, operation: op,
       firebasePath: path, payload: payload,
       companyId: companyCode, branchId: branchId,
       deviceId: ctx['deviceId']!,
       priority: SyncPriority.p4Transactional,
     );
     // Fire upload (never delete - status updates only)
-    _fireAndForget(() => _uploadHeldToFirebase(companyCode, h.heldNumber, payload));
+    _fireAndForget(() => _uploadHeldToFirebase(companyCode, h.id, payload));
   }
 
   static Future<void> _uploadHeldToFirebase(
