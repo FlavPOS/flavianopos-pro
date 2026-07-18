@@ -61,48 +61,93 @@ class _HeldListScreenState extends State<HeldListScreen> {
     ).toList();
   }
 
-  Future<void> _deleteHeld(HeldTransaction h) async {
-    // Q2=C: Confirmation dialog (no PIN)
+  Future<void> _cancelHeld(HeldTransaction h) async {
+    // v154: Cancel with reason (permanent audit trail - NEVER DELETE)
+    String selectedReason = 'Customer Changed Mind';
+    final noteCtrl = TextEditingController();
+    final reasons = ['Customer Changed Mind', 'Wrong Items', 'Duplicate Hold', 'Customer Left', 'Other'];
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(children: [
-          Icon(Icons.warning_amber, color: Colors.red[700]),
-          const SizedBox(width: 8),
-          const Text('Delete Held Transaction?'),
-        ]),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(h.heldNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
-          if (h.customerName.isNotEmpty) Text('Customer: ' + h.customerName),
-          Text('Items: ' + h.items.length.toString()),
-          Text('Total: PHP ' + h.total.toStringAsFixed(2)),
-          const SizedBox(height: 12),
-          const Text('This will permanently delete the held transaction.',
-            style: TextStyle(color: Colors.red, fontSize: 12)),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
-            child: const Text('DELETE'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateD) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.cancel, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('Cancel Held Transaction?'),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(h.heldNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (h.customerName.isNotEmpty) Text('Customer: ' + h.customerName),
+              Text('Items: ' + h.items.length.toString()),
+              Text('Total: PHP ' + h.total.toStringAsFixed(2)),
+              const SizedBox(height: 12),
+              const Text('Cancellation Reason *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                initialValue: selectedReason,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                onChanged: (v) => setStateD(() => selectedReason = v ?? 'Customer Changed Mind'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                  hintText: 'Additional details',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(6)),
+                child: Row(children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.blue[700]),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text(
+                    'Record is kept for audit trail. Not deleted.',
+                    style: TextStyle(fontSize: 11),
+                  )),
+                ]),
+              ),
+            ]),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('KEEP HOLD')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+              child: const Text('CANCEL HOLD'),
+            ),
+          ],
+        ),
       ),
     );
     if (confirmed != true) return;
 
     try {
-      await DatabaseHelper().updateHeldTransactionStatus(h.id, 'deleted');
+      final fullReason = noteCtrl.text.trim().isEmpty
+        ? selectedReason
+        : selectedReason + ' - ' + noteCtrl.text.trim();
+      // v154: Permanent audit trail - status update only, NO physical delete
+      await DatabaseHelper().markHoldCancelled(h.id, fullReason, 'cashier');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Deleted: ' + h.heldNumber), backgroundColor: Colors.red[700]),
+        SnackBar(content: Text('Cancelled: ' + h.heldNumber), backgroundColor: Colors.red[700]),
       );
       _loadHeld();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: ' + e.toString())),
+        SnackBar(content: Text('Cancel failed: ' + e.toString())),
       );
     }
   }
@@ -207,9 +252,9 @@ class _HeldListScreenState extends State<HeldListScreen> {
                           Row(children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () => _deleteHeld(h),
+                                onPressed: () => _cancelHeld(h),
                                 icon: const Icon(Icons.delete_outline, size: 16),
-                                label: const Text('DELETE'),
+                                label: const Text('CANCEL'),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: Colors.red[700],
                                   side: BorderSide(color: Colors.red[300]!),

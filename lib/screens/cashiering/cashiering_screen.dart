@@ -81,6 +81,9 @@ class CashieringScreen extends StatefulWidget {
 class _CashieringScreenState extends State<CashieringScreen> {
   // v153.1: HELD count for AppBar badge
   int _heldCount = 0;
+  // v154: Track resumed hold for COMPLETED marking after payment
+  String? _resumedHoldId;
+
 
   Future<void> _refreshHeldCount() async {
     try {
@@ -1264,7 +1267,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
         totalDiscount: 0,
         total: total,
         heldAt: DateTime.now(),
-        status: 'active',
+        status: HeldTransaction.statusHold,  // v154: 'HOLD'
         shiftId: '',
       );
 
@@ -1396,7 +1399,10 @@ class _CashieringScreenState extends State<CashieringScreen> {
         }
       });
 
-      await DatabaseHelper().updateHeldTransactionStatus(held.id, 'resumed');
+      // v154: Track this hold ID for COMPLETED marking after PAY NOW succeeds
+      _resumedHoldId = held.id;
+      // Note: Status stays as 'HOLD' until payment completes
+      // If cashier cancels/leaves, hold remains resumable
 
       if (!mounted) return;
       _showSnackBar('Resumed ' + held.heldNumber + ' (' + held.items.length.toString() + ' items)');

@@ -6,6 +6,12 @@ import 'cart_item_model.dart';
 import 'product_model.dart';
 
 class HeldTransaction {
+  // v154: Status constants for permanent audit trail
+  static const String statusHold = 'HOLD';
+  static const String statusCompleted = 'COMPLETED';
+  static const String statusCancelled = 'CANCELLED';
+  static const String statusExpired = 'EXPIRED';
+
   final String id;
   final String heldNumber;
   final String branch;
@@ -20,6 +26,17 @@ class HeldTransaction {
   final DateTime heldAt;
   final String status;
   final String shiftId;
+  // v154: Audit trail fields
+  final String completedAt;
+  final String completedBy;
+  final String cancelledAt;
+  final String cancelledBy;
+  final String cancelReason;
+  final String expiredAt;
+  final String salesTransactionId;
+  final String deviceId;
+  final String modifiedAt;
+  final String modifiedBy;
 
   HeldTransaction({
     required this.id,
@@ -36,6 +53,17 @@ class HeldTransaction {
     required this.heldAt,
     this.status = 'active',
     this.shiftId = '',
+    // v154: Audit trail params
+    this.completedAt = '',
+    this.completedBy = '',
+    this.cancelledAt = '',
+    this.cancelledBy = '',
+    this.cancelReason = '',
+    this.expiredAt = '',
+    this.salesTransactionId = '',
+    this.deviceId = '',
+    this.modifiedAt = '',
+    this.modifiedBy = '',
   });
 
   int get totalQty => items.fold(0, (s, i) => s + i.quantity);
@@ -62,6 +90,17 @@ class HeldTransaction {
     'heldAt': heldAt.toIso8601String(),
     'status': status,
     'shiftId': shiftId,
+    // v154: Audit trail
+    'completedAt': completedAt,
+    'completedBy': completedBy,
+    'cancelledAt': cancelledAt,
+    'cancelledBy': cancelledBy,
+    'cancelReason': cancelReason,
+    'expiredAt': expiredAt,
+    'salesTransactionId': salesTransactionId,
+    'deviceId': deviceId,
+    'modifiedAt': modifiedAt,
+    'modifiedBy': modifiedBy,
   };
 
   static HeldTransaction fromMap(Map<String, dynamic> m) {
@@ -102,6 +141,17 @@ class HeldTransaction {
       heldAt: DateTime.tryParse((m['heldAt'] ?? '').toString()) ?? DateTime.now(),
       status: (m['status'] ?? 'active').toString(),
       shiftId: (m['shiftId'] ?? '').toString(),
+      // v154: Audit trail
+      completedAt: (m['completedAt'] ?? '').toString(),
+      completedBy: (m['completedBy'] ?? '').toString(),
+      cancelledAt: (m['cancelledAt'] ?? '').toString(),
+      cancelledBy: (m['cancelledBy'] ?? '').toString(),
+      cancelReason: (m['cancelReason'] ?? '').toString(),
+      expiredAt: (m['expiredAt'] ?? '').toString(),
+      salesTransactionId: (m['salesTransactionId'] ?? '').toString(),
+      deviceId: (m['deviceId'] ?? '').toString(),
+      modifiedAt: (m['modifiedAt'] ?? '').toString(),
+      modifiedBy: (m['modifiedBy'] ?? '').toString(),
     );
   }
 

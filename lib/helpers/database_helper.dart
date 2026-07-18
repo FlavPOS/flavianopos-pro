@@ -143,6 +143,18 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclaredAt TEXT DEFAULT ''"); } catch (_) {}
     try {
       await db.execute('''CREATE TABLE IF NOT EXISTS held_transactions (id TEXT PRIMARY KEY, heldNumber TEXT UNIQUE NOT NULL, branch TEXT DEFAULT '', cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', customerName TEXT DEFAULT '', note TEXT DEFAULT '', itemsJson TEXT DEFAULT '[]', subtotal REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, total REAL DEFAULT 0, heldAt TEXT NOT NULL, status TEXT DEFAULT 'active', shiftId TEXT DEFAULT '')''');
+      // v154: Audit trail columns (safe additive migration)
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN completedAt TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN completedBy TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN cancelledAt TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN cancelledBy TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN cancelReason TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN expiredAt TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN salesTransactionId TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN deviceId TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN modifiedAt TEXT DEFAULT ''"); } catch (_) {}
+      try { await db.execute("ALTER TABLE held_transactions ADD COLUMN modifiedBy TEXT DEFAULT ''"); } catch (_) {}
+
       await db.execute('''CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, allTransactionsJson TEXT DEFAULT '')''');
     try { await db.execute("ALTER TABLE z_reports ADD COLUMN refundedTransactionsJson TEXT DEFAULT ''"); } catch (_) {}
     } catch (_) {}
@@ -1814,7 +1826,11 @@ try {
 
   Future<List<Map<String, dynamic>>> getActiveHeldTransactions(String branch) async {
     final db = await database;
-    return await db.query('held_transactions', where: 'branch = ? AND status = ?', whereArgs: [branch, 'active'], orderBy: 'heldAt DESC');
+    // v154: Support both legacy 'active' and new 'HOLD' status for backward compat
+    return await db.query('held_transactions',
+      where: "branch = ? AND (status = ? OR status = ?)",
+      whereArgs: [branch, 'active', 'HOLD'],
+      orderBy: 'heldAt DESC');
   }
 
   Future<int> updateHeldTransactionStatus(String id, String status) async {
@@ -1822,8 +1838,47 @@ try {
     return await db.update('held_transactions', {'status': status}, where: 'id = ?', whereArgs: [id]);
   }
 
+  // v154: Enterprise permanent audit trail methods (NEVER DELETE)
+  Future<int> markHoldCompleted(String id, String salesTransactionId, String completedBy) async {
+    final db = await database;
+    return await db.update('held_transactions', {
+      'status': 'COMPLETED',
+      'completedAt': DateTime.now().toIso8601String(),
+      'completedBy': completedBy,
+      'salesTransactionId': salesTransactionId,
+      'modifiedAt': DateTime.now().toIso8601String(),
+      'modifiedBy': completedBy,
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> markHoldCancelled(String id, String reason, String cancelledBy) async {
+    final db = await database;
+    return await db.update('held_transactions', {
+      'status': 'CANCELLED',
+      'cancelledAt': DateTime.now().toIso8601String(),
+      'cancelledBy': cancelledBy,
+      'cancelReason': reason,
+      'modifiedAt': DateTime.now().toIso8601String(),
+      'modifiedBy': cancelledBy,
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> markHoldExpired(String id) async {
+    final db = await database;
+    return await db.update('held_transactions', {
+      'status': 'EXPIRED',
+      'expiredAt': DateTime.now().toIso8601String(),
+      'modifiedAt': DateTime.now().toIso8601String(),
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
   Future<int> expireHeldTransactionsForShift(String shiftId) async {
     final db = await database;
-    return await db.update('held_transactions', {'status': 'expired'}, where: 'shiftId = ? AND status = ?', whereArgs: [shiftId, 'active']);
+    // v154: Include audit timestamps (never delete)
+    return await db.update('held_transactions', {
+      'status': 'EXPIRED',
+      'expiredAt': DateTime.now().toIso8601String(),
+      'modifiedAt': DateTime.now().toIso8601String(),
+    }, where: 'shiftId = ? AND (status = ? OR status = ?)', whereArgs: [shiftId, 'active', 'HOLD']);
   }
 }
