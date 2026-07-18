@@ -1148,10 +1148,8 @@ class _CashieringScreenState extends State<CashieringScreen> {
   // v153: HOLD & RESUME TRANSACTION
   // ═══════════════════════════════════════════════════════════
 
-  /// Show HOLD dialog + process the hold
   Future<void> _holdTransaction() async {
     if (_cart.isEmpty) return;
-
     final customerCtrl = TextEditingController();
     final noteCtrl = TextEditingController();
     final total = _cart.fold<double>(0, (sum, it) => sum + it.subtotal);
@@ -1192,7 +1190,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
               controller: noteCtrl,
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
-                hintText: 'e.g. Getting Alaxan',
+                hintText: 'e.g. Getting more items',
                 prefixIcon: Icon(Icons.note_outlined),
                 border: OutlineInputBorder(),
                 isDense: true,
@@ -1207,7 +1205,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
                 Icon(Icons.warning_amber, size: 14, color: Colors.orange[800]),
                 const SizedBox(width: 6),
                 const Expanded(child: Text(
-                  'Cart will be cleared. Ticket will be printed for customer.',
+                  'Cart will be cleared. Ticket will print for customer.',
                   style: TextStyle(fontSize: 11),
                 )),
               ]),
@@ -1250,13 +1248,11 @@ class _CashieringScreenState extends State<CashieringScreen> {
       await DatabaseHelper().insertHeldTransaction(held.toMap());
 
       if (!mounted) return;
-      // Clear cart
       setState(() {
         _cart.clear();
         _txnDiscount = null;
       });
 
-      // Navigate to receipt (auto-prints)
       await Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => HoldReceiptScreen(held: held)),
@@ -1269,11 +1265,10 @@ class _CashieringScreenState extends State<CashieringScreen> {
     }
   }
 
-  /// Detect HLD- prefix in search and trigger resume dialog
   Future<void> _checkForResumeInSearch(String query) async {
     final q = query.trim().toUpperCase();
     if (!q.startsWith('HLD-')) return;
-    if (q.length < 13) return; // Wait for full HLD-YYYYMMDD-####
+    if (q.length < 13) return;
 
     try {
       final map = await DatabaseHelper().getHeldTransactionByNumber(q);
@@ -1291,7 +1286,6 @@ class _CashieringScreenState extends State<CashieringScreen> {
     }
   }
 
-  /// Show confirmation before resuming held transaction
   Future<void> _showResumeDialog(HeldTransaction held) async {
     final currentItems = _cart.length;
     final confirmed = await showDialog<String>(
@@ -1357,7 +1351,6 @@ class _CashieringScreenState extends State<CashieringScreen> {
     if (confirmed == null || confirmed == 'cancel') return;
 
     try {
-      // Restore items - lookup real Product from allProducts for current stock
       setState(() {
         if (confirmed == 'replace' || confirmed == 'resume') {
           _cart.clear();
@@ -1368,7 +1361,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
           try {
             realProduct = Product.allProducts.firstWhere((p) => p.sku == heldItem.product.sku);
           } catch (_) {
-            realProduct = heldItem.product; // Fallback to held snapshot
+            realProduct = heldItem.product;
           }
           _cart.add(CartItem(
             product: realProduct,
@@ -1379,7 +1372,6 @@ class _CashieringScreenState extends State<CashieringScreen> {
         }
       });
 
-      // Delete hold record (used, gone forever - Q4=A)
       await DatabaseHelper().updateHeldTransactionStatus(held.id, 'resumed');
 
       if (!mounted) return;
@@ -1389,9 +1381,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // End v153 HOLD/RESUME
-  // ═══════════════════════════════════════════════════════════
+  // End v153
 
   void _showSnackBar(String message) { SoundHelper.click();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
