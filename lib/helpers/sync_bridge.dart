@@ -539,7 +539,7 @@ class SyncBridge {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'isDeleted': false, // v155: HOLD records are NEVER physically deleted
     };
-    final path = 'companies/$companyCode/holdTransactions/${h.heldNumber}';
+    final path = 'companies/$companyCode/holdTransactions/${h.id}';
     await _queue.enqueue(
       entityType: 'held_transaction', entityId: h.id, operation: op,
       firebasePath: path, payload: payload,
@@ -552,7 +552,7 @@ class SyncBridge {
   }
 
   static Future<void> _uploadHeldToFirebase(
-      String companyCode, String heldNumber,
+      String companyCode, String holdId,
       Map<String, dynamic> payload) async {
     try {
       final cfg = await _cfgSvc.load();
@@ -562,9 +562,9 @@ class SyncBridge {
       }
       final db = FirebaseRealtimeService.instance.db;
       if (db == null) return;
-      await db.ref('companies/$companyCode/holdTransactions/$heldNumber').set(payload);
-      await _markQueueSynced('held_transaction', heldNumber);
-      await _markRowSynced('held_transactions', 'heldNumber', heldNumber);
+      await db.ref('companies/$companyCode/holdTransactions/$holdId').set(payload);
+      await _markQueueSynced('held_transaction', holdId);
+      await _markRowSynced('held_transactions', 'id', holdId);
     } catch (e) {
       if (kDebugMode) debugPrint('⚠️ held transaction upload failed: $e');
     }
