@@ -826,9 +826,38 @@ class _CashieringScreenState extends State<CashieringScreen> {
       context: context, barrierDismissible: false,
       builder: (ctx) => PaymentDialog(
         totalAmount: _totalAmount,
-        onPaymentComplete: (method, amountPaid) {
+        onPaymentComplete: (method, amountPaid) async {
           _transactionCount++;
           final txnId = 'TXN-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+
+          // v155.1 HOTFIX: Mark resumed hold as COMPLETED
+          final holdToComplete = _resumedHoldId;
+          if (holdToComplete != null) {
+            _resumedHoldId = null; // Clear immediately to prevent double-completion
+            try {
+              final rowsUpdated = await DatabaseHelper()
+                  .markHoldCompleted(holdToComplete, txnId, widget.userName);
+              debugPrint('[v155.1] markHoldCompleted: \$rowsUpdated rows updated');
+
+              // Sync COMPLETED status to Firebase
+              try {
+                final heldRows = await DatabaseHelper().rawQuery(
+                    'SELECT * FROM held_transactions WHERE id = ?', [holdToComplete]);
+                if (heldRows.isNotEmpty) {
+                  final held = HeldTransaction.fromMap(heldRows.first);
+                  await SyncBridge.enqueueHeldTransaction(held, op: 'update');
+                  debugPrint('[v155.1] Firebase synced: status=\${held.status}');
+                }
+              } catch (e) {
+                debugPrint('[v155.1] Firebase COMPLETED sync failed: \$e');
+              }
+
+              if (mounted) await _refreshHeldCount();
+            } catch (e) {
+              debugPrint('[v155.1] markHoldCompleted failed: \$e');
+            }
+          }
+
           final cartCopy = List<CartItem>.from(_cart);
           final total = _totalAmount;
           final disc = _totalDiscount;
