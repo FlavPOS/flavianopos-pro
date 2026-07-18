@@ -5,6 +5,8 @@ import '../../models/user_model.dart';
 import '../../models/settings_model.dart';
 import '../../utils/sound_helper.dart';
 import '../../services/cashier_session_service.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 import '../../models/product_model.dart';
 import '../../models/branch_model.dart';
 import '../../models/cart_item_model.dart';
@@ -1272,6 +1274,12 @@ class _CashieringScreenState extends State<CashieringScreen> {
       );
 
       await DatabaseHelper().insertHeldTransaction(held.toMap());
+      // v155: Sync to Firebase for multi-device visibility
+      try {
+        await SyncBridge.enqueueHeldTransaction(held, op: 'create');
+      } catch (e) {
+        debugPrint('[v155] Firebase sync failed (local save succeeded): ' + e.toString());
+      }
 
       if (!mounted) return;
       setState(() {

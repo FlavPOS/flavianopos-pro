@@ -11,6 +11,7 @@ import '../models/branch_model.dart';
 import '../models/product_model.dart';
 import '../models/batch_model.dart';
 import '../models/transaction_model.dart';
+import '../models/held_transaction_model.dart';
 import '../models/z_report_model.dart';
 import '../services/setup_mode_service.dart';
 import '../services/firebase_config_service.dart';
@@ -497,6 +498,78 @@ class SyncBridge {
       await _markQueueSynced('transaction', txnId);
     } catch (_) {}
   }
+
+  // ═══════════════════ v155: HOLD TRANSACTIONS (permanent audit trail) ═══════════════════
+  static Future<void> enqueueHeldTransaction(HeldTransaction h, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty) return;
+
+    final payload = {
+      'heldId': h.id,
+      'heldNumber': h.heldNumber,
+      'companyCode': companyCode,
+      'branchId': branchId,
+      'branch': h.branch,
+      'cashierId': h.cashierId,
+      'cashierName': h.cashierName,
+      'customerName': h.customerName,
+      'note': h.note,
+      'itemsJson': h.toMap()['itemsJson'],
+      'itemCount': h.items.length,
+      'subtotal': h.subtotal,
+      'totalDiscount': h.totalDiscount,
+      'total': h.total,
+      'heldAt': h.heldAt.toIso8601String(),
+      'status': h.status,
+      'shiftId': h.shiftId,
+      // v154 audit trail fields
+      'completedAt': h.completedAt,
+      'completedBy': h.completedBy,
+      'cancelledAt': h.cancelledAt,
+      'cancelledBy': h.cancelledBy,
+      'cancelReason': h.cancelReason,
+      'expiredAt': h.expiredAt,
+      'salesTransactionId': h.salesTransactionId,
+      'deviceId': ctx['deviceId'] ?? '',
+      'modifiedAt': h.modifiedAt,
+      'modifiedBy': h.modifiedBy,
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': false, // v155: HOLD records are NEVER physically deleted
+    };
+    final path = 'companies/$companyCode/holdTransactions/${h.heldNumber}';
+    await _queue.enqueue(
+      entityType: 'held_transaction', entityId: h.heldNumber, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    // Fire upload (never delete - status updates only)
+    _fireAndForget(() => _uploadHeldToFirebase(companyCode, h.heldNumber, payload));
+  }
+
+  static Future<void> _uploadHeldToFirebase(
+      String companyCode, String heldNumber,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/$companyCode/holdTransactions/$heldNumber').set(payload);
+      await _markQueueSynced('held_transaction', heldNumber);
+      await _markRowSynced('held_transactions', 'heldNumber', heldNumber);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ held transaction upload failed: $e');
+    }
+  }
+
 
   // ═══════════════════ Z REPORTS (per-branch end-of-shift snapshots) ═══════════════════
   static Future<void> enqueueZReport(ZReportRecord r, {required String op}) async {

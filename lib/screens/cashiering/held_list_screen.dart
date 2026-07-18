@@ -4,6 +4,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/held_transaction_model.dart';
 import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
+import '../../models/sync_queue_model.dart';
 
 class HeldListScreen extends StatefulWidget {
   final String branch;
@@ -139,6 +141,19 @@ class _HeldListScreenState extends State<HeldListScreen> {
         : selectedReason + ' - ' + noteCtrl.text.trim();
       // v154: Permanent audit trail - status update only, NO physical delete
       await DatabaseHelper().markHoldCancelled(h.id, fullReason, 'cashier');
+      // v155: Sync CANCELLED status to Firebase (permanent audit trail)
+      try {
+        final heldMap = await DatabaseHelper().rawQuery(
+          'SELECT * FROM held_transactions WHERE id = ?',
+          [h.id]
+        );
+        if (heldMap.isNotEmpty) {
+          final updatedHeld = HeldTransaction.fromMap(heldMap.first);
+          await SyncBridge.enqueueHeldTransaction(updatedHeld, op: 'update');
+        }
+      } catch (e) {
+        debugPrint('[v155] Firebase CANCELLED sync failed: ' + e.toString());
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Cancelled: ' + h.heldNumber), backgroundColor: Colors.red[700]),
