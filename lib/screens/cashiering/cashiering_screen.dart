@@ -13,6 +13,9 @@ import '../../widgets/cart_item_widget.dart';
 import 'payment_dialog.dart';
 import 'receipt_screen.dart';
 import 'refund_mode_screen.dart';
+import '../../models/held_transaction_model.dart';
+import 'hold_receipt_screen.dart';
+import 'package:uuid/uuid.dart';
 import '../../utils/approver_pin_dialog.dart';  // v148
 import '../reports/exchange_screen.dart';  // v151
 import '../../models/discount_record_model.dart';
@@ -1141,6 +1144,255 @@ class _CashieringScreenState extends State<CashieringScreen> {
   // End v147 additions
   // ═══════════════════════════════════════════════════════════
 
+  // ═══════════════════════════════════════════════════════════
+  // v153: HOLD & RESUME TRANSACTION
+  // ═══════════════════════════════════════════════════════════
+
+  /// Show HOLD dialog + process the hold
+  Future<void> _holdTransaction() async {
+    if (_cart.isEmpty) return;
+
+    final customerCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final total = _cart.fold<double>(0, (sum, it) => sum + it.subtotal);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.pause_circle, color: Colors.purple[700]),
+          const SizedBox(width: 8),
+          const Text('HOLD Transaction'),
+        ]),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.purple[50], borderRadius: BorderRadius.circular(8)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Cart: ' + _cart.length.toString() + ' items',
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('Total: PHP ' + total.toStringAsFixed(2),
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple[700])),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: customerCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Customer Name (optional)',
+                hintText: 'e.g. Maria',
+                prefixIcon: Icon(Icons.person_outline),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: noteCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Note (optional)',
+                hintText: 'e.g. Getting Alaxan',
+                prefixIcon: Icon(Icons.note_outlined),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(6)),
+              child: Row(children: [
+                Icon(Icons.warning_amber, size: 14, color: Colors.orange[800]),
+                const SizedBox(width: 6),
+                const Expanded(child: Text(
+                  'Cart will be cleared. Ticket will be printed for customer.',
+                  style: TextStyle(fontSize: 11),
+                )),
+              ]),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCEL')),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.pause_circle, size: 18),
+            label: const Text('HOLD & CLEAR'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final heldNumber = await HeldTransaction.generateHldNumber();
+      final subtotal = _cart.fold<double>(0, (s, it) => s + (it.product.sellingPrice * it.quantity));
+      final held = HeldTransaction(
+        id: const Uuid().v4(),
+        heldNumber: heldNumber,
+        branch: widget.branch,
+        cashierId: widget.userName,
+        cashierName: widget.userName,
+        customerName: customerCtrl.text.trim(),
+        note: noteCtrl.text.trim(),
+        items: List<CartItem>.from(_cart),
+        subtotal: subtotal,
+        totalDiscount: 0,
+        total: total,
+        heldAt: DateTime.now(),
+        status: 'active',
+        shiftId: '',
+      );
+
+      await DatabaseHelper().insertHeldTransaction(held.toMap());
+
+      if (!mounted) return;
+      // Clear cart
+      setState(() {
+        _cart.clear();
+        _txnDiscount = null;
+      });
+
+      // Navigate to receipt (auto-prints)
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => HoldReceiptScreen(held: held)),
+      );
+
+      if (!mounted) return;
+      _showSnackBar('Transaction held: ' + heldNumber);
+    } catch (e) {
+      _showSnackBar('Hold failed: ' + e.toString());
+    }
+  }
+
+  /// Detect HLD- prefix in search and trigger resume dialog
+  Future<void> _checkForResumeInSearch(String query) async {
+    final q = query.trim().toUpperCase();
+    if (!q.startsWith('HLD-')) return;
+    if (q.length < 13) return; // Wait for full HLD-YYYYMMDD-####
+
+    try {
+      final map = await DatabaseHelper().getHeldTransactionByNumber(q);
+      if (map == null) {
+        _showSnackBar('No active hold found: ' + q);
+        return;
+      }
+      final held = HeldTransaction.fromMap(map);
+      _searchController.clear();
+      setState(() => _searchQuery = '');
+      if (!mounted) return;
+      await _showResumeDialog(held);
+    } catch (e) {
+      _showSnackBar('Resume error: ' + e.toString());
+    }
+  }
+
+  /// Show confirmation before resuming held transaction
+  Future<void> _showResumeDialog(HeldTransaction held) async {
+    final currentItems = _cart.length;
+    final confirmed = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.replay_circle_filled, color: Colors.purple[700]),
+          const SizedBox(width: 8),
+          const Text('Resume Held Transaction'),
+        ]),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(held.heldNumber, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple[700])),
+            const SizedBox(height: 8),
+            if (held.customerName.isNotEmpty) Text('Customer: ' + held.customerName,
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Cashier: ' + held.cashierName),
+            Text('Held: ' + held.heldAt.toString().substring(0, 16)),
+            const SizedBox(height: 8),
+            Text('Items: ' + held.items.length.toString(),
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            ...held.items.take(5).map((it) => Text(
+              '  - ' + it.product.name + ' (' + it.quantity.toString() + 'x)',
+              style: const TextStyle(fontSize: 12),
+            )),
+            if (held.items.length > 5) Text('  ...and ' + (held.items.length - 5).toString() + ' more',
+              style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+            const SizedBox(height: 8),
+            Text('Total: PHP ' + held.total.toStringAsFixed(2),
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple[700])),
+            const SizedBox(height: 12),
+            if (currentItems > 0) Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(6)),
+              child: Row(children: [
+                Icon(Icons.warning_amber, size: 16, color: Colors.orange[800]),
+                const SizedBox(width: 6),
+                Expanded(child: Text('Current cart has ' + currentItems.toString() + ' items. Choose action:',
+                  style: const TextStyle(fontSize: 11))),
+              ]),
+            ),
+            if (currentItems == 0) Text('Current cart: empty',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 'cancel'), child: const Text('CANCEL')),
+          if (currentItems > 0) TextButton(
+            onPressed: () => Navigator.pop(ctx, 'merge'),
+            child: const Text('MERGE'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, currentItems > 0 ? 'replace' : 'resume'),
+            icon: const Icon(Icons.replay_circle_filled, size: 18),
+            label: Text(currentItems > 0 ? 'REPLACE CART' : 'RESUME'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == null || confirmed == 'cancel') return;
+
+    try {
+      // Restore items - lookup real Product from allProducts for current stock
+      setState(() {
+        if (confirmed == 'replace' || confirmed == 'resume') {
+          _cart.clear();
+          _txnDiscount = null;
+        }
+        for (final heldItem in held.items) {
+          Product? realProduct;
+          try {
+            realProduct = Product.allProducts.firstWhere((p) => p.sku == heldItem.product.sku);
+          } catch (_) {
+            realProduct = heldItem.product; // Fallback to held snapshot
+          }
+          _cart.add(CartItem(
+            product: realProduct,
+            quantity: heldItem.quantity,
+            discount: heldItem.discount,
+            discountType: heldItem.discountType,
+          ));
+        }
+      });
+
+      // Delete hold record (used, gone forever - Q4=A)
+      await DatabaseHelper().updateHeldTransactionStatus(held.id, 'resumed');
+
+      if (!mounted) return;
+      _showSnackBar('Resumed ' + held.heldNumber + ' (' + held.items.length.toString() + ' items)');
+    } catch (e) {
+      _showSnackBar('Resume failed: ' + e.toString());
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // End v153 HOLD/RESUME
+  // ═══════════════════════════════════════════════════════════
+
   void _showSnackBar(String message) { SoundHelper.click();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(message), behavior: SnackBarBehavior.floating,
@@ -1261,6 +1513,12 @@ class _CashieringScreenState extends State<CashieringScreen> {
     return Column(children: [
       Padding(padding: const EdgeInsets.all(12), child: TextField(
         controller: _searchController,
+        onSubmitted: (v) {
+          final q = v.trim().toUpperCase();
+          if (q.startsWith('HLD-') && q.length >= 13) {
+            _checkForResumeInSearch(q);
+          }
+        },
         decoration: InputDecoration(
           hintText: 'Search product, SKU, or barcode...',
           prefixIcon: const Icon(Icons.search),
@@ -1395,13 +1653,29 @@ class _CashieringScreenState extends State<CashieringScreen> {
                 style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
             ]),
             const SizedBox(height: 8),
-            SizedBox(width: double.infinity, height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _cart.isNotEmpty ? _processPayment : null,
-                icon: const Icon(Icons.payment),
-                label: const Text('PAY NOW', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+            // v153: HOLD + PAY NOW buttons side by side
+            Row(children: [
+              Expanded(
+                child: SizedBox(height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _cart.isNotEmpty ? _holdTransaction : null,
+                    icon: const Icon(Icons.pause_circle, size: 18),
+                    label: const Text('HOLD', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.purple[700], foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: SizedBox(height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: _cart.isNotEmpty ? _processPayment : null,
+                    icon: const Icon(Icons.payment),
+                    label: const Text('PAY NOW', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700], foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))))),
+              ),
+            ]),
           ]),
         ),
       ]),

@@ -142,6 +142,7 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclared INTEGER DEFAULT 0"); } catch (_) {}
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclaredAt TEXT DEFAULT ''"); } catch (_) {}
     try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS held_transactions (id TEXT PRIMARY KEY, heldNumber TEXT UNIQUE NOT NULL, branch TEXT DEFAULT '', cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', customerName TEXT DEFAULT '', note TEXT DEFAULT '', itemsJson TEXT DEFAULT '[]', subtotal REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, total REAL DEFAULT 0, heldAt TEXT NOT NULL, status TEXT DEFAULT 'active', shiftId TEXT DEFAULT '')''');
       await db.execute('''CREATE TABLE IF NOT EXISTS z_reports (reportId TEXT PRIMARY KEY, reportDate TEXT NOT NULL, generatedAt TEXT NOT NULL, branch TEXT DEFAULT '', cashier TEXT DEFAULT '', grossSales REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, netSales REAL DEFAULT 0, totalTransactions INTEGER DEFAULT 0, averageTransaction REAL DEFAULT 0, paymentBreakdownJson TEXT DEFAULT '', voidedCount INTEGER DEFAULT 0, voidedAmount REAL DEFAULT 0, voidedTransactionsJson TEXT DEFAULT '', beginningCash REAL DEFAULT 0, endingCash REAL DEFAULT 0, expectedCash REAL DEFAULT 0, overShort REAL DEFAULT 0, refundedCount INTEGER DEFAULT 0, refundedAmount REAL DEFAULT 0, allTransactionsJson TEXT DEFAULT '')''');
     try { await db.execute("ALTER TABLE z_reports ADD COLUMN refundedTransactionsJson TEXT DEFAULT ''"); } catch (_) {}
     } catch (_) {}
@@ -1797,5 +1798,32 @@ try {
     await ensurePhotoTable();
     final db = await database;
     await db.delete("product_photos", where: "sku = ?", whereArgs: [sku]);
+  }
+
+  // v153: HELD TRANSACTIONS CRUD
+  Future<int> insertHeldTransaction(Map<String, dynamic> data) async {
+    final db = await database;
+    return await db.insert('held_transactions', data);
+  }
+
+  Future<Map<String, dynamic>?> getHeldTransactionByNumber(String heldNumber) async {
+    final db = await database;
+    final r = await db.query('held_transactions', where: 'heldNumber = ? AND status = ?', whereArgs: [heldNumber, 'active']);
+    return r.isNotEmpty ? r.first : null;
+  }
+
+  Future<List<Map<String, dynamic>>> getActiveHeldTransactions(String branch) async {
+    final db = await database;
+    return await db.query('held_transactions', where: 'branch = ? AND status = ?', whereArgs: [branch, 'active'], orderBy: 'heldAt DESC');
+  }
+
+  Future<int> updateHeldTransactionStatus(String id, String status) async {
+    final db = await database;
+    return await db.update('held_transactions', {'status': status}, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> expireHeldTransactionsForShift(String shiftId) async {
+    final db = await database;
+    return await db.update('held_transactions', {'status': 'expired'}, where: 'shiftId = ? AND status = ?', whereArgs: [shiftId, 'active']);
   }
 }

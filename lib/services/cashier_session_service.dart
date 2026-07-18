@@ -87,7 +87,20 @@ class CashierSessionService {
     required double systemExpected,
     required double variance,
   }) async {
-    final varianceType = variance == 0 ? 'balanced' : (variance > 0 ? 'over' : 'short');
+    // v153: Expire all active held transactions for this shift before closing
+    try {
+      final expiredCount = await DatabaseHelper().expireHeldTransactionsForShift(sessionId);
+      if (expiredCount > 0) {
+        // Log for audit trail
+        // ignore: avoid_print
+        print('[v153] Expired ' + expiredCount.toString() + ' held transactions for shift ' + sessionId);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('[v153] Failed to expire held transactions: ' + e.toString());
+    }
+
+        final varianceType = variance == 0 ? 'balanced' : (variance > 0 ? 'over' : 'short');
     await DatabaseHelper().updateCashierSession(sessionId, {
       'endingCashDeclared': endingCash,
       'systemExpectedCash': systemExpected,
