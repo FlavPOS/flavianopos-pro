@@ -941,6 +941,8 @@ class _CashieringScreenState extends State<CashieringScreen> {
             id: txnId, items: txnItems, subtotal: _cartSubtotal,
             totalDiscount: disc, tax: AppSettings.vatEnabled ? (total - (total / (1 + AppSettings.vatRate / 100))) : 0, total: total,
             paymentMethod: method, amountPaid: amountPaid, change: amountPaid - total,
+            paymentReference: reference,  // v159c: audit trail
+            bankName: bankName,           // v159c: audit trail
             cashier: widget.userName, 
             branch: _binvBranchId.isNotEmpty ? _binvBranchId : widget.branch, // v1.0.60+134 prefer branchId
             dateTime: now,
@@ -1020,6 +1022,8 @@ class _CashieringScreenState extends State<CashieringScreen> {
             builder: (context) => ReceiptScreen(
               items: cartCopy, totalAmount: total, totalDiscount: disc,
               paymentMethod: method, amountPaid: amountPaid, change: amountPaid - total,
+              paymentReference: reference,  // v159c: audit trail
+              bankName: bankName,           // v159c: audit trail
               transactionId: txnId, branch: widget.branch, cashier: widget.userName, dateTime: now),
           )).then((_) { setState(() { _cart.clear(); _txnDiscount = null; }); });
         },

@@ -11,6 +11,9 @@ class ReceiptScreen extends StatefulWidget {
   final double totalAmount;
   final double totalDiscount;
   final String paymentMethod;
+  // v159c: Payment audit trail
+  final String paymentReference;
+  final String bankName;
   final double amountPaid;
   final double change;
   final String transactionId;
@@ -20,7 +23,7 @@ class ReceiptScreen extends StatefulWidget {
 
   const ReceiptScreen({
     super.key, required this.items, required this.totalAmount,
-    required this.totalDiscount, required this.paymentMethod,
+    required this.totalDiscount, required this.paymentMethod, this.paymentReference = '', this.bankName = '',
     required this.amountPaid, required this.change,
     required this.transactionId, required this.branch,
     required this.cashier, required this.dateTime,
@@ -256,6 +259,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
                 // Payment info
                 pdfInfoRow('Payment:', widget.paymentMethod),
+                if (widget.bankName.isNotEmpty)
+                  pdfInfoRow('Bank:', widget.bankName),
+                if (widget.paymentReference.isNotEmpty)
+                  pdfInfoRow('Reference:', widget.paymentReference),
                 pdfInfoRow('Paid:', widget.amountPaid.toStringAsFixed(2)),
                 pdfInfoRow('Change:', widget.change.toStringAsFixed(2), bold: true),
                 pw.SizedBox(height: 6),
@@ -400,6 +407,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               _dottedLine(),
               const SizedBox(height: 8),
               _infoRow('Payment:', widget.paymentMethod),
+              if (widget.bankName.isNotEmpty)
+                _infoRow('Bank:', widget.bankName),
+              if (widget.paymentReference.isNotEmpty)
+                _infoRow('Reference:', widget.paymentReference),
               _infoRow('Paid:', widget.amountPaid.toStringAsFixed(2)),
               _infoRow('Change:', widget.change.toStringAsFixed(2), isBold: true),
               const SizedBox(height: 12),

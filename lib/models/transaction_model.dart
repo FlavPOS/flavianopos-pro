@@ -43,6 +43,9 @@ class Transaction {
   final String paymentMethod;
   final double amountPaid;
   final double change;
+  // v159c: Payment audit trail
+  final String paymentReference;
+  final String bankName;
   final String cashier;
   final String branch;
   final DateTime dateTime;
@@ -57,7 +60,7 @@ class Transaction {
 
   Transaction({required this.id, required this.items, required this.subtotal,
     this.totalDiscount = 0, required this.tax, required this.total,
-    required this.paymentMethod, required this.amountPaid, required this.change,
+    required this.paymentMethod, required this.amountPaid, required this.change, this.paymentReference = '', this.bankName = '',
     required this.cashier, required this.branch, required this.dateTime,
     this.status = 'completed', this.voidReason = '', this.voidedBy = '',
     this.voidedAt, this.refundAmount = 0, this.refundMethod = '',
@@ -68,7 +71,7 @@ class Transaction {
   Map<String, dynamic> toMap() => {
     'id': id, 'subtotal': subtotal, 'totalDiscount': totalDiscount,
     'total': total, 'paymentMethod': paymentMethod,
-    'amountPaid': amountPaid, 'changeAmount': change,
+    'amountPaid': amountPaid, 'changeAmount': change, 'paymentReference': paymentReference, 'bankName': bankName,
     'status': status, 'cashier': cashier, 'branch': branch,
     'voidReason': voidReason,
     'voidedBy': voidedBy,
@@ -86,6 +89,8 @@ class Transaction {
     tax: 0, total: (m['total'] ?? 0).toDouble(),
     paymentMethod: m['paymentMethod'] ?? 'Cash',
     amountPaid: (m['amountPaid'] ?? 0).toDouble(),
+    paymentReference: (m['paymentReference'] ?? '').toString(),
+    bankName: (m['bankName'] ?? '').toString(),
     change: (m['changeAmount'] ?? 0).toDouble(),
     cashier: m['cashier'] ?? '', branch: m['branch'] ?? '',
     dateTime: DateTime.tryParse(m['dateTime'] ?? '') ?? DateTime.now(),
