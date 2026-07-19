@@ -286,22 +286,34 @@ class SyncManager {
             .onChildChanged.listen((event) => _onZReportUpdate(event, companyCode, branchId)));
       }
 
-      // v157: HOLD TRANSACTIONS - Branch-scoped real-time sync (today-only filter)
-      // Role-based: Admin sees all branches, Cashier sees own branch only
+      // v157.1: HOLD TRANSACTIONS - Branch-scoped real-time sync with proper listeners
+      debugPrint('[v157.1] HOLD sync attach - viewerRole="$viewerRole" branchId="$branchId"');
+      
       if (viewerRole == "admin" || viewerRole == "companyadmin") {
-        // Head Office: listen to ALL branches
+        // Head Office: listen to specific branch (they set branchId=HO001)
+        // Then also listen to ALL branches via subtree listener
+        debugPrint('[v157.1] Attaching ADMIN listener for HO001 + all branches');
         await _backfillAllHeldTransactions(companyCode);
+        // Listen to own branch (HO001) using standard listener
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
+            .onChildAdded.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+        _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
+            .onChildChanged.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+        // Also listen to root for other branches' updates
         _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
             .onChildAdded.listen((event) => _onHeldBranchUpdate(event, companyCode)));
         _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions")
             .onChildChanged.listen((event) => _onHeldBranchUpdate(event, companyCode)));
-      } else {
-        // Branch: listen to OWN branch only
+      } else if (branchId.isNotEmpty) {
+        // Branch cashier: listen to OWN branch only
+        debugPrint('[v157.1] Attaching BRANCH listener for: $branchId');
         await _backfillHeldTransactions(companyCode, branchId);
         _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
             .onChildAdded.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
         _rtListeners.add(fbDb.ref("companies/$companyCode/holdTransactions/$branchId")
             .onChildChanged.listen((event) => _onHeldTransactionUpdate(event, companyCode)));
+      } else {
+        debugPrint('[v157.1] WARNING: skipping HOLD listener - no branchId and not admin');
       }
 
 
