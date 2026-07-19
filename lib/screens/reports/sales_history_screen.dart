@@ -460,8 +460,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                             }
                           }, itemBuilder: (context) => [
                             const PopupMenuItem(value: 'detail', child: Text('View Receipt')),
-                            if (t.status == 'completed')
-                              // v1.0.60+135 — Void removed (moved to POS module)
+                            // v1.0.60+135 — Void removed (moved to POS module)
+                            // v161.4 — Refund + Exchange removed (moved to Cashiering)
                           ]),
                         ]),
                       ]))));

@@ -319,16 +319,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
               icon: Icon(Icons.picture_as_pdf, size: 18, color: Colors.red[700]),
               label: const Text('PDF', style: TextStyle(fontSize: 12)),
               style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)))),
-            if (t.status == 'completed') ...[
-              const SizedBox(width: 8),
-              // v1.0.60+135 — Void removed (belongs in POS module for real-time cancel)
-              // v161.4: Refund + Exchange REMOVED - use Cashiering module (fraud prevention)
-              Expanded(child: ElevatedButton.icon(
-                onPressed: _refundTxn,
-                icon: const Icon(Icons.undo, size: 18), label: const Text('Refund', style: TextStyle(fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12)))),
-            ],
+            // v161.5: Refund button REMOVED - use Cashiering REFUND (Manager PIN gated for fraud prevention)
           ]))),
       ]),
     );
