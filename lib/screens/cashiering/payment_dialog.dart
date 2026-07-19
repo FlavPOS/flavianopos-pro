@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 class PaymentDialog extends StatefulWidget {
   final double totalAmount;
-  final Function(String paymentMethod, double amountPaid) onPaymentComplete;
+  final Function(String paymentMethod, double amountPaid, String reference, String bankName) onPaymentComplete;
 
   const PaymentDialog({
     super.key,
@@ -21,6 +21,10 @@ class _PaymentDialogState extends State<PaymentDialog> {
   final _amountController = TextEditingController();
   double _change = 0;
   bool _isValid = false;
+  // v159: Reference capture for e-payment methods
+  final _referenceController = TextEditingController();
+  final _bankController = TextEditingController();
+  String _referenceError = '';
 
   final List<Map<String, dynamic>> _paymentMethods = [
     {'name': 'Cash', 'icon': Icons.money, 'color': Colors.green},
@@ -49,13 +53,33 @@ class _PaymentDialogState extends State<PaymentDialog> {
     });
   }
 
-  void _selectMethod(String method) {
+  // v159: Validate reference for e-payment methods
+  bool _validateReference() {
+    if (_selectedMethod == 'Cash') return true;
+    final ref = _referenceController.text.trim();
+    if (ref.length < 4) {
+      setState(() => _referenceError = 'Reference must be at least 4 characters');
+      return false;
+    }
+    if (_selectedMethod == 'Card' && _bankController.text.trim().isEmpty) {
+      setState(() => _referenceError = 'Bank name is required for Card');
+      return false;
+    }
+    setState(() => _referenceError = '');
+    return true;
+  }
+
+    void _selectMethod(String method) {
     setState(() {
       _selectedMethod = method;
+      _referenceError = '';
       if (method != 'Cash') {
         _amountController.text = widget.totalAmount.toStringAsFixed(2);
       } else {
         _amountController.clear();
+        // Clear e-payment fields when switching to cash
+        _referenceController.clear();
+        _bankController.clear();
       }
     });
   }
@@ -63,6 +87,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
   @override
   void dispose() {
     _amountController.dispose();
+    _referenceController.dispose();
+    _bankController.dispose();
     super.dispose();
   }
 
@@ -244,6 +270,76 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 ),
                 const SizedBox(height: 12),
 
+                // v159: Reference number for e-payment methods
+                if (_selectedMethod != 'Cash') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.blue.withAlpha(60)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 6),
+                          Text(
+                            _selectedMethod == 'Card' ? 'Card Details Required' : '$_selectedMethod Reference Required',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                          ),
+                        ]),
+                        const SizedBox(height: 10),
+                        // Bank Name field (Card only)
+                        if (_selectedMethod == 'Card') ...[
+                          TextField(
+                            controller: _bankController,
+                            decoration: InputDecoration(
+                              labelText: 'Bank Name *',
+                              hintText: 'e.g. BDO, BPI, Metrobank',
+                              prefixIcon: const Icon(Icons.account_balance, size: 20),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                            textCapitalization: TextCapitalization.characters,
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        // Reference Number field
+                        TextField(
+                          controller: _referenceController,
+                          decoration: InputDecoration(
+                            labelText: _selectedMethod == 'Card' ? 'Approval Code / Reference *' : '$_selectedMethod Reference No. *',
+                            hintText: _selectedMethod == 'Card' ? 'e.g. 123456789' : 'e.g. ABC123XYZ456',
+                            prefixIcon: const Icon(Icons.receipt_long, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            isDense: true,
+                            filled: true,
+                            fillColor: Colors.white,
+                            errorText: _referenceError.isEmpty ? null : _referenceError,
+                          ),
+                          onChanged: (_) => setState(() {
+                            _referenceError = '';
+                          }),
+                          textCapitalization: TextCapitalization.characters,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _selectedMethod == 'Card'
+                            ? 'Save bank + approval code from POS terminal for audit trail'
+                            : 'Save $_selectedMethod reference number for audit trail',
+                          style: TextStyle(fontSize: 10, color: Colors.blue.shade900, fontStyle: FontStyle.italic),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 // Change Display
                 if (_change >= 0 && _amountController.text.isNotEmpty)
                   Container(
@@ -294,12 +390,16 @@ class _PaymentDialogState extends State<PaymentDialog> {
                     flex: 2,
                     child: ElevatedButton(
                       onPressed:
-                          (_selectedMethod != 'Cash' || _isValid)
+                          ((_selectedMethod == 'Cash' && _isValid) || (_selectedMethod != 'Cash' && _referenceController.text.trim().length >= 4 && (_selectedMethod != 'Card' || _bankController.text.trim().isNotEmpty)))
                               ? () {
                                 final paid =
                                     double.tryParse(_amountController.text) ??
                                     widget.totalAmount;
-                                widget.onPaymentComplete(_selectedMethod, paid);
+                                // v159: Validate reference for e-payment methods
+                                if (!_validateReference()) return;
+                                final reference = _referenceController.text.trim();
+                                final bank = _bankController.text.trim();
+                                widget.onPaymentComplete(_selectedMethod, paid, reference, bank);
                               }
                               : null,
                       style: ElevatedButton.styleFrom(

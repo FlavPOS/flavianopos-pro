@@ -858,7 +858,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
       context: context, barrierDismissible: false,
       builder: (ctx) => PaymentDialog(
         totalAmount: _totalAmount,
-        onPaymentComplete: (method, amountPaid) async {
+        onPaymentComplete: (method, amountPaid, reference, bankName) async {
           _transactionCount++;
           final txnId = 'TXN-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
 
