@@ -26,11 +26,40 @@ class _PaymentDialogState extends State<PaymentDialog> {
   final _bankController = TextEditingController();
   String _referenceError = '';
 
+  // v159b: Payment methods with official brand colors
   final List<Map<String, dynamic>> _paymentMethods = [
-    {'name': 'Cash', 'icon': Icons.money, 'color': Colors.green},
-    {'name': 'GCash', 'icon': Icons.phone_android, 'color': Colors.blue},
-    {'name': 'Maya', 'icon': Icons.phone_iphone, 'color': Colors.green},
-    {'name': 'Card', 'icon': Icons.credit_card, 'color': Colors.purple},
+    {
+      'name': 'Cash',
+      'icon': Icons.payments,
+      'color': Colors.green,
+      'brandColor': const Color(0xFF2E7D32),  // Deep green
+      'letter': '₱',  // Peso sign ₱
+      'bgGradient': [const Color(0xFF66BB6A), const Color(0xFF2E7D32)],
+    },
+    {
+      'name': 'GCash',
+      'icon': Icons.phone_android,
+      'color': Colors.blue,
+      'brandColor': const Color(0xFF007BE0),  // Official GCash blue
+      'letter': 'G',
+      'bgGradient': [const Color(0xFF00A1E4), const Color(0xFF007BE0)],
+    },
+    {
+      'name': 'Maya',
+      'icon': Icons.phone_iphone,
+      'color': Colors.green,
+      'brandColor': const Color(0xFF00D632),  // Official Maya green
+      'letter': 'M',
+      'bgGradient': [const Color(0xFF00E23F), const Color(0xFF00A028)],
+    },
+    {
+      'name': 'Card',
+      'icon': Icons.credit_card,
+      'color': Colors.purple,
+      'brandColor': const Color(0xFF6A1B9A),  // Deep purple
+      'letter': null,  // Uses icon
+      'bgGradient': [const Color(0xFF9C27B0), const Color(0xFF6A1B9A)],
+    },
   ];
 
   final List<double> _quickAmounts = [20, 50, 100, 200, 500, 1000];
