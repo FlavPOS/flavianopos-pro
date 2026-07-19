@@ -15,6 +15,7 @@ class VoidRecord {
   final String managerName;
   final String reason;
   final String branch;
+  final String branchId;
   final DateTime voidedAt;
   final String status;
   final String deviceId;
@@ -32,6 +33,7 @@ class VoidRecord {
     this.managerName = '',
     this.reason = '',
     required this.branch,
+    this.branchId = '',
     required this.voidedAt,
     this.status = 'active',
     this.deviceId = '',
@@ -50,6 +52,7 @@ class VoidRecord {
     'managerName': managerName,
     'reason': reason,
     'branch': branch,
+    'branchId': branchId,
     'voidedAt': voidedAt.toIso8601String(),
     'status': status,
     'deviceId': deviceId,
@@ -68,6 +71,7 @@ class VoidRecord {
     managerName: (m['managerName'] ?? '').toString(),
     reason: (m['reason'] ?? '').toString(),
     branch: (m['branch'] ?? '').toString(),
+    branchId: (m['branchId'] ?? '').toString(),
     voidedAt: DateTime.tryParse((m['voidedAt'] ?? '').toString()) ?? DateTime.now(),
     status: (m['status'] ?? 'active').toString(),
     deviceId: (m['deviceId'] ?? '').toString(),

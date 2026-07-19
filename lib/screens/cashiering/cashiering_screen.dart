@@ -469,6 +469,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
         managerName: managerName,
         reason: fullReason,
         branch: widget.branch,
+        branchId: _binvBranchId.isNotEmpty ? _binvBranchId : widget.branch,
         voidedAt: DateTime.now(),
         status: 'active',
       );

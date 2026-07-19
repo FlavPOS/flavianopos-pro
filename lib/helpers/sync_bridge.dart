@@ -573,6 +573,7 @@ class SyncBridge {
       'managerName': v.managerName,
       'reason': v.reason,
       'branch': v.branch,
+      'branchId': v.branchId.isNotEmpty ? v.branchId : branchId,
       'voidedAt': v.voidedAt.toIso8601String(),
       'status': v.status,
       'deviceId': ctx['deviceId'] ?? '',

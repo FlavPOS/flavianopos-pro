@@ -143,6 +143,9 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclaredAt TEXT DEFAULT ''"); } catch (_) {}
     try {
       await db.execute('''CREATE TABLE IF NOT EXISTS void_records (id TEXT PRIMARY KEY, voidNumber TEXT UNIQUE NOT NULL, itemSku TEXT DEFAULT '', itemName TEXT DEFAULT '', itemPrice REAL DEFAULT 0, quantity INTEGER DEFAULT 1, totalAmount REAL DEFAULT 0, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', managerName TEXT DEFAULT '', reason TEXT DEFAULT '', branch TEXT DEFAULT '', voidedAt TEXT NOT NULL, status TEXT DEFAULT 'active', deviceId TEXT DEFAULT '')''');
+      // v161.1: Add branchId to void_records
+      try { await db.execute("ALTER TABLE void_records ADD COLUMN branchId TEXT DEFAULT ''"); } catch (_) {}
+      
       await db.execute('''CREATE TABLE IF NOT EXISTS held_transactions (id TEXT PRIMARY KEY, heldNumber TEXT UNIQUE NOT NULL, branch TEXT DEFAULT '', cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', customerName TEXT DEFAULT '', note TEXT DEFAULT '', itemsJson TEXT DEFAULT '[]', subtotal REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, total REAL DEFAULT 0, heldAt TEXT NOT NULL, status TEXT DEFAULT 'active', shiftId TEXT DEFAULT '')''');
       // v154: Audit trail columns (safe additive migration)
       try { await db.execute("ALTER TABLE held_transactions ADD COLUMN completedAt TEXT DEFAULT ''"); } catch (_) {}
