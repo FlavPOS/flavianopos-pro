@@ -84,6 +84,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     return '${dt.month}/${dt.day}/${dt.year} $h:${dt.minute.toString().padLeft(2, '0')} $ampm';
   }
 
+  // v161.3: DEPRECATED - Use cart-level VOID (cashiering delete button)
+  // Kept for backward compatibility with legacy transactions
+  // ignore: unused_element
   void _voidTransaction(Transaction txn) {
     final reasonCtrl = TextEditingController();
     final pinCtrl = TextEditingController();
@@ -452,7 +455,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                                 builder: (context) => TransactionDetailScreen(
                                     transaction: t, onUpdate: () => setState(() {}))));
                             }
-                            if (v == 'void') _voidTransaction(t);
                             if (v == 'refund') _refundTransaction(t);
                             if (v == 'exchange') {
                               Navigator.push(context, MaterialPageRoute(builder: (_) => ExchangeScreen(transaction: t, currentUser: widget.branch, branch: widget.branch))).then((r) { if (r == true) setState(() {}); });

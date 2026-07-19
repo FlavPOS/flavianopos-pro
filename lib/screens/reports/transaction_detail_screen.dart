@@ -67,6 +67,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
+  // v161.3: DEPRECATED - Use cart-level VOID (cashiering delete button)
+  // Kept for backward compatibility with legacy transactions
+  // ignore: unused_element
   void _voidTxn() {
 
     final reasonCtrl = TextEditingController();
