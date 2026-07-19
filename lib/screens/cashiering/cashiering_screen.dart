@@ -16,6 +16,7 @@ import 'payment_dialog.dart';
 import 'receipt_screen.dart';
 import 'refund_mode_screen.dart';
 import '../../models/held_transaction_model.dart';
+import '../../models/void_record_model.dart';
 import 'hold_receipt_screen.dart';
 import 'held_list_screen.dart';
 import 'package:uuid/uuid.dart';
@@ -356,10 +357,137 @@ class _CashieringScreenState extends State<CashieringScreen> {
     });
   }
 
-  void _removeItem(int index) {
-    final itemName = _cart[index].product.name;
-    setState(() => _cart.removeAt(index));
-    _showSnackBar('$itemName removed from cart');
+  // v161: VOID with Manager PIN + audit trail
+  void _removeItem(int index) async {
+    if (index < 0 || index >= _cart.length) return;
+    final cartItem = _cart[index];
+    final itemName = cartItem.product.name;
+    final itemPrice = cartItem.product.sellingPrice;
+    final qty = cartItem.quantity;
+    final total = itemPrice * qty;
+
+    // Standard reasons
+    String selectedReason = 'Customer Changed Mind';
+    final reasons = ['Customer Changed Mind', 'Wrong Item', 'Duplicate Scan', 'Damaged', 'Other'];
+    final noteCtrl = TextEditingController();
+
+    // Show confirmation dialog with reason picker
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateD) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.warning_amber, color: Colors.red[700]),
+            const SizedBox(width: 8),
+            const Text('Void Item?'),
+          ]),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(itemName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Qty: ' + qty.toString() + ' x PHP ' + itemPrice.toStringAsFixed(2)),
+                  Text('Total: PHP ' + total.toStringAsFixed(2),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[700])),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              const Text('Void Reason', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<String>(
+                initialValue: selectedReason,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                onChanged: (v) => setStateD(() => selectedReason = v ?? 'Customer Changed Mind'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: 'Note (optional)', border: OutlineInputBorder(), isDense: true),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(6)),
+                child: Row(children: [
+                  Icon(Icons.info_outline, size: 14, color: Colors.orange[800]),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('Manager PIN required. Record kept forever.',
+                    style: TextStyle(fontSize: 11))),
+                ]),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('KEEP ITEM')),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.lock_open, size: 18),
+              label: const Text('REQUEST PIN'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    // Manager PIN
+    final pinResult = await showApproverPinDialog(
+      context,
+      themeColor: Colors.red.shade700,
+      title: 'Manager Void Approval',
+      subtitle: 'Voiding ' + itemName + ' (PHP ' + total.toStringAsFixed(2) + ') requires supervisor authorization.',
+      actionLabel: 'Approve Void',
+      actionIcon: Icons.check_circle_outline,
+    );
+    if (pinResult == null) {
+      _showSnackBar('Void cancelled - manager authorization required');
+      return;
+    }
+    final managerName = (pinResult['name'] ?? pinResult['username'] ?? 'manager').toString();
+    final fullReason = noteCtrl.text.trim().isEmpty
+      ? selectedReason
+      : selectedReason + ' - ' + noteCtrl.text.trim();
+
+    // Create + save VoidRecord
+    try {
+      final voidNumber = await VoidRecord.generateVoidNumber();
+      final record = VoidRecord(
+        id: const Uuid().v4(),
+        voidNumber: voidNumber,
+        itemSku: cartItem.product.sku,
+        itemName: itemName,
+        itemPrice: itemPrice,
+        quantity: qty,
+        totalAmount: total,
+        cashierId: widget.userName,
+        cashierName: widget.userName,
+        managerName: managerName,
+        reason: fullReason,
+        branch: widget.branch,
+        voidedAt: DateTime.now(),
+        status: 'active',
+      );
+
+      await DatabaseHelper().insertVoidRecord(record.toMap());
+
+      // Sync to Firebase (branch-scoped)
+      try {
+        await SyncBridge.enqueueVoidRecord(record, op: 'create');
+      } catch (e) {
+        debugPrint('[v161] Firebase sync failed (local saved): ' + e.toString());
+      }
+
+      if (!mounted) return;
+      setState(() => _cart.removeAt(index));
+      _showSnackBar('Voided ' + itemName + ' (PHP ' + total.toStringAsFixed(2) + ') - approved by ' + managerName);
+    } catch (e) {
+      _showSnackBar('Void failed: ' + e.toString());
+    }
   }
 
   void _clearCart() {

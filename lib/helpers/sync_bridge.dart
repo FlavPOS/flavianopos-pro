@@ -12,6 +12,7 @@ import '../models/product_model.dart';
 import '../models/batch_model.dart';
 import '../models/transaction_model.dart';
 import '../models/held_transaction_model.dart';
+import '../models/void_record_model.dart';
 import '../models/z_report_model.dart';
 import '../services/setup_mode_service.dart';
 import '../services/firebase_config_service.dart';
@@ -549,6 +550,63 @@ class SyncBridge {
     );
     // Fire upload (never delete - status updates only)
     _fireAndForget(() => _uploadHeldToFirebase(companyCode, branchId, h.id, payload));
+  }
+
+  // v161: VOID RECORDS - Branch-scoped Firebase sync
+  static Future<void> enqueueVoidRecord(VoidRecord v, {required String op}) async {
+    if (!await _isMultiple()) return;
+    final ctx = await _context();
+    final companyCode = ctx['companyCode']!;
+    final branchId = ctx['branchId']!;
+    if (companyCode.isEmpty) return;
+
+    final payload = {
+      'id': v.id,
+      'voidNumber': v.voidNumber,
+      'itemSku': v.itemSku,
+      'itemName': v.itemName,
+      'itemPrice': v.itemPrice,
+      'quantity': v.quantity,
+      'totalAmount': v.totalAmount,
+      'cashierId': v.cashierId,
+      'cashierName': v.cashierName,
+      'managerName': v.managerName,
+      'reason': v.reason,
+      'branch': v.branch,
+      'voidedAt': v.voidedAt.toIso8601String(),
+      'status': v.status,
+      'deviceId': ctx['deviceId'] ?? '',
+      'updatedAt': DateTime.now().toUtc().toIso8601String(),
+      'isDeleted': false,
+    };
+    final path = 'companies/\$companyCode/voidRecords/\$branchId/\${v.id}';
+    await _queue.enqueue(
+      entityType: 'void_record', entityId: v.id, operation: op,
+      firebasePath: path, payload: payload,
+      companyId: companyCode, branchId: branchId,
+      deviceId: ctx['deviceId']!,
+      priority: SyncPriority.p4Transactional,
+    );
+    _fireAndForget(() => _uploadVoidToFirebase(companyCode, branchId, v.id, payload));
+  }
+
+  static Future<void> _uploadVoidToFirebase(
+      String companyCode, String branchId, String voidId,
+      Map<String, dynamic> payload) async {
+    try {
+      final cfg = await _cfgSvc.load();
+      if (cfg == null) return;
+      if (!FirebaseRealtimeService.instance.isInitialized) {
+        await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
+      }
+      final db = FirebaseRealtimeService.instance.db;
+      if (db == null) return;
+      await db.ref('companies/\$companyCode/voidRecords/\$branchId/\$voidId').set(payload);
+      await _markQueueSynced('void_record', voidId);
+      await _markRowSynced('void_records', 'id', voidId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('⚠️ void record upload failed: \$e');
+    }
   }
 
   static Future<void> _uploadHeldToFirebase(

@@ -142,6 +142,7 @@ class DatabaseHelper {
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclared INTEGER DEFAULT 0"); } catch (_) {}
     try { await db.execute("ALTER TABLE business_day_state ADD COLUMN cashDeclaredAt TEXT DEFAULT ''"); } catch (_) {}
     try {
+      await db.execute('''CREATE TABLE IF NOT EXISTS void_records (id TEXT PRIMARY KEY, voidNumber TEXT UNIQUE NOT NULL, itemSku TEXT DEFAULT '', itemName TEXT DEFAULT '', itemPrice REAL DEFAULT 0, quantity INTEGER DEFAULT 1, totalAmount REAL DEFAULT 0, cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', managerName TEXT DEFAULT '', reason TEXT DEFAULT '', branch TEXT DEFAULT '', voidedAt TEXT NOT NULL, status TEXT DEFAULT 'active', deviceId TEXT DEFAULT '')''');
       await db.execute('''CREATE TABLE IF NOT EXISTS held_transactions (id TEXT PRIMARY KEY, heldNumber TEXT UNIQUE NOT NULL, branch TEXT DEFAULT '', cashierId TEXT DEFAULT '', cashierName TEXT DEFAULT '', customerName TEXT DEFAULT '', note TEXT DEFAULT '', itemsJson TEXT DEFAULT '[]', subtotal REAL DEFAULT 0, totalDiscount REAL DEFAULT 0, total REAL DEFAULT 0, heldAt TEXT NOT NULL, status TEXT DEFAULT 'active', shiftId TEXT DEFAULT '')''');
       // v154: Audit trail columns (safe additive migration)
       try { await db.execute("ALTER TABLE held_transactions ADD COLUMN completedAt TEXT DEFAULT ''"); } catch (_) {}
@@ -1884,5 +1885,25 @@ try {
       'expiredAt': DateTime.now().toIso8601String(),
       'modifiedAt': DateTime.now().toIso8601String(),
     }, where: 'shiftId = ? AND (status = ? OR status = ?)', whereArgs: [shiftId, 'active', 'HOLD']);
+  }
+
+  // v161: VOID RECORDS CRUD (permanent audit trail)
+  Future<int> insertVoidRecord(Map<String, dynamic> data) async {
+    final db = await database;
+    return await db.insert('void_records', data);
+  }
+
+  Future<List<Map<String, dynamic>>> getVoidRecordsByBranch(String branch, {int limit = 100}) async {
+    final db = await database;
+    return await db.query('void_records',
+      where: 'branch = ?', whereArgs: [branch],
+      orderBy: 'voidedAt DESC', limit: limit);
+  }
+
+  Future<List<Map<String, dynamic>>> getVoidRecordsByCashier(String cashierId, {int limit = 100}) async {
+    final db = await database;
+    return await db.query('void_records',
+      where: 'cashierId = ?', whereArgs: [cashierId],
+      orderBy: 'voidedAt DESC', limit: limit);
   }
 }
