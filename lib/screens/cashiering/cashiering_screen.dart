@@ -436,6 +436,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
     if (confirmed != true) return;
 
     // Manager PIN
+    debugPrint('[v161] Requesting Manager PIN for void of: ' + itemName);
     final pinResult = await showApproverPinDialog(
       context,
       themeColor: Colors.red.shade700,
@@ -444,6 +445,7 @@ class _CashieringScreenState extends State<CashieringScreen> {
       actionLabel: 'Approve Void',
       actionIcon: Icons.check_circle_outline,
     );
+    debugPrint('[v161] PIN result: ' + (pinResult == null ? 'CANCELLED' : 'APPROVED by ' + (pinResult['name'] ?? 'unknown').toString()));
     if (pinResult == null) {
       _showSnackBar('Void cancelled - manager authorization required');
       return;
@@ -474,13 +476,16 @@ class _CashieringScreenState extends State<CashieringScreen> {
         status: 'active',
       );
 
-      await DatabaseHelper().insertVoidRecord(record.toMap());
+      final dbResult = await DatabaseHelper().insertVoidRecord(record.toMap());
+      debugPrint('[v161] SQLite insert result: ' + dbResult.toString());
 
       // Sync to Firebase (branch-scoped)
       try {
+        debugPrint('[v161] Attempting Firebase sync for: ' + record.voidNumber);
         await SyncBridge.enqueueVoidRecord(record, op: 'create');
+        debugPrint('[v161] Firebase sync enqueued successfully');
       } catch (e) {
-        debugPrint('[v161] Firebase sync failed (local saved): ' + e.toString());
+        debugPrint('[v161] Firebase sync FAILED: ' + e.toString());
       }
 
       if (!mounted) return;

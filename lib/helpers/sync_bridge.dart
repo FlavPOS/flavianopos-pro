@@ -554,11 +554,21 @@ class SyncBridge {
 
   // v161: VOID RECORDS - Branch-scoped Firebase sync
   static Future<void> enqueueVoidRecord(VoidRecord v, {required String op}) async {
-    if (!await _isMultiple()) return;
+    debugPrint('[v161-sync] enqueueVoidRecord called for: ' + v.voidNumber);
+    final isMulti = await _isMultiple();
+    debugPrint('[v161-sync] _isMultiple() returned: ' + isMulti.toString());
+    if (!isMulti) {
+      debugPrint('[v161-sync] SKIPPED - not in multi-store mode');
+      return;
+    }
     final ctx = await _context();
     final companyCode = ctx['companyCode']!;
     final branchId = ctx['branchId']!;
-    if (companyCode.isEmpty) return;
+    debugPrint('[v161-sync] companyCode=' + companyCode + ', branchId=' + branchId);
+    if (companyCode.isEmpty) {
+      debugPrint('[v161-sync] SKIPPED - companyCode empty');
+      return;
+    }
 
     final payload = {
       'id': v.id,
@@ -594,15 +604,21 @@ class SyncBridge {
   static Future<void> _uploadVoidToFirebase(
       String companyCode, String branchId, String voidId,
       Map<String, dynamic> payload) async {
+    debugPrint('[v161-upload] Starting upload for voidId=' + voidId + ' branchId=' + branchId);
     try {
       final cfg = await _cfgSvc.load();
-      if (cfg == null) return;
+      if (cfg == null) {
+        debugPrint('[v161-upload] cfg is NULL - config not loaded');
+        return;
+      }
       if (!FirebaseRealtimeService.instance.isInitialized) {
         await FirebaseRealtimeService.instance.initializeFromManualConfig(cfg);
       }
       final db = FirebaseRealtimeService.instance.db;
       if (db == null) return;
+      debugPrint('[v161-upload] Setting Firebase path: companies/' + companyCode + '/voidRecords/' + branchId + '/' + voidId);
       await db.ref('companies/\$companyCode/voidRecords/\$branchId/\$voidId').set(payload);
+      debugPrint('[v161-upload] SUCCESS - void record uploaded to Firebase');
       await _markQueueSynced('void_record', voidId);
       await _markRowSynced('void_records', 'id', voidId);
     } catch (e) {
