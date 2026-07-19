@@ -196,9 +196,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                 pw.SizedBox(height: 4),
 
                 // Store name
-                pw.Text('FlavianoPOS Store', style: titleStyle, textAlign: pw.TextAlign.center),
+                pw.Text(AppSettings.receiptHeader.isNotEmpty ? AppSettings.receiptHeader : AppSettings.businessName, style: titleStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 2),
-                pw.Text('Diversion Road, Consolacion, Cebu', style: addressStyle, textAlign: pw.TextAlign.center),
+                pw.Text(AppSettings.receiptSubheader.isNotEmpty ? AppSettings.receiptSubheader : AppSettings.businessAddress, style: addressStyle, textAlign: pw.TextAlign.center),
                 pw.Text('${AppSettings.vatRegStatus} TIN: ${AppSettings.businessTin.replaceAll('TIN: ', '')}', style: tinStyle, textAlign: pw.TextAlign.center),
                 // v160b: BIR compliance header
                 if (AppSettings.birPermitNumber.isNotEmpty)
@@ -324,9 +324,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                   pw.SizedBox(height: 8),
                 ],
 
-                pw.Text('Thank you for shopping with us!', style: thankStyle, textAlign: pw.TextAlign.center),
+                pw.Text(AppSettings.receiptFooter.isNotEmpty ? AppSettings.receiptFooter : 'Thank you for shopping with us!', style: thankStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 2),
-                pw.Text('Please come again!', style: comeAgainStyle, textAlign: pw.TextAlign.center),
+                pw.Text(AppSettings.receiptFooter2.isNotEmpty ? AppSettings.receiptFooter2 : 'Please come again!', style: comeAgainStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 12),
 
                 // Barcode placeholder
@@ -399,7 +399,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
               const Icon(Icons.store, size: 36, color: Colors.grey),
               const SizedBox(height: 4),
-              const Text('FlavianoPOS Store', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text(AppSettings.receiptHeader.isNotEmpty ? AppSettings.receiptHeader : AppSettings.businessName, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               Text('Diversion Road, Consolacion, Cebu', style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   textAlign: TextAlign.center),
               Text('${AppSettings.vatRegStatus} TIN: ${AppSettings.businessTin.replaceAll('TIN: ', '')}',
@@ -532,7 +532,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                 const SizedBox(height: 12),
               ],
 
-              const Text('Thank you for shopping with us!',
+              Text(AppSettings.receiptFooter.isNotEmpty ? AppSettings.receiptFooter : 'Thank you for shopping with us!',
                   style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
                   textAlign: TextAlign.center),
               const SizedBox(height: 4),
