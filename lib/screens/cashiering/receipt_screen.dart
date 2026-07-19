@@ -199,7 +199,14 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                 pw.Text('FlavianoPOS Store', style: titleStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 2),
                 pw.Text('Diversion Road, Consolacion, Cebu', style: addressStyle, textAlign: pw.TextAlign.center),
-                pw.Text('TIN: 123-456-789-000', style: tinStyle, textAlign: pw.TextAlign.center),
+                pw.Text('${AppSettings.vatRegStatus} TIN: ${AppSettings.businessTin.replaceAll('TIN: ', '')}', style: tinStyle, textAlign: pw.TextAlign.center),
+                // v160b: BIR compliance header
+                if (AppSettings.birPermitNumber.isNotEmpty)
+                  pw.Text('BIR Permit No: ${AppSettings.birPermitNumber}', style: tinStyle, textAlign: pw.TextAlign.center),
+                if (AppSettings.terminalSN.isNotEmpty)
+                  pw.Text('Terminal SN: ${AppSettings.terminalSN}', style: tinStyle, textAlign: pw.TextAlign.center),
+                if (AppSettings.machineIdentNumber.isNotEmpty)
+                  pw.Text('MIN: ${AppSettings.machineIdentNumber}', style: tinStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 4),
 
                 // Divider
@@ -272,6 +279,51 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
 
                 // Thank you
                 pw.SizedBox(height: 8),
+                // v160b: Store Policy
+                if (AppSettings.showStorePolicy && AppSettings.storePolicy.isNotEmpty) ...[
+                  pw.SizedBox(height: 8),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(6),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                      borderRadius: pw.BorderRadius.circular(4),
+                    ),
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('STORE POLICY:', style: pw.TextStyle(font: fontBold, fontSize: 8)),
+                        pw.SizedBox(height: 3),
+                        pw.Text(AppSettings.storePolicy, style: pw.TextStyle(font: fontRegular, fontSize: 7)),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(height: 8),
+                ],
+
+                // v160b: OFFICIAL RECEIPT notice
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.black, width: 1),
+                  ),
+                  child: pw.Text(
+                    AppSettings.officialReceiptNotice,
+                    style: pw.TextStyle(font: fontBold, fontSize: 9),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+
+                // v160b: Signature lines
+                if (AppSettings.showSignatureLines) ...[
+                  pw.Text('Customer Signature: ______________________',
+                    style: pw.TextStyle(font: fontRegular, fontSize: 8)),
+                  pw.SizedBox(height: 10),
+                  pw.Text('Cashier Signature: _______________________',
+                    style: pw.TextStyle(font: fontRegular, fontSize: 8)),
+                  pw.SizedBox(height: 8),
+                ],
+
                 pw.Text('Thank you for shopping with us!', style: thankStyle, textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 2),
                 pw.Text('Please come again!', style: comeAgainStyle, textAlign: pw.TextAlign.center),
@@ -350,7 +402,18 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               const Text('FlavianoPOS Store', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               Text('Diversion Road, Consolacion, Cebu', style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   textAlign: TextAlign.center),
-              Text('TIN: 123-456-789-000', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+              Text('${AppSettings.vatRegStatus} TIN: ${AppSettings.businessTin.replaceAll('TIN: ', '')}',
+                style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+              // v160b: BIR compliance header
+              if (AppSettings.birPermitNumber.isNotEmpty)
+                Text('BIR Permit No: ${AppSettings.birPermitNumber}',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+              if (AppSettings.terminalSN.isNotEmpty)
+                Text('Terminal SN: ${AppSettings.terminalSN}',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+              if (AppSettings.machineIdentNumber.isNotEmpty)
+                Text('MIN: ${AppSettings.machineIdentNumber}',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[500])),
               const SizedBox(height: 8),
               _dottedLine(),
               const SizedBox(height: 8),
@@ -416,6 +479,59 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
               const SizedBox(height: 12),
               _dottedLine(),
               const SizedBox(height: 16),
+              // v160b: Store Policy
+              if (AppSettings.showStorePolicy && AppSettings.storePolicy.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!, width: 0.5),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('STORE POLICY:',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey[700])),
+                      const SizedBox(height: 4),
+                      Text(AppSettings.storePolicy,
+                        style: TextStyle(fontSize: 9, color: Colors.grey[600])),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // v160b: OFFICIAL RECEIPT notice
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.black, width: 1.5),
+                ),
+                child: Text(
+                  AppSettings.officialReceiptNotice,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // v160b: Signature lines
+              if (AppSettings.showSignatureLines) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text('Customer Signature: ______________________',
+                    style: TextStyle(fontSize: 10)),
+                ),
+                const SizedBox(height: 12),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text('Cashier Signature:  ______________________',
+                    style: TextStyle(fontSize: 10)),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               const Text('Thank you for shopping with us!',
                   style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
                   textAlign: TextAlign.center),
