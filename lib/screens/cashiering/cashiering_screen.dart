@@ -85,6 +85,8 @@ class _CashieringScreenState extends State<CashieringScreen> {
   int _heldCount = 0;
   // v154: Track resumed hold for COMPLETED marking after payment
   String? _resumedHoldId;
+  // v158: Manager approver name for discount authorization
+  String? _discountApprovedBy;
 
 
   Future<void> _refreshHeldCount() async {
@@ -382,7 +384,25 @@ class _CashieringScreenState extends State<CashieringScreen> {
   // ──────────────────────────────────────────────────────────
   // DISCOUNT SELECTOR - Scrollable DraggableSheet
   // ──────────────────────────────────────────────────────────
-  void _showDiscountSelector() {
+  // v158: Manager PIN gate for discount authorization (fraud prevention)
+  Future<bool> _requireDiscountManagerPin(String discountType) async {
+    final result = await showApproverPinDialog(
+      context,
+      themeColor: Colors.blue.shade700,
+      title: 'Manager Approval Required',
+      subtitle: '$discountType discount requires manager or supervisor authorization.',
+      actionLabel: 'Authorize Discount',
+      actionIcon: Icons.lock_open,
+    );
+    if (result == null) {
+      _showSnackBar('Discount cancelled - manager authorization required');
+      return false;
+    }
+    _discountApprovedBy = (result['name'] ?? result['username'] ?? 'manager').toString();
+    return true;
+  }
+
+    void _showDiscountSelector() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -403,23 +423,35 @@ class _CashieringScreenState extends State<CashieringScreen> {
               const SizedBox(height: 4),
               Center(child: Text('Subtotal: ${_cartSubtotal.toStringAsFixed(2)}', style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
               const SizedBox(height: 16),
-              _discountOption(ctx, '👴', 'Senior Citizen', '20% Discount', Colors.blue, () {
+              _discountOption(ctx, '👴', 'Senior Citizen', '20% Discount', Colors.blue, () async {
                 Navigator.pop(ctx);
+                // v158: Manager PIN required
+                final ok = await _requireDiscountManagerPin('Senior Citizen');
+                if (!ok || !mounted) return;
                 _showIdFormDialog('Senior', 20);
               }),
               const SizedBox(height: 8),
-              _discountOption(ctx, '♿', 'PWD', '20% Discount', Colors.purple, () {
+              _discountOption(ctx, '♿', 'PWD', '20% Discount', Colors.purple, () async {
                 Navigator.pop(ctx);
+                // v158: Manager PIN required
+                final ok = await _requireDiscountManagerPin('PWD');
+                if (!ok || !mounted) return;
                 _showIdFormDialog('PWD', 20);
               }),
               const SizedBox(height: 8),
-              _discountOption(ctx, '🏢', 'Employee', '10% Discount', Colors.teal, () {
+              _discountOption(ctx, '🏢', 'Employee', '10% Discount', Colors.teal, () async {
                 Navigator.pop(ctx);
+                // v158: Manager PIN required
+                final ok = await _requireDiscountManagerPin('Employee');
+                if (!ok || !mounted) return;
                 _showEmployeeFormDialog();
               }),
               const SizedBox(height: 8),
-              _discountOption(ctx, '✏️', 'Manual Discount', 'Custom Amount or %', Colors.orange, () {
+              _discountOption(ctx, '✏️', 'Manual Discount', 'Custom Amount or %', Colors.orange, () async {
                 Navigator.pop(ctx);
+                // v158: Manager PIN required
+                final ok = await _requireDiscountManagerPin('Manual');
+                if (!ok || !mounted) return;
                 _showManualDiscountDialog();
               }),
               if (_txnDiscount != null) ...[
