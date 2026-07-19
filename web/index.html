@@ -33,6 +33,30 @@
   <link rel="manifest" href="manifest.json">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css"/>
+  <!-- v159a-cleanup: Force clean SW + cache on every load -->
+  <script>
+    (async function() {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          for (const reg of regs) {
+            await reg.unregister();
+            console.log('[v159a-cleanup] SW unregistered:', reg.scope);
+          }
+        }
+        if ('caches' in window) {
+          const cacheNames = await caches.keys();
+          for (const name of cacheNames) {
+            await caches.delete(name);
+            console.log('[v159a-cleanup] Cache cleared:', name);
+          }
+        }
+        console.log('[v159a-cleanup] Complete');
+      } catch (e) {
+        console.warn('[v159a-cleanup] Error:', e);
+      }
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

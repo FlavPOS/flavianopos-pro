@@ -270,76 +270,6 @@ class _PaymentDialogState extends State<PaymentDialog> {
                 ),
                 const SizedBox(height: 12),
 
-                // v159: Reference number for e-payment methods
-                if (_selectedMethod != 'Cash') ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withAlpha(20),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blue.withAlpha(60)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
-                          const SizedBox(width: 6),
-                          Text(
-                            _selectedMethod == 'Card' ? 'Card Details Required' : '$_selectedMethod Reference Required',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
-                          ),
-                        ]),
-                        const SizedBox(height: 10),
-                        // Bank Name field (Card only)
-                        if (_selectedMethod == 'Card') ...[
-                          TextField(
-                            controller: _bankController,
-                            decoration: InputDecoration(
-                              labelText: 'Bank Name *',
-                              hintText: 'e.g. BDO, BPI, Metrobank',
-                              prefixIcon: const Icon(Icons.account_balance, size: 20),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                              isDense: true,
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                            onChanged: (_) => setState(() {}),
-                            textCapitalization: TextCapitalization.characters,
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                        // Reference Number field
-                        TextField(
-                          controller: _referenceController,
-                          decoration: InputDecoration(
-                            labelText: _selectedMethod == 'Card' ? 'Approval Code / Reference *' : '$_selectedMethod Reference No. *',
-                            hintText: _selectedMethod == 'Card' ? 'e.g. 123456789' : 'e.g. ABC123XYZ456',
-                            prefixIcon: const Icon(Icons.receipt_long, size: 20),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                            isDense: true,
-                            filled: true,
-                            fillColor: Colors.white,
-                            errorText: _referenceError.isEmpty ? null : _referenceError,
-                          ),
-                          onChanged: (_) => setState(() {
-                            _referenceError = '';
-                          }),
-                          textCapitalization: TextCapitalization.characters,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _selectedMethod == 'Card'
-                            ? 'Save bank + approval code from POS terminal for audit trail'
-                            : 'Save $_selectedMethod reference number for audit trail',
-                          style: TextStyle(fontSize: 10, color: Colors.blue.shade900, fontStyle: FontStyle.italic),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 // Change Display
                 if (_change >= 0 && _amountController.text.isNotEmpty)
                   Container(
@@ -367,6 +297,77 @@ class _PaymentDialogState extends State<PaymentDialog> {
                       ],
                     ),
                   ),
+              ],
+
+              // v159: Reference number for e-payment methods
+              if (_selectedMethod != 'Cash') ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withAlpha(20),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.withAlpha(60)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                        const SizedBox(width: 6),
+                        Text(
+                          _selectedMethod == 'Card' ? 'Card Details Required' : '$_selectedMethod Reference Required',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
+                        ),
+                      ]),
+                      const SizedBox(height: 10),
+                      // Bank Name field (Card only)
+                      if (_selectedMethod == 'Card') ...[
+                        TextField(
+                          controller: _bankController,
+                          decoration: InputDecoration(
+                            labelText: 'Bank Name *',
+                            hintText: 'e.g. BDO, BPI, Metrobank',
+                            prefixIcon: const Icon(Icons.account_balance, size: 20),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                            isDense: true,
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                          textCapitalization: TextCapitalization.characters,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      // Reference Number field
+                      TextField(
+                        controller: _referenceController,
+                        decoration: InputDecoration(
+                          labelText: _selectedMethod == 'Card' ? 'Approval Code / Reference *' : '$_selectedMethod Reference No. *',
+                          hintText: _selectedMethod == 'Card' ? 'e.g. 123456789' : 'e.g. ABC123XYZ456',
+                          prefixIcon: const Icon(Icons.receipt_long, size: 20),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                          filled: true,
+                          fillColor: Colors.white,
+                          errorText: _referenceError.isEmpty ? null : _referenceError,
+                        ),
+                        onChanged: (_) => setState(() {
+                          _referenceError = '';
+                        }),
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _selectedMethod == 'Card'
+                          ? 'Save bank + approval code from POS terminal for audit trail'
+                          : 'Save $_selectedMethod reference number for audit trail',
+                        style: TextStyle(fontSize: 10, color: Colors.blue.shade900, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
               ],
               const SizedBox(height: 20),
 
