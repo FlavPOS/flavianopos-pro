@@ -60,6 +60,23 @@ class AppSettings {
   static String businessPhone = '';
   static String businessTin = 'TIN: 123-456-789-000';
   static String businessEmail = '';
+
+  // ─── BIR COMPLIANCE (v160a) ───
+  static String vatRegStatus = 'VAT REG';  // VAT REG / NON-VAT / VAT-EXEMPT
+  static String birPermitNumber = '';  // e.g. FP123456789 (from BIR accreditation)
+  static String terminalSN = 'FLAV-POS-001';  // POS Terminal Serial Number
+  static String machineIdentNumber = '';  // MIN assigned by BIR
+  static String terminalNumber = 'POS-01';  // Register/Terminal number
+  static String accreditationNumber = '';  // BIR Accreditation No
+
+  // ─── STORE POLICY (v160a) ───
+  static bool showStorePolicy = true;
+  static String storePolicy = '''• 7-day replacement for defective items
+• Present original receipt for claims
+• Perishables and sale items non-refundable
+• Contact: 0917-XXX-XXXX for warranty''';
+  static String officialReceiptNotice = 'THIS SERVES AS YOUR OFFICIAL RECEIPT';
+  static bool showSignatureLines = true;
   static String receiptHeader = 'FlavianoPOS Store';
   static String receiptSubheader = 'Diversion Road, Consolacion, Cebu';
   static String receiptFooter = 'Thank you for shopping with us!';
@@ -154,7 +171,21 @@ class AppSettings {
     showBarcode = _prefs!.getBool('showBarcode') ?? false;
     showQRCode = _prefs!.getBool('showQRCode') ?? false;
     paperSize = _prefs!.getString('paperSize') ?? '80mm';
-    fontSize = _prefs!.getString('fontSize') ?? 'Medium';
+    fontSize = _prefs!.getString('fontSize') ?? 'Medium';;
+
+    // v160a: BIR Compliance fields
+    vatRegStatus = _prefs!.getString('vatRegStatus') ?? 'VAT REG';
+    birPermitNumber = _prefs!.getString('birPermitNumber') ?? '';
+    terminalSN = _prefs!.getString('terminalSN') ?? 'FLAV-POS-001';
+    machineIdentNumber = _prefs!.getString('machineIdentNumber') ?? '';
+    terminalNumber = _prefs!.getString('terminalNumber') ?? 'POS-01';
+    accreditationNumber = _prefs!.getString('accreditationNumber') ?? '';
+
+    // v160a: Store Policy fields
+    showStorePolicy = _prefs!.getBool('showStorePolicy') ?? true;
+    storePolicy = _prefs!.getString('storePolicy') ?? storePolicy;
+    officialReceiptNotice = _prefs!.getString('officialReceiptNotice') ?? 'THIS SERVES AS YOUR OFFICIAL RECEIPT';
+    showSignatureLines = _prefs!.getBool('showSignatureLines') ?? true;
   }
 
   static Future<void> save(String key, dynamic value) async {

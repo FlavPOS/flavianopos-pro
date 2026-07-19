@@ -30,6 +30,20 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
   String _paperSize = AppSettings.paperSize;
   String _fontSize = AppSettings.fontSize;
 
+  // v160a: BIR Compliance state
+  final _birPermitController = TextEditingController(text: AppSettings.birPermitNumber);
+  final _terminalSNController = TextEditingController(text: AppSettings.terminalSN);
+  final _minController = TextEditingController(text: AppSettings.machineIdentNumber);
+  final _terminalNumberController = TextEditingController(text: AppSettings.terminalNumber);
+  final _accreditationController = TextEditingController(text: AppSettings.accreditationNumber);
+  String _vatRegStatus = AppSettings.vatRegStatus;
+
+  // v160a: Store Policy state
+  final _storePolicyController = TextEditingController(text: AppSettings.storePolicy);
+  final _officialNoticeController = TextEditingController(text: AppSettings.officialReceiptNotice);
+  bool _showStorePolicy = AppSettings.showStorePolicy;
+  bool _showSignatureLines = AppSettings.showSignatureLines;
+
   void _saveSettings() {
     AppSettings.receiptHeader = _headerController.text; AppSettings.save('receiptHeader', _headerController.text);
     AppSettings.businessName = _headerController.text; AppSettings.save('businessName', _headerController.text);
@@ -47,6 +61,20 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     AppSettings.showQRCode = _showQRCode; AppSettings.save('showQRCode', _showQRCode);
     AppSettings.paperSize = _paperSize; AppSettings.save('paperSize', _paperSize);
     AppSettings.fontSize = _fontSize; AppSettings.save('fontSize', _fontSize);
+
+    // v160a: BIR Compliance
+    AppSettings.vatRegStatus = _vatRegStatus; AppSettings.save('vatRegStatus', _vatRegStatus);
+    AppSettings.birPermitNumber = _birPermitController.text; AppSettings.save('birPermitNumber', _birPermitController.text);
+    AppSettings.terminalSN = _terminalSNController.text; AppSettings.save('terminalSN', _terminalSNController.text);
+    AppSettings.machineIdentNumber = _minController.text; AppSettings.save('machineIdentNumber', _minController.text);
+    AppSettings.terminalNumber = _terminalNumberController.text; AppSettings.save('terminalNumber', _terminalNumberController.text);
+    AppSettings.accreditationNumber = _accreditationController.text; AppSettings.save('accreditationNumber', _accreditationController.text);
+
+    // v160a: Store Policy
+    AppSettings.showStorePolicy = _showStorePolicy; AppSettings.save('showStorePolicy', _showStorePolicy);
+    AppSettings.storePolicy = _storePolicyController.text; AppSettings.save('storePolicy', _storePolicyController.text);
+    AppSettings.officialReceiptNotice = _officialNoticeController.text; AppSettings.save('officialReceiptNotice', _officialNoticeController.text);
+    AppSettings.showSignatureLines = _showSignatureLines; AppSettings.save('showSignatureLines', _showSignatureLines);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Receipt settings saved!'),
@@ -64,6 +92,13 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
     _footerController.dispose();
     _footer2Controller.dispose();
     _tinController.dispose();
+    _birPermitController.dispose();
+    _terminalSNController.dispose();
+    _minController.dispose();
+    _terminalNumberController.dispose();
+    _accreditationController.dispose();
+    _storePolicyController.dispose();
+    _officialNoticeController.dispose();
     super.dispose();
   }
 
@@ -210,6 +245,136 @@ class _ReceiptSettingsScreenState extends State<ReceiptSettingsScreen> {
                   (v) => setState(() => _showQRCode = v),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // v160a: BIR COMPLIANCE section
+          _buildHeader('BIR Compliance', Icons.gavel),
+          const SizedBox(height: 8),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Required for BIR-accredited POS terminals',
+                    style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _vatRegStatus,
+                    decoration: const InputDecoration(
+                      labelText: 'VAT Registration Status',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.verified),
+                    ),
+                    items: ['VAT REG', 'NON-VAT', 'VAT-EXEMPT'].map((s) =>
+                      DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (v) => setState(() => _vatRegStatus = v ?? 'VAT REG'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _birPermitController,
+                    decoration: const InputDecoration(
+                      labelText: 'BIR Permit Number',
+                      hintText: 'e.g. FP-2024-001',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.description),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _terminalSNController,
+                    decoration: const InputDecoration(
+                      labelText: 'Terminal Serial Number',
+                      hintText: 'e.g. FLAV-POS-001',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.qr_code),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _minController,
+                    decoration: const InputDecoration(
+                      labelText: 'MIN (Machine Identification Number)',
+                      hintText: 'Assigned by BIR after accreditation',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _terminalNumberController,
+                    decoration: const InputDecoration(
+                      labelText: 'Terminal Number',
+                      hintText: 'e.g. POS-01',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.point_of_sale),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _accreditationController,
+                    decoration: const InputDecoration(
+                      labelText: 'Accreditation Number (Optional)',
+                      hintText: 'BIR Accreditation No',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.verified_user),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // v160a: STORE POLICY section
+          _buildHeader('Store Policy & Signatures', Icons.policy),
+          const SizedBox(height: 8),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSwitch(
+                    'Show Store Policy',
+                    'Display policy on receipt',
+                    _showStorePolicy,
+                    (v) => setState(() => _showStorePolicy = v),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _storePolicyController,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      labelText: 'Policy Text',
+                      hintText: '• 7-day replacement policy\n• Present original receipt\n• Contact info',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSwitch(
+                    'Show Signature Lines',
+                    'Customer + Cashier signatures',
+                    _showSignatureLines,
+                    (v) => setState(() => _showSignatureLines = v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _officialNoticeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Official Receipt Notice',
+                      hintText: 'THIS SERVES AS YOUR OFFICIAL RECEIPT',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.receipt_long),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
