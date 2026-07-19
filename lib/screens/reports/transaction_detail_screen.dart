@@ -99,6 +99,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ]));
   }
 
+  // v161.4: DEPRECATED - Use Cashiering REFUND button (Manager PIN gated)
+  // Kept for backward compatibility with legacy code paths
+  // ignore: unused_element
   void _refundTxn() {
     String method = t.paymentMethod;
     final pinCtrl = TextEditingController();
@@ -319,7 +322,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
             if (t.status == 'completed') ...[
               const SizedBox(width: 8),
               // v1.0.60+135 — Void removed (belongs in POS module for real-time cancel)
-              // Only Refund + Exchange available in Sales History
+              // v161.4: Refund + Exchange REMOVED - use Cashiering module (fraud prevention)
               Expanded(child: ElevatedButton.icon(
                 onPressed: _refundTxn,
                 icon: const Icon(Icons.undo, size: 18), label: const Text('Refund', style: TextStyle(fontSize: 12)),

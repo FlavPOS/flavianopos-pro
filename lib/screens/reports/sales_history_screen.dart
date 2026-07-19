@@ -128,6 +128,9 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
       ]));
   }
 
+  // v161.4: DEPRECATED - Use Cashiering REFUND button (Manager PIN gated)
+  // Kept for backward compatibility with legacy code paths
+  // ignore: unused_element
   void _refundTransaction(Transaction txn) {
     String refundMethod = txn.paymentMethod;
     final pinCtrl = TextEditingController();
@@ -455,18 +458,10 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                                 builder: (context) => TransactionDetailScreen(
                                     transaction: t, onUpdate: () => setState(() {}))));
                             }
-                            if (v == 'refund') _refundTransaction(t);
-                            if (v == 'exchange') {
-                              Navigator.push(context, MaterialPageRoute(builder: (_) => ExchangeScreen(transaction: t, currentUser: widget.branch, branch: widget.branch))).then((r) { if (r == true) setState(() {}); });
-                            }
                           }, itemBuilder: (context) => [
                             const PopupMenuItem(value: 'detail', child: Text('View Receipt')),
                             if (t.status == 'completed')
                               // v1.0.60+135 — Void removed (moved to POS module)
-                            if (t.status == 'completed')
-                              const PopupMenuItem(value: 'refund', child: Text('Refund', style: TextStyle(color: Colors.orange))),
-                            if (t.status == 'completed')
-                              const PopupMenuItem(value: 'exchange', child: Text('Exchange Item', style: TextStyle(color: Color(0xFF1565C0)))),
                           ]),
                         ]),
                       ]))));
