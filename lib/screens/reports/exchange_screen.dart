@@ -7,6 +7,7 @@ import '../../models/transaction_model.dart';
 import '../../models/product_model.dart';
 import '../../models/user_model.dart';
 import '../../helpers/database_helper.dart';
+import '../../helpers/sync_bridge.dart';
 import '../../services/branch_inventory_service.dart'; // v1.0.60+138
 import '../../services/device_assignment_service.dart'; // v1.0.60+138
 import '../cashiering/exchange_receipt_screen.dart'; // v151.2
@@ -255,10 +256,15 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
         final newTotal = newSubtotal - widget.transaction.totalDiscount;
 
         // 4. Update transaction with new totals
+        // v162: Add status update + audit trail
+        final _managerName = (widget.preApprovedBy ?? widget.currentUser).toString();
         await DatabaseHelper().updateTransaction(widget.transaction.id, {
           'subtotal': newSubtotal,
           'totalDiscount': widget.transaction.totalDiscount,
           'total': newTotal,
+          'status': 'exchanged',                                      // v162
+          'refundedBy': _managerName,                                  // v162 (reuses refund fields)
+          'refundedAt': DateTime.now().toIso8601String(),              // v162
         });
       } catch (e) {
         // Log but don't fail the exchange itself
@@ -279,7 +285,15 @@ class _ExchangeScreenState extends State<ExchangeScreen> {
             .firstWhere((tx) => tx.id == widget.transaction.id,
                         orElse: () => widget.transaction);
         Transaction.updateTransaction(widget.transaction.id, updatedTxn);
-        debugPrint('[EXCHANGE-SYNC] Transaction updated for Firebase sync');
+        debugPrint('[EXCHANGE-SYNC] Transaction updated for local cache');
+
+        // v162: REAL Firebase sync (was missing!)
+        try {
+          await SyncBridge.enqueueTransaction(updatedTxn, op: 'exchange');
+          debugPrint('[v162] ✅ Firebase sync for exchange: ' + updatedTxn.id);
+        } catch (fbErr) {
+          debugPrint('[v162] ❌ Firebase sync failed: ' + fbErr.toString());
+        }
       } catch (e) {
         debugPrint('[EXCHANGE-SYNC] Failed: $e');
       }
