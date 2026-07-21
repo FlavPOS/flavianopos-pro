@@ -590,7 +590,7 @@ class SyncBridge {
       'updatedAt': DateTime.now().toUtc().toIso8601String(),
       'isDeleted': false,
     };
-    final path = 'companies/\$companyCode/voidRecords/\$branchId/\${v.id}';
+    final path = 'companies/$companyCode/voidRecords/$branchId/${v.id}';
     await _queue.enqueue(
       entityType: 'void_record', entityId: v.id, operation: op,
       firebasePath: path, payload: payload,
@@ -617,12 +617,12 @@ class SyncBridge {
       final db = FirebaseRealtimeService.instance.db;
       if (db == null) return;
       debugPrint('[v161-upload] Setting Firebase path: companies/' + companyCode + '/voidRecords/' + branchId + '/' + voidId);
-      await db.ref('companies/\$companyCode/voidRecords/\$branchId/\$voidId').set(payload);
+      await db.ref('companies/$companyCode/voidRecords/$branchId/$voidId').set(payload);
       debugPrint('[v161-upload] SUCCESS - void record uploaded to Firebase');
       await _markQueueSynced('void_record', voidId);
       await _markRowSynced('void_records', 'id', voidId);
     } catch (e) {
-      if (kDebugMode) debugPrint('⚠️ void record upload failed: \$e');
+      if (kDebugMode) debugPrint('⚠️ void record upload failed: $e');
     }
   }
 
