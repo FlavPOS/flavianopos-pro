@@ -227,28 +227,31 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
   }
 
   String _fmtCurrency(double v) {
-    if (v == 0) return '0.00';
-    final str = v.toStringAsFixed(2);
-    final parts = str.split('.');
-    var whole = parts[0];
-    final decimal = parts.length > 1 ? '.${parts[1]}' : '';
-    final buffer = StringBuffer();
-    for (var i = 0; i < whole.length; i++) {
-      if (i > 0 && (whole.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(whole[i]);
+    // v164b.3: Retail-standard K/M/B abbreviations
+    if (v == 0) return '0';
+    final absV = v.abs();
+    final sign = v < 0 ? '-' : '';
+    if (absV >= 1000000000) {
+      return sign + (absV / 1000000000).toStringAsFixed(2) + 'B';
+    } else if (absV >= 1000000) {
+      return sign + (absV / 1000000).toStringAsFixed(2) + 'M';
+    } else if (absV >= 1000) {
+      return sign + (absV / 1000).toStringAsFixed(1) + 'K';
+    } else if (absV >= 100) {
+      return sign + absV.toStringAsFixed(0);
+    } else {
+      return sign + absV.toStringAsFixed(2);
     }
-    return '${buffer.toString()}$decimal';
   }
 
+
   String _fmtCount(int n) {
+    // v164b.3: Retail-standard K/M/B for counts too
     if (n == 0) return '0';
-    final str = n.toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < str.length; i++) {
-      if (i > 0 && (str.length - i) % 3 == 0) buffer.write(',');
-      buffer.write(str[i]);
-    }
-    return buffer.toString();
+    if (n >= 1000000) return (n / 1000000).toStringAsFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toStringAsFixed(1) + 'K';
+    // Under 1000: show as-is
+    return n.toString();
   }
 
   String _fmtTime(DateTime dt) {
