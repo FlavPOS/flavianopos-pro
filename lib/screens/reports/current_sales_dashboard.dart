@@ -79,6 +79,26 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
   double _lyGrossMargin = 0.0;
   double _lyDiscountAmount = 0.0;
 
+  // v164b Phase 2A: Additional comparisons
+  double _yesterdayNet = 0.0;
+  double _lastWeekNet = 0.0;
+  double _lastMonthNet = 0.0;
+  double _budgetTarget = 130000.0;
+
+  // Financial breakdown
+  double _vatableSales = 0.0;
+  double _vatAmount = 0.0;
+  double _refundAmount = 0.0;
+  double _voidAmount = 0.0;
+  double _netCollection = 0.0;
+
+  // Transaction breakdown
+  int _completedCount = 0;
+  int _refundCount = 0;
+  int _voidCount = 0;
+  int _exchangeCount = 0;
+  int _suspendedCount = 0;
+
   DateTime _lyCompareDate = DateTime.now().subtract(const Duration(days: 364));
 
   bool _loading = true;
@@ -176,6 +196,70 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
       }
       final lyTxnDisc = lyTxns.fold<double>(0.0, (sum, t) => sum + t.totalDiscount);
       final lyDisc = lyItemDisc + lyTxnDisc;
+
+      // v164b Phase 2A: Yesterday calculations
+      final yesterday = now.subtract(const Duration(days: 1));
+      final yStart = RetailCalendar.startOfDay(yesterday);
+      final yEnd = RetailCalendar.endOfDay(yesterday);
+      final yesterdayTxns = txns.where((t) =>
+        t.dateTime.isAfter(yStart) && t.dateTime.isBefore(yEnd) &&
+        t.status == 'completed'
+      ).toList();
+      final yesterdayNet = yesterdayTxns.fold<double>(0.0, (s, t) => s + t.total);
+
+      // Last Week Same Day
+      final lastWeek = now.subtract(const Duration(days: 7));
+      final lwStart = RetailCalendar.startOfDay(lastWeek);
+      final lwEnd = RetailCalendar.endOfDay(lastWeek);
+      final lwTxns = txns.where((t) =>
+        t.dateTime.isAfter(lwStart) && t.dateTime.isBefore(lwEnd) &&
+        t.status == 'completed'
+      ).toList();
+      final lastWeekNet = lwTxns.fold<double>(0.0, (s, t) => s + t.total);
+
+      // Last Month Same Weekday
+      var lastMonthDay = now.subtract(const Duration(days: 28));
+      while (lastMonthDay.weekday != now.weekday) {
+        lastMonthDay = lastMonthDay.subtract(const Duration(days: 1));
+      }
+      final lmStart = RetailCalendar.startOfDay(lastMonthDay);
+      final lmEnd = RetailCalendar.endOfDay(lastMonthDay);
+      final lmTxns = txns.where((t) =>
+        t.dateTime.isAfter(lmStart) && t.dateTime.isBefore(lmEnd) &&
+        t.status == 'completed'
+      ).toList();
+      final lastMonthNet = lmTxns.fold<double>(0.0, (s, t) => s + t.total);
+
+      // Financial breakdown (VAT-inclusive - Philippines standard)
+      final vatableSales = netSales / 1.12;
+      final vatAmount = netSales - vatableSales;
+
+      // Refund + Void today
+      final refundedTxns = txns.where((t) =>
+        t.dateTime.isAfter(today) && t.dateTime.isBefore(todayEnd) &&
+        t.status == 'refunded'
+      ).toList();
+      final refundAmt = refundedTxns.fold<double>(0.0, (s, t) => s + t.total);
+
+      final voidedTxns = txns.where((t) =>
+        t.dateTime.isAfter(today) && t.dateTime.isBefore(todayEnd) &&
+        t.status == 'voided'
+      ).toList();
+      final voidAmt = voidedTxns.fold<double>(0.0, (s, t) => s + t.total);
+
+      final netCollection = netSales - refundAmt;
+
+      // Transaction counts
+      final completedCount = todayTxns.length;
+      final refundCountToday = refundedTxns.length;
+      final voidCountToday = voidedTxns.length;
+      final exchangedTxns = txns.where((t) =>
+        t.dateTime.isAfter(today) && t.dateTime.isBefore(todayEnd) &&
+        t.status == 'exchanged'
+      ).toList();
+      final exchangeCountToday = exchangedTxns.length;
+      final suspendedCountToday = 0;
+
       final lyNet = lyTxns.fold<double>(0.0, (sum, t) => sum + t.total);
       final lyTrans = lyTxns.length;
       final lyUnits = lyTxns.fold<int>(0, (sum, t) => sum + t.items.fold<int>(0, (s, i) => s + i.qty));
@@ -204,6 +288,23 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
         _lyIpb = lyIpb.toDouble();
         _lyGrossMargin = lyMargin;
         _lyDiscountAmount = lyDisc;
+
+        // v164b Phase 2A: Additional metrics
+        _yesterdayNet = yesterdayNet;
+        _lastWeekNet = lastWeekNet;
+        _lastMonthNet = lastMonthNet;
+
+        _vatableSales = vatableSales;
+        _vatAmount = vatAmount;
+        _refundAmount = refundAmt;
+        _voidAmount = voidAmt;
+        _netCollection = netCollection;
+
+        _completedCount = completedCount;
+        _refundCount = refundCountToday;
+        _voidCount = voidCountToday;
+        _exchangeCount = exchangeCountToday;
+        _suspendedCount = suspendedCountToday;
 
         _lyCompareDate = lyDay;
         _lastUpdated = DateTime.now();
@@ -441,34 +542,72 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Coming Soon Placeholder
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                                        // v164b Phase 2A: Performance Comparison
+                    _buildSectionCard(
+                      title: 'PERFORMANCE COMPARISON',
+                      icon: Icons.compare_arrows_rounded,
+                      iconColor: const Color(0xFF3B82F6),
                       child: Column(
                         children: [
-                          Icon(Icons.hourglass_top_rounded, size: 48, color: Colors.grey.shade400),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'More Sections Coming in Phase 2',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
+                          _buildComparisonRow('Yesterday', _yesterdayNet),
+                          const Divider(height: 16),
+                          _buildComparisonRow('Last Week', _lastWeekNet),
+                          const Divider(height: 16),
+                          _buildComparisonRow('Last Month', _lastMonthNet),
+                          const Divider(height: 16),
+                          _buildComparisonRow('LY ' + RetailCalendar.weekdayName(_lyCompareDate), _lyNetSales),
+                          const Divider(height: 16),
+                          _buildComparisonRow('Budget', _budgetTarget),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Financial Summary
+                    _buildSectionCard(
+                      title: 'FINANCIAL SUMMARY',
+                      icon: Icons.account_balance_wallet_rounded,
+                      iconColor: const Color(0xFF22C55E),
+                      child: Column(
+                        children: [
+                          _buildFinRow('Gross Sales', _fmtCurrency(_grossSales)),
+                          _buildFinRow('Less: Discount', _fmtCurrency(_discountAmount), negative: true),
+                          const Divider(height: 20, thickness: 1),
+                          _buildFinRow('Net Sales', _fmtCurrency(_netSales), bold: true, positive: true),
+                          const Divider(height: 20),
+                          _buildFinRow('VATable Sales', _fmtCurrency(_vatableSales)),
+                          _buildFinRow('VAT Amount (12%)', _fmtCurrency(_vatAmount)),
+                          const Divider(height: 20),
+                          _buildFinRow('Refund Amount', _fmtCurrency(_refundAmount), negative: true),
+                          _buildFinRow('Void Amount', _fmtCurrency(_voidAmount), negative: true),
+                          const Divider(height: 20, thickness: 1),
+                          _buildFinRow('Net Collection', _fmtCurrency(_netCollection), bold: true, positive: true),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Transaction Summary
+                    _buildSectionCard(
+                      title: 'TRANSACTION SUMMARY',
+                      icon: Icons.receipt_long_rounded,
+                      iconColor: const Color(0xFF8B5CF6),
+                      child: Column(
+                        children: [
+                          Row(children: [
+                            Expanded(child: _buildTxnStat(Icons.receipt_rounded, 'Total', _fmtCount(_transactions), const Color(0xFF3B82F6))),
+                            Expanded(child: _buildTxnStat(Icons.check_circle_rounded, 'Complete', _fmtCount(_completedCount), const Color(0xFF22C55E))),
+                          ]),
                           const SizedBox(height: 8),
-                          Text(
-                            'Performance Comparison • Financial Summary • Payment Summary • Transaction Summary • Sales by Hour • Top Selling Items • Recent Transactions',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                            textAlign: TextAlign.center,
-                          ),
+                          Row(children: [
+                            Expanded(child: _buildTxnStat(Icons.keyboard_return_rounded, 'Refund', _fmtCount(_refundCount), const Color(0xFFEF4444))),
+                            Expanded(child: _buildTxnStat(Icons.block_rounded, 'Void', _fmtCount(_voidCount), const Color(0xFF6B7280))),
+                          ]),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: _buildTxnStat(Icons.swap_horiz_rounded, 'Exchange', _fmtCount(_exchangeCount), const Color(0xFF06B6D4))),
+                            Expanded(child: _buildTxnStat(Icons.pause_circle_outline_rounded, 'Suspend', _fmtCount(_suspendedCount), const Color(0xFFF59E0B))),
+                          ]),
                         ],
                       ),
                     ),
@@ -596,4 +735,153 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
       ),
     );
   }
+
+  // v164b Phase 2A: Helper widgets
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required Widget child,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: iconColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonRow(String label, double compareValue) {
+    final diff = _netSales - compareValue;
+    final pct = compareValue > 0 ? (diff / compareValue) * 100 : 0.0;
+    final isPositive = diff >= 0;
+    final color = isPositive ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(Icons.calendar_today_rounded, size: 14, color: Colors.grey.shade500),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'vs ' + label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+          Icon(
+            isPositive ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+            size: 12,
+            color: color,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            pct.abs().toStringAsFixed(2) + '%',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 70,
+            child: Text(
+              (isPositive ? '+' : '-') + _fmtCurrency(diff.abs()),
+              style: TextStyle(fontSize: 11, color: color),
+              textAlign: TextAlign.right,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFinRow(String label, String value, {bool negative = false, bool bold = false, bool positive = false}) {
+    Color textColor = const Color(0xFF1F2937);
+    if (negative) textColor = const Color(0xFFEF4444);
+    if (positive) textColor = const Color(0xFF22C55E);
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: bold ? 6 : 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.bold : FontWeight.w500,
+              color: textColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTxnStat(IconData icon, String label, String value, Color color) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
 }
