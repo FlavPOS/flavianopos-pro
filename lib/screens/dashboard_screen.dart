@@ -17,6 +17,7 @@ import 'cashiering/cashiering_screen.dart';
 import 'inventory/inventory_screen.dart';
 import 'reports/z_report_screen.dart';
 import 'reports/sales_history_screen.dart';
+import 'reports/sales_history_hub_screen.dart';
 import 'reports/discount_monitoring_screen.dart';
 import 'inventory_adjustment/inventory_adjustment_hub.dart';
 import 'inventory_transfer/stock_transfer_hub.dart';
@@ -190,7 +191,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => SalesHistoryScreen(branch: widget.branch),
+            builder: (context) => SalesHistoryHubScreen(branch: widget.branch),
           ),
         ).then((_) => setState(() {}));
         break;
