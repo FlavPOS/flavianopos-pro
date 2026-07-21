@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../models/transaction_model.dart' as txn_model;
 import '../../helpers/database_helper.dart';
 import 'sales_history_screen.dart';
+import 'current_sales_dashboard.dart';
 
 /// v164a: Main Hub for Sales History module.
 /// Shows 14 sales analytics and transaction cards.
@@ -307,7 +308,7 @@ class _SalesHistoryHubScreenState extends State<SalesHistoryHubScreen> {
                       subtitle: "View today's current sales performance and transaction summary.",
                       badge: _fmtCurrency(_currentSales),
                       badgeColor: const Color(0xFF22C55E),
-                      onTap: () => _openComingSoon('Current Sales'),
+                      onTap: () => _open(CurrentSalesDashboard(branch: widget.branch)),
                     ),
                     const SizedBox(height: 12),
 
