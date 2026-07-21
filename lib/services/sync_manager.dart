@@ -619,14 +619,21 @@ class SyncManager {
         return;
       }
 
-      // Also check if transaction already exists locally (double safety)
+      // v163: Check if exists - if yes, UPDATE status (was: skip)
       final dbCheck = await DatabaseHelper().database;
       final existing = await dbCheck.query('transactions',
           where: 'id = ?', whereArgs: [id], limit: 1);
-      if (existing.isNotEmpty) {
-        // Already have this transaction (maybe from own device write)
-        if (kDebugMode) debugPrint('[SYNC-SALE] Skip existing transaction: $id');
-        return;
+      final isUpdate = existing.isNotEmpty;
+      if (isUpdate) {
+        // v163: UPDATE existing (allows refund/exchange status sync)
+        final incomingStatus = (m['status'] ?? '').toString();
+        final localStatus = existing.first['status']?.toString() ?? '';
+        if (incomingStatus == localStatus && incomingStatus == 'completed') {
+          // No status change, skip to avoid unnecessary writes
+          if (kDebugMode) debugPrint('[SYNC-SALE] Skip - no status change: \$id');
+          return;
+        }
+        if (kDebugMode) debugPrint('[SYNC-SALE] v163: Status change detected \$localStatus -> \$incomingStatus for \$id');
       }
 
       final db = await DatabaseHelper().database;
@@ -656,6 +663,14 @@ class SyncManager {
         'branchId_sync': branchId,
         'isDeleted': (m['isDeleted'] == true) ? 1 : 0,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      // v163: Reload Transaction cache so UI sees changes
+      try {
+        await Transaction.loadFromDB();
+        if (kDebugMode) debugPrint('[v163] Transaction cache reloaded after sale update: \$id');
+      } catch (e) {
+        if (kDebugMode) debugPrint('[v163] Cache reload failed: \$e');
+      }
 
       // Insert items if present
       final itemsRaw = m['items'];
