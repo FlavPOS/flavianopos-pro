@@ -8,6 +8,7 @@ import 'device_id_service.dart';
 import '../helpers/sync_queue_dao.dart';
 import '../helpers/cache_reload_helper.dart';
 import '../models/sync_queue_model.dart';
+import '../models/transaction_model.dart' as txn_model;
 import 'setup_mode_service.dart';
 import 'firebase_config_service.dart';
 import 'firebase_realtime_service.dart';
@@ -630,10 +631,10 @@ class SyncManager {
         final localStatus = existing.first['status']?.toString() ?? '';
         if (incomingStatus == localStatus && incomingStatus == 'completed') {
           // No status change, skip to avoid unnecessary writes
-          if (kDebugMode) debugPrint('[SYNC-SALE] Skip - no status change: \$id');
+          if (kDebugMode) debugPrint('[SYNC-SALE] Skip - no status change: $id');
           return;
         }
-        if (kDebugMode) debugPrint('[SYNC-SALE] v163: Status change detected \$localStatus -> \$incomingStatus for \$id');
+        if (kDebugMode) debugPrint('[SYNC-SALE] v163: Status change detected $localStatus -> $incomingStatus for $id');
       }
 
       final db = await DatabaseHelper().database;
@@ -666,10 +667,10 @@ class SyncManager {
 
       // v163: Reload Transaction cache so UI sees changes
       try {
-        await Transaction.loadFromDB();
-        if (kDebugMode) debugPrint('[v163] Transaction cache reloaded after sale update: \$id');
+        await txn_model.Transaction.loadFromDB();
+        if (kDebugMode) debugPrint('[v163] Transaction cache reloaded after sale update: $id');
       } catch (e) {
-        if (kDebugMode) debugPrint('[v163] Cache reload failed: \$e');
+        if (kDebugMode) debugPrint('[v163] Cache reload failed: $e');
       }
 
       // Insert items if present
@@ -861,7 +862,7 @@ class SyncManager {
       
       // For admin, we need to fetch all branches
       // Firebase path: companies/{code}/holdTransactions/{branchId}/{uuid}
-      final snap = await db.ref('companies/\$companyCode/holdTransactions')
+      final snap = await db.ref('companies/$companyCode/holdTransactions')
           .get()
           .timeout(const Duration(seconds: 20));
       
@@ -890,12 +891,12 @@ class SyncManager {
           totalCount++;
         }
       }
-      if (kDebugMode) debugPrint('[v157] Admin backfill: \$totalCount HOLDs synced from all branches');
+      if (kDebugMode) debugPrint('[v157] Admin backfill: $totalCount HOLDs synced from all branches');
       if (totalCount > 0) {
-        _showSnackBar?.call('📥 Pulled \$totalCount active hold\${totalCount == 1 ? "" : "s"} from all branches');
+        _showSnackBar?.call('📥 Pulled $totalCount active hold${totalCount == 1 ? "" : "s"} from all branches');
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[v157] Admin backfill error: \$e');
+      if (kDebugMode) debugPrint('[v157] Admin backfill error: $e');
     }
   }
 
@@ -927,7 +928,7 @@ class SyncManager {
         }
       }
     } catch (e) {
-      if (kDebugMode) debugPrint('[v157] Branch update error: \$e');
+      if (kDebugMode) debugPrint('[v157] Branch update error: $e');
     }
   }
 
