@@ -127,9 +127,27 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
         t.status == 'completed'
       ).toList();
 
-      // Calculate Today's KPIs
-      final grossSales = todayTxns.fold<double>(0.0, (sum, t) => sum + t.subtotal);
-      final discountAmount = todayTxns.fold<double>(0.0, (sum, t) => sum + t.totalDiscount);
+      // v164b.1: TRUE Gross Sales = sum of (item.price × item.qty) BEFORE any discount
+      double grossSales = 0.0;
+      double itemDiscountTotal = 0.0;
+      for (final t in todayTxns) {
+        for (final item in t.items) {
+          final itemGross = item.price * item.qty;
+          grossSales += itemGross;
+          // Calculate item-level discount
+          if (item.discount > 0) {
+            if (item.discountType == 'percentage') {
+              itemDiscountTotal += itemGross * (item.discount / 100);
+            } else {
+              itemDiscountTotal += item.discount;
+            }
+          }
+        }
+      }
+      // Transaction-level discount (from totalDiscount field)
+      final txnDiscountTotal = todayTxns.fold<double>(0.0, (sum, t) => sum + t.totalDiscount);
+      // TOTAL discount = item-level + transaction-level
+      final discountAmount = itemDiscountTotal + txnDiscountTotal;
       final netSales = todayTxns.fold<double>(0.0, (sum, t) => sum + t.total);
       final transactions = todayTxns.length;
       final unitsSold = todayTxns.fold<int>(0, (sum, t) => sum + t.items.fold<int>(0, (s, i) => s + i.qty));
@@ -140,9 +158,24 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
       final grossMarginPct = netSales > 0 ? (grossMargin / netSales) * 100 : 0.0;
       final discountPct = grossSales > 0 ? (discountAmount / grossSales) * 100 : 0.0;
 
-      // Calculate LY KPIs
-      final lyGross = lyTxns.fold<double>(0.0, (sum, t) => sum + t.subtotal);
-      final lyDisc = lyTxns.fold<double>(0.0, (sum, t) => sum + t.totalDiscount);
+      // v164b.1: TRUE LY Gross Sales
+      double lyGross = 0.0;
+      double lyItemDisc = 0.0;
+      for (final t in lyTxns) {
+        for (final item in t.items) {
+          final itemGross = item.price * item.qty;
+          lyGross += itemGross;
+          if (item.discount > 0) {
+            if (item.discountType == 'percentage') {
+              lyItemDisc += itemGross * (item.discount / 100);
+            } else {
+              lyItemDisc += item.discount;
+            }
+          }
+        }
+      }
+      final lyTxnDisc = lyTxns.fold<double>(0.0, (sum, t) => sum + t.totalDiscount);
+      final lyDisc = lyItemDisc + lyTxnDisc;
       final lyNet = lyTxns.fold<double>(0.0, (sum, t) => sum + t.total);
       final lyTrans = lyTxns.length;
       final lyUnits = lyTxns.fold<int>(0, (sum, t) => sum + t.items.fold<int>(0, (s, i) => s + i.qty));
