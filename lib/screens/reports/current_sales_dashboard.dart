@@ -37,7 +37,7 @@ class RetailCalendar {
   static String formatShort(DateTime dt) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '\${months[dt.month - 1]} \${dt.day}, \${dt.year}';
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
   /// Format weekday name
@@ -177,7 +177,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
         _loading = false;
       });
     } catch (e) {
-      debugPrint('[v164b] Load stats error: \$e');
+      debugPrint('[v164b] Load stats error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -198,13 +198,13 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
     final str = v.toStringAsFixed(2);
     final parts = str.split('.');
     var whole = parts[0];
-    final decimal = parts.length > 1 ? '.\${parts[1]}' : '';
+    final decimal = parts.length > 1 ? '.${parts[1]}' : '';
     final buffer = StringBuffer();
     for (var i = 0; i < whole.length; i++) {
       if (i > 0 && (whole.length - i) % 3 == 0) buffer.write(',');
       buffer.write(whole[i]);
     }
-    return '\${buffer.toString()}\$decimal';
+    return '${buffer.toString()}$decimal';
   }
 
   String _fmtCount(int n) {
@@ -222,14 +222,14 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final min = dt.minute.toString().padLeft(2, '0');
     final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    return '\$hour:\$min \$ampm';
+    return '$hour:$min $ampm';
   }
 
   String _fmtFullDate(DateTime dt) {
     const months = ['January', 'February', 'March', 'April', 'May', 'June',
                     'July', 'August', 'September', 'October', 'November', 'December'];
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    return '\${days[dt.weekday - 1]}, \${months[dt.month - 1]} \${dt.day}, \${dt.year}';
+    return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
   }
 
   @override
@@ -250,7 +250,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
-              'Today, \${_fmtFullDate(now)}',
+              'Today, ${_fmtFullDate(now)}',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
             ),
           ],
@@ -291,7 +291,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'NET SALES',
                           value: _fmtCurrency(_netSales),
                           growth: _growthPct(_netSales, _lyNetSales),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: _buildKpiCard(
@@ -300,7 +300,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'GROSS SALES',
                           value: _fmtCurrency(_grossSales),
                           growth: _growthPct(_grossSales, _lyGrossSales),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: _buildKpiCard(
@@ -309,7 +309,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'TRANSACTIONS',
                           value: _fmtCount(_transactions),
                           growth: _growthPct(_transactions.toDouble(), _lyTransactions.toDouble()),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: _buildKpiCard(
@@ -318,7 +318,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'UNITS SOLD',
                           value: _fmtCount(_unitsSold),
                           growth: _growthPct(_unitsSold.toDouble(), _lyUnitsSold.toDouble()),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                       ],
                     ),
@@ -333,7 +333,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'ATV',
                           value: _fmtCurrency(_atv),
                           growth: _growthPct(_atv, _lyAtv),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: _buildKpiCard(
@@ -342,7 +342,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'IPB',
                           value: _ipb.toStringAsFixed(2),
                           growth: _growthPct(_ipb, _lyIpb),
-                          comparison: 'vs LY \${RetailCalendar.weekdayName(_lyCompareDate)}',
+                          comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
                         )),
                         const SizedBox(width: 8),
                         Expanded(child: _buildKpiCard(
@@ -351,7 +351,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                           label: 'GROSS MARGIN',
                           value: _fmtCurrency(_grossMargin),
                           growth: _growthPct(_grossMargin, _lyGrossMargin),
-                          comparison: 'Margin \${_grossMarginPct.toStringAsFixed(2)}%',
+                          comparison: 'Margin ${_grossMarginPct.toStringAsFixed(2)}%',
                           isSubtitle: true,
                         )),
                         const SizedBox(width: 8),
@@ -390,11 +390,11 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00796B)),
                                 ),
                                 Text(
-                                  'Today (\${RetailCalendar.weekdayName(now)}) vs LY \${RetailCalendar.weekdayName(_lyCompareDate)} (\${RetailCalendar.formatShort(_lyCompareDate)})',
+                                  'Today (${RetailCalendar.weekdayName(now)}) vs LY ${RetailCalendar.weekdayName(_lyCompareDate)} (${RetailCalendar.formatShort(_lyCompareDate)})',
                                   style: const TextStyle(fontSize: 11, color: Color(0xFF00695C)),
                                 ),
                                 Text(
-                                  'Last updated: \${_fmtTime(_lastUpdated)}',
+                                  'Last updated: ${_fmtTime(_lastUpdated)}',
                                   style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                                 ),
                               ],
@@ -509,7 +509,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
             Column(
               children: [
                 Text(
-                  showAsPercent ? '\${growth.toStringAsFixed(2)}%' : '\${growth.toStringAsFixed(2)}%',
+                  showAsPercent ? '${growth.toStringAsFixed(2)}%' : '${growth.toStringAsFixed(2)}%',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -538,7 +538,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                     ),
                     const SizedBox(width: 2),
                     Text(
-                      '\${growth.abs().toStringAsFixed(2)}%',
+                      '${growth.abs().toStringAsFixed(2)}%',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
