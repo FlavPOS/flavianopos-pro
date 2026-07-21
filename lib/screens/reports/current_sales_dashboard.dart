@@ -330,7 +330,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                         Expanded(child: _buildKpiCard(
                           icon: Icons.shopping_bag_rounded,
                           iconBg: const Color(0xFF3B82F6),
-                          label: 'GROSS SALES',
+                          label: 'GROSS',
                           value: _fmtCurrency(_grossSales),
                           growth: _growthPct(_grossSales, _lyGrossSales),
                           comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
@@ -339,7 +339,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                         Expanded(child: _buildKpiCard(
                           icon: Icons.receipt_long_rounded,
                           iconBg: const Color(0xFF8B5CF6),
-                          label: 'TRANSACTIONS',
+                          label: 'TXN',
                           value: _fmtCount(_transactions),
                           growth: _growthPct(_transactions.toDouble(), _lyTransactions.toDouble()),
                           comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
@@ -348,7 +348,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                         Expanded(child: _buildKpiCard(
                           icon: Icons.inventory_2_rounded,
                           iconBg: const Color(0xFFF97316),
-                          label: 'UNITS SOLD',
+                          label: 'UNITS',
                           value: _fmtCount(_unitsSold),
                           growth: _growthPct(_unitsSold.toDouble(), _lyUnitsSold.toDouble()),
                           comparison: 'vs LY ${RetailCalendar.weekdayName(_lyCompareDate)}',
@@ -381,7 +381,7 @@ class _CurrentSalesDashboardState extends State<CurrentSalesDashboard> {
                         Expanded(child: _buildKpiCard(
                           icon: Icons.pie_chart_rounded,
                           iconBg: const Color(0xFFF59E0B),
-                          label: 'GROSS MARGIN',
+                          label: 'MARGIN',
                           value: _fmtCurrency(_grossMargin),
                           growth: _growthPct(_grossMargin, _lyGrossMargin),
                           comparison: 'Margin ${_grossMarginPct.toStringAsFixed(2)}%',
